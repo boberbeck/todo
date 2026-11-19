@@ -263,7 +263,7 @@ struct SAPSyncSheet: View {
                     ForEach(group.items) { item in
                         HStack(spacing: 12) {
                             Text(item.row.code)
-                                .font(.body.monospaced())
+                                .font(.body.monospacedDigit())
                                 .frame(width: 150, alignment: .leading)
                             Text(item.row.title.isEmpty ? "ohne Bezeichnung" : item.row.title)
                                 .foregroundStyle(item.row.title.isEmpty ? Color.secondary : Color.primary)
@@ -286,7 +286,7 @@ struct SAPSyncSheet: View {
                     ForEach(plan.missing) { psp in
                         HStack(spacing: 12) {
                             Text(psp.code)
-                                .font(.body.monospaced())
+                                .font(.body.monospacedDigit())
                                 .frame(width: 150, alignment: .leading)
                             Text(psp.title)
                                 .lineLimit(1)
@@ -308,7 +308,7 @@ struct SAPSyncSheet: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(group.project)
-                    .font(.headline.monospaced())
+                    .font(.headline.monospacedDigit())
                     .foregroundStyle(.primary)
                 let details = [group.projectName, group.customerName.map { "Kunde in SAP: \($0)" }].compactMap { $0 }
                 if !details.isEmpty {
@@ -337,7 +337,8 @@ struct SAPSyncSheet: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 230)
+            .fixedSize()
+            .frame(width: 250, alignment: .trailing)
         }
         .padding(.vertical, 4)
     }

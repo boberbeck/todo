@@ -22,7 +22,10 @@ if let path = environment["TAGWERK_DB"], !path.isEmpty {
 
 do {
     let store = try SQLiteStore(url: databaseURL)
-    let tools = TagwerkTools(store: store, defaults: UserDefaults(suiteName: "local.tagwerk.app"))
+    // Liegt der Server in Tagwerk.app, gehört er zum Bundle der App und liest ihre Einstellungen direkt.
+    let appID = "local.tagwerk.app"
+    let defaults = Bundle.main.bundleIdentifier == appID ? UserDefaults.standard : UserDefaults(suiteName: appID)
+    let tools = TagwerkTools(store: store, defaults: defaults)
     log("bereit, Daten: \(databaseURL.path)")
     MCPServer(tools: tools).run()
 } catch {

@@ -72,7 +72,8 @@ struct SettingsTextField: View {
         TextField("", text: $text, prompt: Text(prompt))
             .labelsHidden()
             .textFieldStyle(.roundedBorder)
-            .font(monospaced ? .body.monospaced() : .body)
+            .multilineTextAlignment(.leading)
+            .font(monospaced ? .body.monospacedDigit() : .body)
             .frame(width: width)
     }
 }
@@ -115,8 +116,13 @@ struct GeneralSettings: View {
             Section {
                 DatePicker("Beginn", selection: timeBinding($workdayStart), displayedComponents: .hourAndMinute)
                 DatePicker("Ende", selection: timeBinding($workdayEnd), displayedComponents: .hourAndMinute)
-                Stepper(value: $focusGoalMinutes, in: 30...720, step: 15) {
-                    LabeledContent("Tagesziel Fokuszeit", value: "\(TimeMath.format(minutes: focusGoalMinutes)) h")
+                LabeledContent("Tagesziel Fokuszeit") {
+                    HStack(spacing: 6) {
+                        Text("\(TimeMath.format(minutes: focusGoalMinutes)) h")
+                            .monospacedDigit()
+                        Stepper("Tagesziel Fokuszeit", value: $focusGoalMinutes, in: 30...720, step: 15)
+                            .labelsHidden()
+                    }
                 }
             } header: {
                 Text("Arbeitszeit")
@@ -155,7 +161,7 @@ struct GeneralSettings: View {
                 SettingsFootnote("Funktioniert in jeder App. Mails ziehst du aus Outlook einfach in den Eingang; sie werden zur Aufgabe mit Betreff und Absender.")
             }
         }
-        .settingsPage(height: 520)
+        .settingsPage(height: 580)
         .onChange(of: workdayStart) { model.settingsChanged() }
         .onChange(of: workdayEnd) { model.settingsChanged() }
     }
@@ -438,6 +444,7 @@ struct ManageEngineSettings: View {
                     SecureField("", text: $token, prompt: Text("Schlüssel einfügen"))
                         .labelsHidden()
                         .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.leading)
                         .frame(width: 220)
                         .onSubmit(saveToken)
                     Button("Sichern", action: saveToken)
@@ -536,7 +543,7 @@ struct ClaudeSettings: View {
                 SettingsFootnote("Liegt Tagwerk woanders, z. B. nach dem Verschieben in „Programme“, trag es hier neu ein.")
             }
         }
-        .settingsPage(height: 620)
+        .settingsPage(height: 680)
         .onAppear { installed = ClaudeIntegration.isInstalledInDesktop }
     }
 
