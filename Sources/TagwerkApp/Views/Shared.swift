@@ -196,3 +196,53 @@ struct ColorChooser: View {
         }
     }
 }
+
+/// PSP-Element wählen: zuletzt genutzte Elemente des Kunden zuerst, sonst frei eingeben.
+struct PSPMenu: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+
+    @State private var showsCustomEntry = false
+    @State private var customCode = ""
+
+    var body: some View {
+        let options = model.psps(for: task.customerID)
+        Menu {
+            ForEach(options) { psp in
+                Button(psp.label) { model.setPSPElement(psp.code, for: task.id) }
+            }
+            if !options.isEmpty {
+                Divider()
+            }
+            Button("Anderes PSP-Element …") {
+                customCode = task.pspElement ?? ""
+                showsCustomEntry = true
+            }
+            if task.pspElement != nil {
+                Button("Kein PSP-Element") { model.setPSPElement("", for: task.id) }
+            }
+        } label: {
+            Text(task.pspElement.map { "PSP \($0)" } ?? "PSP wählen")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .fixedSize()
+        .popover(isPresented: $showsCustomEntry) {
+            HStack(spacing: 8) {
+                TextField("PSP-Element", text: $customCode)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 180)
+                    .onSubmit(saveCustom)
+                Button("Übernehmen", action: saveCustom)
+            }
+            .padding(12)
+        }
+        .help("PSP-Element in SAP ByDesign, gilt für alle Zeiten dieser Aufgabe")
+    }
+
+    private func saveCustom() {
+        model.setPSPElement(customCode, for: task.id)
+        showsCustomEntry = false
+    }
+}

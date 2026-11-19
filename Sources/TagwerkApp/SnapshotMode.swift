@@ -46,11 +46,15 @@ enum SnapshotMode {
             ("heute", .today),
             ("tagesplanung", .planning),
             ("fokus", .focus),
+            ("tagesabschluss", .close),
             ("kunden", .customers),
             ("rueckblick", .review),
         ]
-        if let customer = model.activeCustomers.first {
-            screens.insert(("kunde", .customer(customer.id)), at: 4)
+        let richest = model.activeCustomers.max { lhs, rhs in
+            model.psps(for: lhs.id, includeInactive: true).count < model.psps(for: rhs.id, includeInactive: true).count
+        }
+        if let customer = richest {
+            screens.insert(("kunde", .customer(customer.id)), at: 5)
         }
 
         let appearances: [(name: NSAppearance.Name, suffix: String)] = [(.aqua, "hell"), (.darkAqua, "dunkel")]

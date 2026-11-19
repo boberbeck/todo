@@ -8,6 +8,7 @@ enum SidebarItem: Hashable {
     case customers
     case review
     case planning
+    case close
     case customer(UUID)
 }
 
@@ -18,6 +19,12 @@ final class AppModel {
     private(set) var customers: [Customer] = []
     private(set) var tasks: [TaskItem] = []
     private(set) var entries: [TimeEntry] = []
+    private(set) var pspElements: [PSPElement] = []
+    private(set) var bookings: [Booking] = []
+    private(set) var lastTicketSync: Date?
+    private(set) var ticketSyncMessage: String?
+    private(set) var isSyncingTickets = false
+    private(set) var isSendingBookings = false
 
     var selection: SidebarItem? = .today
     /// Aufgabe, die im Fokus-Modus gezeigt wird. Ohne Auswahl: die laufende oder die nächste offene.
@@ -41,6 +48,7 @@ final class AppModel {
 
     private let store: Store
     private let calendarProvider: CalendarProviding
+    private let manageEngine = ManageEngineClient()
     @ObservationIgnored private var ticker: Timer?
 
     init(store: Store, calendar: CalendarProviding) {
@@ -266,6 +274,7 @@ final class AppModel {
             try store.deleteTask(id: id)
             tasks.removeAll { $0.id == id }
             entries.removeAll { $0.taskID == id }
+            bookings.removeAll { $0.taskID == id }
             if focusedTaskID == id { focusedTaskID = nil }
         } catch {
             report(error)
@@ -284,6 +293,11 @@ final class AppModel {
         guard var task = self.task(id), task.pspElement != newValue else { return }
         task.pspElement = newValue
         persist(task)
+        if let code = newValue,
+           var psp = pspElements.first(where: { $0.code == code && $0.customerID == task.customerID }) {
+            psp.lastUsedAt = Date()
+            save(psp)
+        }
     }
 
     func setDescription(_ text: String, for id: UUID) {
@@ -574,6 +588,261 @@ final class AppModel {
         }
     }
 
+    // MARK: PSP-Elemente
+
+    /// Aktive PSP-Elemente eines Kunden, zuletzt genutzte zuerst.
+    func psps(for customerID: UUID?, includeInactive: Bool = false) -> [PSPElement] {
+        guard let customerID else { return [] }
+        return pspElements
+            .filter { $0.customerID == customerID && (includeInactive || $0.isActive) }
+            .sorted { lhs, rhs in
+                if lhs.isActive != rhs.isActive { return lhs.isActive }
+                let left = lhs.lastUsedAt ?? .distantPast
+                let right = rhs.lastUsedAt ?? .distantPast
+                if left != right { return left > right }
+                return lhs.code.localizedStandardCompare(rhs.code) == .orderedAscending
+            }
+    }
+
+    @discardableResult
+    func addPSP(customerID: UUID, code rawCode: String, title: String) -> PSPElement? {
+        let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else { return nil }
+        let psp = PSPElement(customerID: customerID, code: code, title: title.trimmingCharacters(in: .whitespacesAndNewlines))
+        save(psp)
+        return psp
+    }
+
+    func update(_ psp: PSPElement) {
+        save(psp)
+    }
+
+    func deletePSP(_ id: UUID) {
+        do {
+            try store.deletePSP(id: id)
+            pspElements.removeAll { $0.id == id }
+        } catch {
+            report(error)
+        }
+    }
+
+    // MARK: Tagesabschluss und Buchung
+
+    var bookingRules: BookingRules {
+        _ = settingsVersion
+        let defaults = UserDefaults.standard
+        return BookingRules(
+            roundingStep: max(1, defaults.integer(forKey: Preferences.roundingStepKey)),
+            roundingMode: RoundingMode(rawValue: defaults.string(forKey: Preferences.roundingModeKey) ?? "") ?? .nearest
+        )
+    }
+
+    /// Leistung in SAP zur Arbeitsart, wie in den Einstellungen hinterlegt.
+    func serviceProduct(for workType: WorkType?) -> String {
+        _ = settingsVersion
+        guard let workType else { return "" }
+        return UserDefaults.standard.string(forKey: Preferences.serviceKey(for: workType)) ?? ""
+    }
+
+    func closeLines(for day: LocalDate) -> [BookingLine] {
+        DailyClose.lines(for: day, tasks: tasks, entries: entries, bookings: bookings, rules: bookingRules, now: now)
+    }
+
+    var canUseManageEngine: Bool {
+        _ = settingsVersion
+        return manageEngine.isReady
+    }
+
+    func reflection(for day: LocalDate) -> String {
+        UserDefaults.standard.string(forKey: Preferences.reflectionKey(for: day)) ?? ""
+    }
+
+    func setReflection(_ text: String, for day: LocalDate) {
+        UserDefaults.standard.set(text, forKey: Preferences.reflectionKey(for: day))
+    }
+
+    /// Bereitet alle vollständigen Zeilen des Tages als Buchungen vor. `minutes` überschreibt die gerundete Zeit.
+    func prepareBookings(for day: LocalDate, minutes overrides: [UUID: Int]) {
+        for line in closeLines(for: day) {
+            for booking in DailyClose.prepare(line, minutes: overrides[line.id], now: Date()) {
+                save(booking)
+            }
+        }
+    }
+
+    /// Bucht den Tag: bereitet vor und sendet die Worklogs an ManageEngine. SAP bleibt für die Übertragung offen.
+    func bookDay(_ day: LocalDate, minutes overrides: [UUID: Int]) async -> String {
+        prepareBookings(for: day, minutes: overrides)
+        let pendingME = BookingQueue.due(bookings.filter { $0.day == day }, target: .manageEngine, now: Date())
+        var parts: [String] = []
+        if !pendingME.isEmpty {
+            if manageEngine.isReady {
+                let result = await sendManageEngine(pendingME)
+                parts.append(result)
+            } else {
+                parts.append("\(pendingME.count) Worklog(s) warten, bis ManageEngine in den Einstellungen eingerichtet ist.")
+            }
+        }
+        let openSAP = bookings.filter { $0.day == day && $0.target == .sap && !$0.status.isDone }.count
+        if openSAP > 0 {
+            parts.append("\(openSAP) Zeile(n) noch in SAP eintragen und abhaken.")
+        }
+        return parts.isEmpty ? "Alles gebucht." : parts.joined(separator: " ")
+    }
+
+    /// Sendet fällige Worklogs, auch Wiederholungen nach Fehlern.
+    func retryManageEngine() async -> String {
+        let due = BookingQueue.due(bookings, target: .manageEngine, now: Date())
+        guard !due.isEmpty else { return "Nichts zu senden." }
+        return await sendManageEngine(due)
+    }
+
+    private func sendManageEngine(_ due: [Booking]) async -> String {
+        isSendingBookings = true
+        defer { isSendingBookings = false }
+        var sent = 0
+        var failed = 0
+        for booking in due {
+            guard let key = booking.ticketKey else { continue }
+            let start = firstStart(of: booking.taskID, on: booking.day)
+            do {
+                let reference = try await manageEngine.addWorklog(
+                    requestKey: key,
+                    description: booking.description,
+                    minutes: booking.minutes,
+                    start: start
+                )
+                save(BookingQueue.confirmed(booking, reference: reference, now: Date()))
+                sent += 1
+            } catch {
+                save(BookingQueue.failed(booking, error: String(describing: error), now: Date()))
+                failed += 1
+            }
+        }
+        if failed == 0 { return "\(sent) Worklog(s) an ManageEngine gesendet." }
+        return "\(sent) gesendet, \(failed) fehlgeschlagen. Tagwerk versucht es später erneut."
+    }
+
+    /// Markiert die SAP-Zeile als von Hand eingetragen (legt die Buchung bei Bedarf an).
+    func markEnteredInSAP(_ line: BookingLine, minutes: Int?) {
+        if let existing = line.bookings[.sap] {
+            save(BookingQueue.entered(existing, now: Date()))
+            return
+        }
+        guard let prepared = DailyClose.prepare(line, minutes: minutes, now: Date()).first(where: { $0.target == .sap }) else {
+            lastError = "Für SAP fehlt noch etwas: \(line.issues(for: .sap).map(\.message).joined(separator: ", "))."
+            return
+        }
+        save(BookingQueue.entered(prepared, now: Date()))
+    }
+
+    func undoEnteredInSAP(_ line: BookingLine) {
+        guard var booking = line.bookings[.sap], booking.status == .entered else { return }
+        booking.status = .pending
+        booking.updatedAt = Date()
+        save(booking)
+    }
+
+    /// Übertragungsliste für SAP als Text (für Excel) und als Datei im Export-Ordner.
+    func sapTransferList(for day: LocalDate, minutes overrides: [UUID: Int]) -> (text: String, file: URL?) {
+        prepareBookings(for: day, minutes: overrides)
+        let sapBookings = bookings.filter { $0.day == day && $0.target == .sap }
+        let text = SAPTransfer.csv(sapBookings) { [weak self] workType in
+            self?.serviceProduct(for: workType) ?? ""
+        }
+        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Tagwerk/Exporte", isDirectory: true)
+        let file = folder.appendingPathComponent("SAP-\(day.string).csv")
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try text.data(using: .utf8)?.write(to: file)
+            return (text, file)
+        } catch {
+            return (text, nil)
+        }
+    }
+
+    private func firstStart(of taskID: UUID, on day: LocalDate) -> Date {
+        let interval = day.interval()
+        return entries
+            .filter { $0.taskID == taskID && TimeMath.overlap(of: $0, with: interval, now: now) > 0 }
+            .map(\.start)
+            .min() ?? FreeTime.date(on: day, minutes: 9 * 60)
+    }
+
+    // MARK: Tickets aus ManageEngine
+
+    /// Holt die eigenen offenen Tickets in den Eingang. Bekannte Tickets werden nicht doppelt angelegt.
+    func importTickets() async {
+        guard manageEngine.isReady else {
+            ticketSyncMessage = "ManageEngine ist noch nicht eingerichtet (Einstellungen › ManageEngine)."
+            return
+        }
+        isSyncingTickets = true
+        defer { isSyncingTickets = false }
+        do {
+            let tickets = try await manageEngine.fetchTickets()
+            var added = 0
+            for ticket in tickets where ticket.isOpen {
+                let known = tasks.contains { $0.source == .ticket && ($0.externalKey == ticket.key || $0.externalID == ticket.number) }
+                guard !known else { continue }
+                let task = TaskItem(
+                    title: ticket.subject,
+                    customerID: customerID(forAccount: ticket.accountName),
+                    source: .ticket,
+                    externalID: ticket.number,
+                    externalURL: ticket.webURL,
+                    externalKey: ticket.key
+                )
+                persist(task)
+                added += 1
+            }
+            lastTicketSync = Date()
+            ticketSyncMessage = added == 0 ? "Keine neuen Tickets." : "\(added) neue(s) Ticket(s) im Eingang."
+        } catch {
+            ticketSyncMessage = String(describing: error)
+        }
+    }
+
+    func testManageEngine() async -> String {
+        do {
+            try await manageEngine.testConnection()
+            return "Verbindung klappt."
+        } catch {
+            return String(describing: error)
+        }
+    }
+
+    func setManageEngineToken(_ token: String) {
+        Keychain.set(token.trimmingCharacters(in: .whitespacesAndNewlines), account: ManageEngineClient.tokenAccount)
+        settingsChanged()
+    }
+
+    var hasManageEngineToken: Bool {
+        _ = settingsVersion
+        return !(manageEngine.token ?? "").isEmpty
+    }
+
+    private func customerID(forAccount account: String?) -> UUID? {
+        guard let account = account?.trimmingCharacters(in: .whitespaces), !account.isEmpty else { return nil }
+        let match = customers.first { customer in
+            let names = [customer.manageEngineAccount, customer.name].compactMap { $0 }
+            return names.contains { $0.compare(account, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+        }
+        return match?.id
+    }
+
+    private func autoSyncTicketsIfDue() {
+        guard SnapshotMode.directory == nil,
+              !isSyncingTickets,
+              UserDefaults.standard.bool(forKey: Preferences.meAutoFetchKey),
+              manageEngine.isReady else { return }
+        let due = lastTicketSync.map { now.timeIntervalSince($0) > 5 * 60 } ?? true
+        guard due else { return }
+        lastTicketSync = now
+        Task { await importTickets() }
+    }
+
     // MARK: Kunden
 
     @discardableResult
@@ -597,6 +866,8 @@ final class AppModel {
             customers = snapshot.customers
             tasks = snapshot.tasks
             entries = snapshot.entries
+            pspElements = snapshot.pspElements
+            bookings = snapshot.bookings
         } catch {
             report(error)
         }
@@ -630,6 +901,7 @@ final class AppModel {
             refreshEvents()
             showPlanningIfDue()
         }
+        autoSyncTicketsIfDue()
     }
 
     private func persist(_ task: TaskItem) {
@@ -652,6 +924,32 @@ final class AppModel {
                 customers[index] = customer
             } else {
                 customers.append(customer)
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    private func save(_ psp: PSPElement) {
+        do {
+            try store.save(psp)
+            if let index = pspElements.firstIndex(where: { $0.id == psp.id }) {
+                pspElements[index] = psp
+            } else {
+                pspElements.append(psp)
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    private func save(_ booking: Booking) {
+        do {
+            try store.save(booking)
+            if let index = bookings.firstIndex(where: { $0.id == booking.id }) {
+                bookings[index] = booking
+            } else {
+                bookings.append(booking)
             }
         } catch {
             report(error)

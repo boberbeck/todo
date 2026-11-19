@@ -79,7 +79,10 @@ struct CustomerDetailContent: View {
     let customer: Customer
 
     @State private var name = ""
+    @State private var account = ""
     @State private var showDone = false
+    @State private var newPSPCode = ""
+    @State private var newPSPTitle = ""
 
     var body: some View {
         let open = model.customerTasks(customer.id, done: false)
@@ -114,9 +117,43 @@ struct CustomerDetailContent: View {
                 .buttonStyle(.borderless)
                 .fixedSize()
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+
+            HStack(spacing: 8) {
+                Image(systemName: "ticket")
+                    .foregroundStyle(.secondary)
+                TextField("Konto in ManageEngine (ordnet Tickets diesem Kunden zu)", text: $account)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 420)
+                    .onSubmit(saveAccount)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
 
             List {
+                Section("PSP-Elemente") {
+                    let psps = model.psps(for: customer.id, includeInactive: true)
+                    if psps.isEmpty {
+                        Text("Noch keine PSP-Elemente. Leg die an, auf die du für diesen Kunden buchst.")
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(psps) { psp in
+                        PSPRow(psp: psp)
+                    }
+                    HStack(spacing: 8) {
+                        TextField("PSP-Element, z. B. Projektaufgabe-ID", text: $newPSPCode)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 220)
+                            .onSubmit(addPSP)
+                        TextField("Bezeichnung (optional)", text: $newPSPTitle)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit(addPSP)
+                        Button("Hinzufügen", action: addPSP)
+                            .disabled(newPSPCode.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
                 Section("Offen (\(open.count))") {
                     if open.isEmpty {
                         Text("Keine offenen Todos.")
@@ -142,8 +179,28 @@ struct CustomerDetailContent: View {
         .navigationTitle(customer.name)
         .onAppear {
             name = customer.name
+            account = customer.manageEngineAccount ?? ""
         }
-        .onDisappear(perform: saveName)
+        .onDisappear {
+            saveName()
+            saveAccount()
+        }
+    }
+
+    private func addPSP() {
+        if model.addPSP(customerID: customer.id, code: newPSPCode, title: newPSPTitle) != nil {
+            newPSPCode = ""
+            newPSPTitle = ""
+        }
+    }
+
+    private func saveAccount() {
+        let trimmed = account.trimmingCharacters(in: .whitespaces)
+        let value: String? = trimmed.isEmpty ? nil : trimmed
+        guard value != customer.manageEngineAccount else { return }
+        var changed = customer
+        changed.manageEngineAccount = value
+        model.update(changed)
     }
 
     private func saveName() {
@@ -204,5 +261,40 @@ struct CustomerTaskRow: View {
         guard let date = task.plannedDate else { return "nicht eingeplant" }
         if date == model.today { return "heute" }
         return "geplant für \(date.startDate().formatted(date: .abbreviated, time: .omitted))"
+    }
+}
+
+struct PSPRow: View {
+    @Environment(AppModel.self) private var model
+    let psp: PSPElement
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(psp.code)
+                .font(.body.monospaced())
+                .foregroundStyle(psp.isActive ? Color.primary : Color.secondary)
+            Text(psp.title)
+                .foregroundStyle(.secondary)
+            Spacer()
+            if let used = psp.lastUsedAt {
+                Text("zuletzt \(used.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Toggle("aktiv", isOn: Binding(
+                get: { psp.isActive },
+                set: { active in
+                    var changed = psp
+                    changed.isActive = active
+                    model.update(changed)
+                }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .help("Inaktive Elemente erscheinen nicht mehr in der Auswahl")
+        }
+        .contextMenu {
+            Button("Löschen", role: .destructive) { model.deletePSP(psp.id) }
+        }
     }
 }

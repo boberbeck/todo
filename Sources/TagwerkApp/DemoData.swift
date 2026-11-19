@@ -8,7 +8,8 @@ enum DemoData {
         let minute: TimeInterval = 60
         let hour: TimeInterval = 3600
 
-        let mueller = Customer(name: "Müller Logistik", colorIndex: 1, createdAt: now.addingTimeInterval(-90 * 86400))
+        let mueller = Customer(name: "Müller Logistik", colorIndex: 1, createdAt: now.addingTimeInterval(-90 * 86400),
+                               manageEngineAccount: "Müller Logistik GmbH")
         let stadtwerke = Customer(name: "Stadtwerke Nord", colorIndex: 2, createdAt: now.addingTimeInterval(-80 * 86400))
         let becker = Customer(name: "Becker & Partner", colorIndex: 6, createdAt: now.addingTimeInterval(-70 * 86400))
 
@@ -39,7 +40,8 @@ enum DemoData {
             completedAt: now.addingTimeInterval(-3 * hour),
             sortIndex: 1,
             createdAt: now.addingTimeInterval(-26 * hour),
-            scheduledStart: at(8)
+            scheduledStart: at(8),
+            externalKey: "100124"
         )
         let jourFixe = TaskItem(
             title: "Jour fixe",
@@ -65,7 +67,8 @@ enum DemoData {
             workDescription: "VPN-Logs geprüft, Tunnel neu gestartet",
             sortIndex: 3,
             createdAt: now.addingTimeInterval(-4 * hour),
-            scheduledStart: at(12)
+            scheduledStart: at(12),
+            externalKey: "100123"
         )
         let offer = TaskItem(
             title: "Angebot Wartungsvertrag",
@@ -134,6 +137,25 @@ enum DemoData {
             entries.append(TimeEntry(taskID: task.id, start: start, end: start.addingTimeInterval(item.minutes * minute)))
         }
 
-        return Snapshot(customers: [mueller, stadtwerke, becker], tasks: tasks, entries: entries)
+        let psps = [
+            PSPElement(customerID: mueller.id, code: "4702", title: "Wartungsvertrag 2026", lastUsedAt: now.addingTimeInterval(-3 * hour)),
+            PSPElement(customerID: mueller.id, code: "4711", title: "Störungen", lastUsedAt: now.addingTimeInterval(-hour)),
+            PSPElement(customerID: mueller.id, code: "4690", title: "Projekt Netzumbau", isActive: false),
+            PSPElement(customerID: stadtwerke.id, code: "5120", title: "Support"),
+            PSPElement(customerID: becker.id, code: "6001", title: "Beratung"),
+        ]
+
+        // Das Server-Update ist schon gebucht: Worklog bestätigt, in SAP eingetragen.
+        let bookings = [
+            Booking(taskID: serverUpdate.id, day: today, target: .manageEngine, minutes: 30,
+                    description: serverUpdate.workDescription, pspElement: "4702", workType: .wartung,
+                    ticketKey: "100124", status: .confirmed, reference: "WL-8812", updatedAt: now.addingTimeInterval(-2 * hour)),
+            Booking(taskID: serverUpdate.id, day: today, target: .sap, minutes: 30,
+                    description: "#1240 \(serverUpdate.workDescription)", pspElement: "4702", workType: .wartung,
+                    status: .entered, updatedAt: now.addingTimeInterval(-2 * hour)),
+        ]
+
+        return Snapshot(customers: [mueller, stadtwerke, becker], tasks: tasks, entries: entries,
+                        pspElements: psps, bookings: bookings)
     }
 }

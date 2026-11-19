@@ -84,6 +84,14 @@ struct SettingsView: View {
     @AppStorage(Preferences.focusGoalMinutesKey) private var focusGoalMinutes = Preferences.defaultFocusGoalMinutes
     @AppStorage(Preferences.writeBlocksKey) private var writeBlocks = false
     @AppStorage(Preferences.planningOnLaunchKey) private var planningOnLaunch = true
+    @AppStorage(Preferences.roundingStepKey) private var roundingStep = 15
+    @AppStorage(Preferences.roundingModeKey) private var roundingMode = RoundingMode.nearest.rawValue
+    @AppStorage(Preferences.meBaseURLKey) private var meBaseURL = ""
+    @AppStorage(Preferences.meAuthKindKey) private var meAuthKind = ManageEngineConfig.AuthKind.authtoken.rawValue
+    @AppStorage(Preferences.meTechnicianKey) private var meTechnician = ""
+    @AppStorage(Preferences.meAutoFetchKey) private var meAutoFetch = true
+    @State private var meToken = ""
+    @State private var meTestResult: String?
 
     var body: some View {
         Form {
@@ -133,6 +141,52 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Buchung") {
+                Picker("Runden auf", selection: $roundingStep) {
+                    ForEach([5, 10, 15, 30], id: \.self) { step in
+                        Text("\(step) Minuten").tag(step)
+                    }
+                }
+                Picker("Rundung", selection: $roundingMode) {
+                    Text("kaufmännisch").tag(RoundingMode.nearest.rawValue)
+                    Text("immer aufrunden").tag(RoundingMode.up.rawValue)
+                }
+                ForEach(WorkType.allCases) { workType in
+                    ServiceProductField(workType: workType)
+                }
+            }
+
+            Section("ManageEngine") {
+                TextField("Adresse", text: $meBaseURL, prompt: Text("https://helpdesk.firma.de"))
+                Picker("Anmeldung", selection: $meAuthKind) {
+                    ForEach(ManageEngineConfig.AuthKind.allCases) { kind in
+                        Text(kind.label).tag(kind.rawValue)
+                    }
+                }
+                TextField("Techniker-ID", text: $meTechnician, prompt: Text("deine ID in ServiceDesk Plus"))
+                HStack {
+                    SecureField(model.hasManageEngineToken ? "Schlüssel gespeichert" : "API-Schlüssel", text: $meToken)
+                        .onSubmit(saveToken)
+                    Button("Speichern", action: saveToken)
+                        .disabled(meToken.isEmpty)
+                }
+                Toggle("Tickets alle 5 Minuten abrufen", isOn: $meAutoFetch)
+                HStack {
+                    Button("Verbindung testen") {
+                        Task { meTestResult = await model.testManageEngine() }
+                    }
+                    if let meTestResult {
+                        Text(meTestResult)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                Text("Den API-Schlüssel erzeugst du in ServiceDesk Plus unter deinem Profil (On-Premises) bzw. als Zoho-OAuth-Token (Cloud). Er liegt nur im Schlüsselbund dieses Macs.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Daten") {
                 LabeledContent("Speicherort", value: "~/Library/Application Support/Tagwerk")
                 Button("Im Finder zeigen") {
@@ -143,11 +197,21 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520)
-        .frame(minHeight: 480)
+        .frame(width: 560)
+        .frame(minHeight: 560)
         .onChange(of: workdayStart) { model.settingsChanged() }
         .onChange(of: workdayEnd) { model.settingsChanged() }
         .onChange(of: writeBlocks) { model.settingsChanged() }
+        .onChange(of: roundingStep) { model.settingsChanged() }
+        .onChange(of: roundingMode) { model.settingsChanged() }
+        .onChange(of: meBaseURL) { model.settingsChanged() }
+        .onChange(of: meAuthKind) { model.settingsChanged() }
+        .onChange(of: meTechnician) { model.settingsChanged() }
+    }
+
+    private func saveToken() {
+        model.setManageEngineToken(meToken)
+        meToken = ""
     }
 
     private func timeBinding(_ minutes: Binding<Int>) -> Binding<Date> {
@@ -155,5 +219,23 @@ struct SettingsView: View {
             get: { FreeTime.date(on: LocalDate.today(), minutes: minutes.wrappedValue) },
             set: { minutes.wrappedValue = FreeTime.minutesSinceMidnight($0) }
         )
+    }
+}
+
+/// Leistung in SAP für eine Arbeitsart.
+struct ServiceProductField: View {
+    @Environment(AppModel.self) private var model
+    let workType: WorkType
+    @State private var value = ""
+
+    var body: some View {
+        TextField("Leistung für \(workType.label)", text: $value, prompt: Text("Leistungs-ID in ByDesign"))
+            .onAppear {
+                value = UserDefaults.standard.string(forKey: Preferences.serviceKey(for: workType)) ?? ""
+            }
+            .onChange(of: value) {
+                UserDefaults.standard.set(value.trimmingCharacters(in: .whitespaces), forKey: Preferences.serviceKey(for: workType))
+                model.settingsChanged()
+            }
     }
 }

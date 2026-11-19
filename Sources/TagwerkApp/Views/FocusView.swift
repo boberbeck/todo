@@ -36,7 +36,6 @@ struct FocusTaskPane: View {
     let task: TaskItem
 
     @State private var descriptionText = ""
-    @State private var pspText = ""
 
     var body: some View {
         let running = model.isRunning(task.id)
@@ -51,11 +50,7 @@ struct FocusTaskPane: View {
                 HStack(spacing: 10) {
                     TaskMetaLine(task: task, showsBooking: false)
                     WorkTypeMenu(task: task)
-                    TextField("PSP-Element", text: $pspText)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 140)
-                        .onSubmit { model.setPSPElement(pspText, for: task.id) }
-                        .help("PSP-Element in SAP ByDesign, gilt für alle Zeiten dieser Aufgabe")
+                    PSPMenu(task: task)
                 }
             }
 
@@ -118,14 +113,10 @@ struct FocusTaskPane: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
             descriptionText = task.workDescription
-            pspText = task.pspElement ?? ""
             model.focusedTaskID = task.id
         }
         .onChange(of: descriptionText) {
             model.setDescription(descriptionText, for: task.id)
-        }
-        .onDisappear {
-            model.setPSPElement(pspText, for: task.id)
         }
     }
 }
@@ -195,9 +186,14 @@ struct DoneListPane: View {
 
             Spacer(minLength: 0)
 
-            Text("Gebucht wird beim Tagesabschluss.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Button {
+                model.selection = .close
+            } label: {
+                Label("Tag abschließen", systemImage: "moon")
+                    .frame(maxWidth: .infinity)
+            }
+            .controlSize(.large)
+            .help("Zeiten prüfen und buchen (⌘9)")
         }
         .padding(20)
         .frame(maxHeight: .infinity, alignment: .top)

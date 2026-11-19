@@ -75,6 +75,8 @@ struct TagwerkCommands: Commands {
             Divider()
             Button("Tag planen") { model.selection = .planning }
                 .keyboardShortcut("0", modifiers: .command)
+            Button("Tag abschließen") { model.selection = .close }
+                .keyboardShortcut("9", modifiers: .command)
         }
     }
 }
@@ -88,6 +90,16 @@ enum Preferences {
     static let planningOnLaunchKey = "showPlanningOnLaunch"
     static let lastPlannedDayKey = "lastPlannedDay"
     static let showInboxKey = "showInbox"
+    static let roundingStepKey = "roundingStepMinutes"
+    static let roundingModeKey = "roundingMode"
+    static let meBaseURLKey = "manageEngineBaseURL"
+    static let meAuthKindKey = "manageEngineAuthKind"
+    static let meTechnicianKey = "manageEngineTechnicianID"
+    static let meAutoFetchKey = "manageEngineAutoFetch"
+
+    static func serviceKey(for workType: WorkType) -> String { "serviceProduct.\(workType.rawValue)" }
+
+    static func reflectionKey(for day: LocalDate) -> String { "reflection.\(day.string)" }
 
     static let defaultWorkdayStart = 8 * 60
     static let defaultWorkdayEnd = 17 * 60
@@ -101,6 +113,9 @@ enum Preferences {
             writeBlocksKey: false,
             planningOnLaunchKey: true,
             showInboxKey: true,
+            roundingStepKey: 15,
+            roundingModeKey: RoundingMode.nearest.rawValue,
+            meAutoFetchKey: true,
         ])
     }
 }

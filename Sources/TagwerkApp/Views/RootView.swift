@@ -40,6 +40,8 @@ struct RootView: View {
                 ReviewView()
             case .planning:
                 PlanningView()
+            case .close:
+                DayCloseView()
             case .customer(let id):
                 CustomerDetailView(customerID: id)
             }

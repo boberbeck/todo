@@ -39,6 +39,13 @@ struct TodayView: View {
                     .help("Geführte Tagesplanung (⌘0)")
 
                     Button {
+                        model.selection = .close
+                    } label: {
+                        Label("Tag abschließen", systemImage: "moon")
+                    }
+                    .help("Zeiten prüfen und buchen (⌘9)")
+
+                    Button {
                         if wide {
                             showInbox.toggle()
                         } else {
@@ -198,12 +205,26 @@ struct InboxPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Eingang")
-                    .font(.title3.weight(.semibold))
-                Text("Noch nicht eingeplant")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Eingang")
+                        .font(.title3.weight(.semibold))
+                    Text(model.ticketSyncMessage ?? "Noch nicht eingeplant")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer()
+                if model.canUseManageEngine {
+                    Button {
+                        Task { await model.importTickets() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(model.isSyncingTickets)
+                    .help("Tickets aus ManageEngine abrufen")
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)
