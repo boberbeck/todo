@@ -1,0 +1,189 @@
+import AppKit
+import SwiftUI
+import TagwerkCore
+
+/// Feste Farbpalette für Kunden. In der Datenbank steht nur der Index.
+enum CustomerPalette {
+    static let colors: [Color] = [.blue, .orange, .green, .purple, .pink, .teal, .indigo, .brown]
+    static var count: Int { colors.count }
+
+    static func color(_ index: Int) -> Color {
+        colors[((index % count) + count) % count]
+    }
+}
+
+struct CustomerDot: View {
+    let colorIndex: Int
+    var size: CGFloat = 8
+
+    var body: some View {
+        Circle()
+            .fill(CustomerPalette.color(colorIndex))
+            .frame(width: size, height: size)
+    }
+}
+
+/// "Ticket #1234 · Kunde A · Störung"
+struct TaskMetaLine: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: task.source.systemImage)
+            Text(sourceText)
+            if let customer = model.customer(task.customerID) {
+                Text("·")
+                CustomerDot(colorIndex: customer.colorIndex, size: 6)
+                Text(customer.name)
+            }
+            if let workType = task.workType {
+                Text("·")
+                Text(workType.label)
+            }
+            if let psp = task.pspElement {
+                Text("·")
+                Text("PSP \(psp)")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+    }
+
+    private var sourceText: String {
+        if task.source == .ticket, let number = task.externalID {
+            return "Ticket #\(number)"
+        }
+        return task.source.label
+    }
+}
+
+struct WorkTypeMenu: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+
+    var body: some View {
+        Menu {
+            ForEach(WorkType.allCases) { workType in
+                Button(workType.label) { model.setWorkType(workType, for: task.id) }
+            }
+            Divider()
+            Button("Keine Arbeitsart") { model.setWorkType(nil, for: task.id) }
+        } label: {
+            Text(task.workType?.label ?? "Arbeitsart wählen")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .fixedSize()
+    }
+}
+
+/// Rechtsklick-Menü für eine Aufgabe, überall gleich.
+struct TaskContextMenu: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+
+    var body: some View {
+        Button("Im Fokus öffnen") { model.openFocus(task.id) }
+        if task.plannedDate != model.today {
+            Button("Für heute einplanen") { model.plan(task.id, for: model.today) }
+        }
+        Button("Auf morgen verschieben") { model.plan(task.id, for: model.today.adding(days: 1)) }
+        if task.plannedDate != nil {
+            Button("Zurück in den Eingang") { model.plan(task.id, for: nil) }
+        }
+        Divider()
+        Menu("Kunde") {
+            Button("Ohne Kunde") { model.setCustomer(nil, for: task.id) }
+            ForEach(model.activeCustomers) { customer in
+                Button(customer.name) { model.setCustomer(customer.id, for: task.id) }
+            }
+        }
+        Menu("Arbeitsart") {
+            ForEach(WorkType.allCases) { workType in
+                Button(workType.label) { model.setWorkType(workType, for: task.id) }
+            }
+            Divider()
+            Button("Keine") { model.setWorkType(nil, for: task.id) }
+        }
+        Menu("Schätzung") {
+            ForEach([15, 30, 45, 60, 90, 120, 180, 240], id: \.self) { minutes in
+                Button("\(TimeMath.format(minutes: minutes)) h") { model.setEstimate(minutes, for: task.id) }
+            }
+            Divider()
+            Button("Keine") { model.setEstimate(nil, for: task.id) }
+        }
+        Divider()
+        Button("Löschen", role: .destructive) { model.delete(task.id) }
+    }
+}
+
+/// Eingabezeile für neue Aufgaben. Eine Zeitangabe am Ende wird zur Schätzung ("… 1h30").
+struct NewTaskBar: View {
+    @Environment(AppModel.self) private var model
+    let plannedDate: LocalDate?
+    var fixedCustomerID: UUID? = nil
+
+    @State private var title = ""
+    @State private var customerID: UUID?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "plus")
+                .foregroundStyle(.secondary)
+            TextField("Neue Aufgabe, z. B. „Angebot schreiben 1h30“", text: $title)
+                .textFieldStyle(.plain)
+                .focused($focused)
+                .onSubmit(add)
+            if fixedCustomerID == nil {
+                Picker("Kunde", selection: $customerID) {
+                    Text("Ohne Kunde").tag(UUID?.none)
+                    ForEach(model.activeCustomers) { customer in
+                        Text(customer.name).tag(UUID?.some(customer.id))
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 170)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .onChange(of: model.newTaskRequest) {
+            focused = true
+        }
+    }
+
+    private func add() {
+        if model.addTask(title: title, customerID: fixedCustomerID ?? customerID, plannedDate: plannedDate) != nil {
+            title = ""
+        }
+    }
+}
+
+struct ColorChooser: View {
+    let selected: Int
+    let onSelect: (Int) -> Void
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<CustomerPalette.count, id: \.self) { index in
+                Button {
+                    onSelect(index)
+                } label: {
+                    Circle()
+                        .fill(CustomerPalette.color(index))
+                        .frame(width: 12, height: 12)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.primary, lineWidth: index == selected ? 2 : 0)
+                                .padding(-2)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
