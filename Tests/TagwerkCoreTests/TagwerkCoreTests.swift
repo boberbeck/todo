@@ -655,3 +655,182 @@ final class ReviewTests: XCTestCase {
         XCTAssertNil(after.tasks.first?.goalID, "Aufgaben verlieren nur die Verknüpfung")
     }
 }
+
+final class SAPImportTests: XCTestCase {
+    func testTaskIDs() {
+        XCTAssertTrue(SAPImport.looksLikeTaskID("CPSO8643-12"))
+        XCTAssertTrue(SAPImport.looksLikeTaskID("P1000-3"))
+        XCTAssertTrue(SAPImport.looksLikeTaskID("CPSO8643-12-1"))
+        XCTAssertFalse(SAPImport.looksLikeTaskID("2026-11-19"))
+        XCTAssertFalse(SAPImport.looksLikeTaskID("UTF-8"))
+        XCTAssertFalse(SAPImport.looksLikeTaskID("Projektaufgabenbestätigung"))
+        XCTAssertFalse(SAPImport.looksLikeTaskID("cpso8643-1"))
+        XCTAssertEqual(SAPImport.projectKey(of: "CPSO8643-12"), "CPSO8643")
+    }
+
+    func testTableWithHeader() {
+        let text = """
+        Kategorie\tAufgabennummer\tAufgabenname\tKunde
+        Projektaufgabenbestätigung\tCPSO8643-12\tFirewall erneuern\tMüller Logistik GmbH
+        Projektaufgabenbestätigung\tCPSO8643-1\tWartung\tMüller Logistik GmbH
+        Projektaufgabenbestätigung\tCPSO8643-1\tWartung\tMüller Logistik GmbH
+        """
+        let rows = SAPImport.rows(fromText: text)
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows[0].code, "CPSO8643-12")
+        XCTAssertEqual(rows[0].title, "Firewall erneuern")
+        XCTAssertEqual(rows[0].project, "CPSO8643")
+        XCTAssertEqual(rows[0].customerName, "Müller Logistik GmbH")
+        XCTAssertEqual(rows[0].category, "Projektaufgabenbestätigung")
+    }
+
+    func testTableWithoutHeaderAndSemicolons() {
+        let rows = SAPImport.rows(fromText: "Projektaufgabenbestätigung;CPSO8643-5;Migration Exchange\nSumme;;\n")
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows[0].code, "CPSO8643-5")
+        XCTAssertEqual(rows[0].title, "Migration Exchange")
+    }
+
+    func testLinesCopiedFromBrowser() {
+        let rows = SAPImport.rows(fromText: "Projektaufgabenbestätigung CPSO8643-7\nCPSO8643-8 Netzwerk\nGruppieren nach Kategorie")
+        XCTAssertEqual(rows.map(\.code), ["CPSO8643-7", "CPSO8643-8"])
+        XCTAssertEqual(rows[1].title, "Netzwerk")
+    }
+
+    func testCSVQuotes() {
+        let cells = TableText.cells(from: "Aufgabennummer,Aufgabenname\n\"CPSO1-2\",\"Beratung, vor Ort\"\n")
+        XCTAssertEqual(cells[1], ["CPSO1-2", "Beratung, vor Ort"])
+    }
+
+    func testHTMLTable() {
+        let html = "<table><tr><th>Aufgabennummer</th><th>Aufgabenname</th></tr><tr><td><span>CPSO8643-9</span></td><td>Gr&uuml;ne&nbsp;Wiese &amp; Co</td></tr></table>"
+        let rows = SAPImport.rows(fromCells: HTMLTable.cells(from: html))
+        XCTAssertEqual(rows.first?.code, "CPSO8643-9")
+        XCTAssertEqual(rows.first?.title, "Grüne Wiese & Co")
+    }
+
+    func testXLSXSheet() {
+        let shared = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Aufgabennummer</t></si><si><t>Aufgabenname</t></si><si><t>CPSO8643-10</t></si><si><r><t>Back</t></r><r><t>up</t></r></si></sst>
+        """
+        let sheet = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>
+        <row r="1"><c r="A1" t="s"><v>0</v></c><c r="C1" t="s"><v>1</v></c></row>
+        <row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>42</v></c><c r="C2" t="s"><v>3</v></c></row>
+        <row r="3"><c r="A3" t="inlineStr"><is><t>CPSO8643-11</t></is></c><c r="C3" t="inlineStr"><is><t>Monitoring</t></is></c></row>
+        </sheetData></worksheet>
+        """
+        let cells = XLSXSheet.cells(sheet: Data(sheet.utf8), sharedStrings: Data(shared.utf8))
+        XCTAssertEqual(cells[0], ["Aufgabennummer", "", "Aufgabenname"])
+        XCTAssertEqual(cells[1], ["CPSO8643-10", "42", "Backup"])
+        let rows = SAPImport.rows(fromCells: cells)
+        XCTAssertEqual(rows.map(\.code), ["CPSO8643-10", "CPSO8643-11"])
+        XCTAssertEqual(rows.map(\.title), ["Backup", "Monitoring"])
+        XCTAssertEqual(XLSXSheet.columnIndex(of: "AB12"), 27)
+    }
+
+    func testSpreadsheetML() {
+        let xml = """
+        <?xml version="1.0"?>
+        <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+        <Worksheet ss:Name="Aufgaben"><Table>
+        <Row><Cell><Data ss:Type="String">Aufgabennummer</Data></Cell><Cell><Data ss:Type="String">Aufgabenname</Data></Cell></Row>
+        <Row><Cell><Data ss:Type="String">CPSO8643-4</Data></Cell><Cell ss:Index="2"><Data ss:Type="String">Projekt Netzumbau</Data></Cell></Row>
+        </Table></Worksheet></Workbook>
+        """
+        let data = Data(xml.utf8)
+        XCTAssertTrue(SpreadsheetML.isSpreadsheetML(data))
+        let rows = SAPImport.rows(fromCells: SpreadsheetML.cells(from: data))
+        XCTAssertEqual(rows.first?.code, "CPSO8643-4")
+        XCTAssertEqual(rows.first?.title, "Projekt Netzumbau")
+    }
+
+    func testPlanAndApply() {
+        let mueller = Customer(name: "Müller Logistik", colorIndex: 1, manageEngineAccount: "Müller Logistik GmbH")
+        let stadtwerke = Customer(name: "Stadtwerke Nord", colorIndex: 2)
+        let existing = [
+            PSPElement(customerID: mueller.id, code: "CPSO8643-1", title: "Wartung"),
+            PSPElement(customerID: mueller.id, code: "CPSO8643-2", title: "Störungen"),
+            PSPElement(customerID: mueller.id, code: "CPSO8643-4", title: "Netzumbau", isActive: false),
+            PSPElement(customerID: stadtwerke.id, code: "CPSO9000-1", title: "Support"),
+        ]
+        let rows = [
+            SAPTaskRow(code: "CPSO8643-1", title: "Wartung"),
+            SAPTaskRow(code: "CPSO8643-4", title: "Netzumbau"),
+            SAPTaskRow(code: "CPSO8643-12", title: "Firewall"),
+            SAPTaskRow(code: "CPSO8700-1", title: "Rollout", customerName: "Stadtwerke Nord GmbH"),
+            SAPTaskRow(code: "CPSO8800-1", title: "Beratung", customerName: "Hansa Spedition"),
+        ]
+        let plan = SAPImport.plan(rows: rows, existing: existing, customers: [mueller, stadtwerke])
+        XCTAssertEqual(plan.groups.map(\.project), ["CPSO8643", "CPSO8700", "CPSO8800"])
+        XCTAssertEqual(plan.groups[0].suggestedCustomerID, mueller.id)
+        XCTAssertEqual(plan.groups[1].suggestedCustomerID, stadtwerke.id)
+        XCTAssertNil(plan.groups[2].suggestedCustomerID)
+        XCTAssertEqual(plan.groups[0].items.map(\.change), [.unchanged, .reactivated, .new])
+        // CPSO8643-2 fehlt in SAP, CPSO9000-1 gehört zu einem anderen Projekt und bleibt
+        XCTAssertEqual(plan.missing.map(\.code), ["CPSO8643-2"])
+
+        let saved = SAPImport.apply(plan, customerFor: { group in
+            group.project == "CPSO8800" ? nil : group.suggestedCustomerID
+        }, deactivateMissing: true)
+        let byCode = Dictionary(uniqueKeysWithValues: saved.map { ($0.code, $0) })
+        XCTAssertNil(byCode["CPSO8643-1"], "Unverändertes wird nicht gespeichert")
+        XCTAssertEqual(byCode["CPSO8643-4"]?.isActive, true)
+        XCTAssertEqual(byCode["CPSO8643-12"]?.customerID, mueller.id)
+        XCTAssertEqual(byCode["CPSO8700-1"]?.customerID, stadtwerke.id)
+        XCTAssertNil(byCode["CPSO8800-1"], "Übersprungenes Projekt")
+        XCTAssertEqual(byCode["CPSO8643-2"]?.isActive, false)
+    }
+
+    func testRenamedTask() {
+        let customer = Customer(name: "Becker", colorIndex: 0)
+        let existing = [PSPElement(customerID: customer.id, code: "CPSO1-1", title: "Alt")]
+        let plan = SAPImport.plan(rows: [SAPTaskRow(code: "CPSO1-1", title: "Neu")], existing: existing, customers: [customer])
+        XCTAssertEqual(plan.groups.first?.items.first?.change, .renamed("Alt"))
+        let saved = SAPImport.apply(plan, customerFor: { $0.suggestedCustomerID }, deactivateMissing: false)
+        XCTAssertEqual(saved.first?.title, "Neu")
+        XCTAssertEqual(saved.first?.id, existing[0].id)
+    }
+}
+
+final class ManageEngineTechnicianTests: XCTestCase {
+    private let technicians = [
+        ManageEngineTechnician(id: "1501", name: "Björn Lulay", email: "b.lulay@example.com"),
+        ManageEngineTechnician(id: "1502", name: "Anna Schmidt", email: "aschmidt@example.com"),
+    ]
+
+    func testLoginNameMatchesInitialAndLastName() {
+        XCTAssertEqual(ManageEngineAPI.technicians(matching: "blulay", in: technicians).map(\.id), ["1501"])
+        XCTAssertEqual(ManageEngineAPI.technicians(matching: "aschmidt", in: technicians).map(\.id), ["1502"])
+        XCTAssertEqual(ManageEngineAPI.technicians(matching: "Lulay", in: technicians).map(\.id), ["1501"])
+        XCTAssertEqual(ManageEngineAPI.technicians(matching: "1502", in: technicians).map(\.id), ["1502"])
+        XCTAssertTrue(ManageEngineAPI.technicians(matching: "xyz", in: technicians).isEmpty)
+    }
+
+    func testNumericID() {
+        XCTAssertTrue(ManageEngineConfig(baseURL: "https://x", technicianID: " 1501 ").technicianIDIsNumeric)
+        XCTAssertFalse(ManageEngineConfig(baseURL: "https://x", technicianID: "blulay").technicianIDIsNumeric)
+        let config = ManageEngineConfig(baseURL: "https://helpdesk.example.com", technicianID: "blulay")
+        XCTAssertThrowsError(try ManageEngineAPI.assignedRequests(config: config, token: "T")) { error in
+            XCTAssertEqual(error as? ManageEngineError, .technicianNotNumeric)
+        }
+        XCTAssertNoThrow(try ManageEngineAPI.connectionTest(config: config, token: "T"))
+        XCTAssertNoThrow(try ManageEngineAPI.connectionTest(config: ManageEngineConfig(baseURL: "https://helpdesk.example.com"), token: "T"))
+    }
+
+    func testParseTechnicians() throws {
+        let json = """
+        {"requests":[
+          {"id":"1","technician":{"id":"1501","name":"Björn Lulay","email_id":"b.lulay@example.com"}},
+          {"id":"2","technician":{"id":1502,"name":"Anna Schmidt"}},
+          {"id":"3","technician":{"id":"1501","name":"Björn Lulay"}},
+          {"id":"4","technician":null}
+        ],"response_status":[{"status_code":2000,"status":"success"}]}
+        """
+        let parsed = try ManageEngineAPI.parseTechnicians(Data(json.utf8))
+        XCTAssertEqual(parsed.map(\.id), ["1502", "1501"])
+        XCTAssertEqual(parsed.last?.email, nil)
+    }
+}

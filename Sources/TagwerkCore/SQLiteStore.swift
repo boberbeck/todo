@@ -40,6 +40,8 @@ public final class SQLiteStore: Store {
             db = nil
             throw SQLiteError.open(message)
         }
+        // App und MCP-Server schreiben in dieselbe Datei: kurz warten statt sofort abbrechen.
+        sqlite3_busy_timeout(db, 3000)
         try exec("PRAGMA journal_mode = WAL;")
         try migrate()
     }
@@ -156,6 +158,12 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+    }
+
+    /// Zählt Änderungen durch andere Verbindungen (`PRAGMA data_version`).
+    public func changeToken() -> Int? {
+        guard let statement = try? prepare("PRAGMA data_version;"), (try? statement.step()) == true else { return nil }
+        return statement.int(0)
     }
 
     private func userVersion() throws -> Int {

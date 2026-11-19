@@ -24,8 +24,17 @@ enum SnapshotMode {
     }
 
     @MainActor
-    static func run(model: AppModel, into directory: URL) async {
+    static func run(model: AppModel, into directory: URL, openSettings: () -> Void) async {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Beispielwerte für die Einstellungen; `register` schreibt nichts dauerhaft.
+        UserDefaults.standard.register(defaults: [
+            Preferences.meBaseURLKey: "https://helpdesk.example.com",
+            Preferences.meTechnicianKey: "301",
+            Preferences.serviceKey(for: .wartung): "S-WART",
+            Preferences.serviceKey(for: .stoerung): "S-STOER",
+            Preferences.serviceKey(for: .projekt): "S-PROJ",
+            Preferences.serviceKey(for: .beratung): "S-BERAT",
+        ])
         try? await Task.sleep(for: .seconds(2))
 
         guard let window = NSApp.windows.first(where: { $0.isVisible && $0.frame.width >= 600 }) else {
@@ -86,6 +95,32 @@ enum SnapshotMode {
                     model.idlePrompt = nil
                     try? await Task.sleep(for: .seconds(0.5))
                 }
+
+                // Abgleich mit SAP ByDesign
+                model.selection = .customers
+                model.sapSyncRows = DemoData.sapRows
+                model.showsSAPSync = true
+                try? await Task.sleep(for: .seconds(1.5))
+                await capture(window.attachedSheet ?? window, name: "sapabgleich", in: directory)
+                model.showsSAPSync = false
+                try? await Task.sleep(for: .seconds(0.8))
+
+                // Einstellungen, jeder Tab einzeln
+                openSettings()
+                try? await Task.sleep(for: .seconds(1.5))
+                for tab in SettingsView.Tab.allCases {
+                    UserDefaults.standard.set(tab.rawValue, forKey: SettingsView.tabKey)
+                    try? await Task.sleep(for: .seconds(1.2))
+                    if let settings = NSApp.windows.first(where: { candidate in
+                        candidate.isVisible && candidate !== window && !(candidate is NSPanel) && candidate.frame.width > 300
+                    }) {
+                        settings.makeKeyAndOrderFront(nil)
+                        try? await Task.sleep(for: .seconds(0.3))
+                        await capture(settings, name: "einstellungen-\(tab.rawValue.lowercased())", in: directory)
+                    }
+                }
+                UserDefaults.standard.set(SettingsView.Tab.general.rawValue, forKey: SettingsView.tabKey)
+                NSApp.windows.first { $0.isVisible && $0 !== window && !($0 is NSPanel) && $0.frame.width > 300 }?.close()
                 window.makeKeyAndOrderFront(nil)
             }
         }

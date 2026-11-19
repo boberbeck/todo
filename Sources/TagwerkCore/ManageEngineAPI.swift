@@ -34,7 +34,20 @@ public struct ManageEngineConfig: Equatable, Codable, Sendable {
     }
 
     public var isComplete: Bool {
-        URL(string: trimmedBase) != nil && !trimmedBase.isEmpty && !technicianID.trimmingCharacters(in: .whitespaces).isEmpty
+        hasAddress && !trimmedTechnician.isEmpty
+    }
+
+    public var hasAddress: Bool {
+        URL(string: trimmedBase) != nil && !trimmedBase.isEmpty
+    }
+
+    var trimmedTechnician: String {
+        technicianID.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Die API erwartet die interne Nummer des Technikers, nicht den Anmeldenamen.
+    public var technicianIDIsNumeric: Bool {
+        !trimmedTechnician.isEmpty && trimmedTechnician.allSatisfy(\.isNumber)
     }
 
     var trimmedBase: String {
@@ -58,8 +71,22 @@ public struct ManageEngineTicket: Equatable, Sendable {
     public var webURL: String?
 }
 
+/// Ein Techniker, wie er in Tickets steht. Hilft, die eigene Techniker-ID zu finden.
+public struct ManageEngineTechnician: Hashable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+    public var email: String?
+
+    public init(id: String, name: String, email: String? = nil) {
+        self.id = id
+        self.name = name
+        self.email = email
+    }
+}
+
 public enum ManageEngineError: Error, CustomStringConvertible, Equatable {
     case notConfigured
+    case technicianNotNumeric
     case invalidURL
     case server(String)
     case unexpectedResponse
@@ -67,6 +94,7 @@ public enum ManageEngineError: Error, CustomStringConvertible, Equatable {
     public var description: String {
         switch self {
         case .notConfigured: return "ManageEngine ist noch nicht eingerichtet."
+        case .technicianNotNumeric: return "Die Techniker-ID ist eine Zahl, nicht der Anmeldename. „Verbindung testen“ in den Einstellungen findet sie."
         case .invalidURL: return "Die Adresse von ManageEngine ist ungültig."
         case .server(let message): return "ManageEngine meldet: \(message)"
         case .unexpectedResponse: return "Unerwartete Antwort von ManageEngine."
@@ -83,6 +111,8 @@ public enum ManageEngineAPI {
 
     /// Offene Tickets, die dem eigenen Techniker zugewiesen sind.
     public static func assignedRequests(config: ManageEngineConfig, token: String, rowCount: Int = 100) throws -> URLRequest {
+        guard config.isComplete else { throw ManageEngineError.notConfigured }
+        guard config.technicianIDIsNumeric else { throw ManageEngineError.technicianNotNumeric }
         let input: [String: Any] = [
             "list_info": [
                 "row_count": rowCount,
@@ -91,16 +121,25 @@ public enum ManageEngineAPI {
                 "sort_order": "desc",
                 "get_total_count": false,
                 "search_criteria": [
-                    ["field": "technician.id", "condition": "is", "value": config.technicianID],
+                    ["field": "technician.id", "condition": "is", "value": config.trimmedTechnician],
                 ],
             ] as [String: Any],
         ]
         return try get(path: "/api/v3/requests", input: input, config: config, token: token)
     }
 
-    /// Kleinste Anfrage, um Adresse und Schlüssel zu prüfen.
-    public static func connectionTest(config: ManageEngineConfig, token: String) throws -> URLRequest {
-        try get(path: "/api/v3/requests", input: ["list_info": ["row_count": 1]], config: config, token: token)
+    /// Prüft Adresse und Schlüssel. Holt dazu die letzten Tickets, um die Techniker darin zu zeigen.
+    /// Braucht noch keine Techniker-ID.
+    public static func connectionTest(config: ManageEngineConfig, token: String, rowCount: Int = 100) throws -> URLRequest {
+        let input: [String: Any] = [
+            "list_info": [
+                "row_count": rowCount,
+                "start_index": 1,
+                "sort_field": "created_time",
+                "sort_order": "desc",
+            ] as [String: Any],
+        ]
+        return try get(path: "/api/v3/requests", input: input, config: config, token: token, requireTechnician: false)
     }
 
     /// Legt einen Worklog am Ticket an: Beschreibung, Dauer, Start und Ende.
@@ -112,10 +151,12 @@ public enum ManageEngineAPI {
         minutes: Int,
         start: Date
     ) throws -> URLRequest {
+        guard config.isComplete else { throw ManageEngineError.notConfigured }
+        guard config.technicianIDIsNumeric else { throw ManageEngineError.technicianNotNumeric }
         let end = start.addingTimeInterval(TimeInterval(minutes * 60))
         let worklog: [String: Any] = [
             "description": description,
-            "owner": ["id": config.technicianID],
+            "owner": ["id": config.trimmedTechnician],
             "start_time": ["value": String(Int64(start.timeIntervalSince1970 * 1000))],
             "end_time": ["value": String(Int64(end.timeIntervalSince1970 * 1000))],
             "time_spent": ["hours": String(minutes / 60), "minutes": String(minutes % 60)],
@@ -155,6 +196,51 @@ public enum ManageEngineAPI {
                 webURL: webURL(for: key, config: config)
             )
         }
+    }
+
+    /// Alle Techniker, die in den Tickets der Antwort vorkommen, nach Name sortiert.
+    public static func parseTechnicians(_ data: Data) throws -> [ManageEngineTechnician] {
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ManageEngineError.unexpectedResponse
+        }
+        if let message = errorMessage(in: root) { throw ManageEngineError.server(message) }
+        var byID: [String: ManageEngineTechnician] = [:]
+        for item in root["requests"] as? [[String: Any]] ?? [] {
+            guard let technician = item["technician"] as? [String: Any],
+                  let id = stringValue(technician["id"]) else { continue }
+            let name = technician["name"] as? String ?? id
+            byID[id] = ManageEngineTechnician(id: id, name: name, email: technician["email_id"] as? String)
+        }
+        return byID.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// Techniker, die zu einer Eingabe wie „blulay“, „Lulay“ oder einer Mail-Adresse passen.
+    /// „blulay“ passt z. B. auf „Björn Lulay“ (erster Buchstabe des Vornamens + Nachname).
+    public static func technicians(matching query: String, in technicians: [ManageEngineTechnician]) -> [ManageEngineTechnician] {
+        let key = fold(query)
+        guard !key.isEmpty else { return [] }
+        if let exact = technicians.first(where: { $0.id == query.trimmingCharacters(in: .whitespaces) }) {
+            return [exact]
+        }
+        return technicians.filter { technician in
+            let parts = technician.name.split(whereSeparator: { $0 == " " || $0 == "," }).map { fold(String($0)) }.filter { !$0.isEmpty }
+            var candidates = [fold(technician.name)]
+            if let email = technician.email {
+                candidates.append(fold(String(email.split(separator: "@").first ?? "")))
+                candidates.append(fold(email))
+            }
+            if let first = parts.first, let last = parts.last, parts.count > 1 {
+                candidates.append(String(first.prefix(1)) + last)
+                candidates.append(first + last)
+                candidates.append(last)
+            }
+            return candidates.contains { $0 == key || (key.count >= 4 && $0.contains(key)) }
+        }
+    }
+
+    private static func fold(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .filter { $0.isLetter || $0.isNumber || $0 == "@" || $0 == "." }
     }
 
     /// ID des angelegten Worklogs.
@@ -198,14 +284,14 @@ public enum ManageEngineAPI {
 
     // MARK: Hilfen
 
-    private static func get(path: String, input: [String: Any], config: ManageEngineConfig, token: String) throws -> URLRequest {
-        var request = try base(path: path, query: [URLQueryItem(name: "input_data", value: try jsonString(input))], config: config, token: token)
+    private static func get(path: String, input: [String: Any], config: ManageEngineConfig, token: String, requireTechnician: Bool = true) throws -> URLRequest {
+        var request = try base(path: path, query: [URLQueryItem(name: "input_data", value: try jsonString(input))], config: config, token: token, requireTechnician: requireTechnician)
         request.httpMethod = "GET"
         return request
     }
 
-    private static func base(path: String, query: [URLQueryItem]?, config: ManageEngineConfig, token: String) throws -> URLRequest {
-        guard config.isComplete else { throw ManageEngineError.notConfigured }
+    private static func base(path: String, query: [URLQueryItem]?, config: ManageEngineConfig, token: String, requireTechnician: Bool = true) throws -> URLRequest {
+        guard requireTechnician ? config.isComplete : config.hasAddress else { throw ManageEngineError.notConfigured }
         guard var components = URLComponents(string: config.trimmedBase + path) else { throw ManageEngineError.invalidURL }
         components.queryItems = query
         guard let url = components.url else { throw ManageEngineError.invalidURL }

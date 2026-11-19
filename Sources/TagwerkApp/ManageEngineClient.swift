@@ -83,10 +83,11 @@ final class ManageEngineClient {
         return try ManageEngineAPI.parseWorklogID(data)
     }
 
-    func testConnection() async throws {
+    /// Prüft Adresse und Schlüssel und gibt die Techniker aus den letzten Tickets zurück.
+    func testConnection() async throws -> [ManageEngineTechnician] {
         let request = try ManageEngineAPI.connectionTest(config: config, token: try requireToken())
         let data = try await send(request)
-        _ = try ManageEngineAPI.parseTickets(data, config: config)
+        return try ManageEngineAPI.parseTechnicians(data)
     }
 
     private func requireToken() throws -> String {

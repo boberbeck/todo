@@ -4,9 +4,11 @@ import PackageDescription
 // Tagwerk – Arbeitsname der Todo-App.
 // TagwerkCore enthält Datenmodell, Zeitlogik und Speicherung und läuft auch unter Linux (für Tests).
 // TagwerkApp ist die SwiftUI-Oberfläche und wird nur auf macOS gebaut.
+// tagwerk-mcp ist der MCP-Server für Claude und liegt später neben der App im Bundle.
 
 var products: [Product] = [
     .library(name: "TagwerkCore", targets: ["TagwerkCore"]),
+    .executable(name: "tagwerk-mcp", targets: ["tagwerk-mcp"]),
 ]
 
 var targets: [Target] = [
@@ -20,6 +22,20 @@ var targets: [Target] = [
     .testTarget(
         name: "TagwerkCoreTests",
         dependencies: ["TagwerkCore"]
+    ),
+    // MCP-Server, damit Claude (Desktop oder Code) auf Aufgaben und Zeiten zugreifen kann.
+    .target(
+        name: "TagwerkMCP",
+        dependencies: ["TagwerkCore"]
+    ),
+    .executableTarget(
+        name: "tagwerk-mcp",
+        dependencies: ["TagwerkCore", "TagwerkMCP"],
+        path: "Sources/tagwerk-mcp"
+    ),
+    .testTarget(
+        name: "TagwerkMCPTests",
+        dependencies: ["TagwerkMCP", "TagwerkCore"]
     ),
 ]
 

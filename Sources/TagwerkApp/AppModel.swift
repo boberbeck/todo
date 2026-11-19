@@ -26,6 +26,9 @@ final class AppModel {
     private(set) var goals: [WeeklyGoal] = []
     /// Erkannte Pause während eines laufenden Timers, wartet auf eine Entscheidung.
     var idlePrompt: IdlePrompt?
+    /// Zeigt den Abgleich mit SAP ByDesign. `sapSyncRows` füllt ihn vorab (Vorschau, Bildschirmfotos).
+    var showsSAPSync = false
+    var sapSyncRows: [SAPTaskRow]?
     private(set) var inboxMessage: String?
     private(set) var lastTicketSync: Date?
     private(set) var ticketSyncMessage: String?
@@ -57,6 +60,8 @@ final class AppModel {
     private let manageEngine = ManageEngineClient()
     @ObservationIgnored private var ticker: Timer?
     @ObservationIgnored private var tickCount = 0
+    /// Letzter Stand der Datenbank, um Änderungen von außen (Claude über MCP) zu bemerken.
+    @ObservationIgnored private var lastChangeToken: Int?
     @ObservationIgnored private var idleSince: Date?
     @ObservationIgnored private var quickCaptureController: QuickCaptureController?
 
@@ -643,6 +648,43 @@ final class AppModel {
         }
     }
 
+    // MARK: Abgleich mit SAP
+
+    func sapImportPlan(_ rows: [SAPTaskRow]) -> SAPImport.Plan {
+        SAPImport.plan(rows: rows, existing: pspElements, customers: customers)
+    }
+
+    /// Übernimmt den Abgleich und gibt eine kurze Zusammenfassung zurück.
+    func applySAPImport(_ plan: SAPImport.Plan, choices: [String: SAPCustomerChoice], deactivateMissing: Bool) -> String {
+        var created: [String: UUID] = [:]
+        let knownIDs = Set(pspElements.map(\.id))
+        let elements = SAPImport.apply(plan, customerFor: { group in
+            switch choices[group.project] ?? .skip {
+            case .skip:
+                return nil
+            case .existing(let id):
+                return id
+            case .new(let name):
+                if let id = created[name] { return id }
+                let customer = addCustomer(name: name)
+                created[name] = customer?.id
+                return customer?.id
+            }
+        }, deactivateMissing: deactivateMissing)
+        for psp in elements {
+            save(psp)
+        }
+        let new = elements.filter { !knownIDs.contains($0.id) }.count
+        let deactivated = deactivateMissing ? plan.missing.count : 0
+        let updated = elements.count - new - deactivated
+        var parts: [String] = []
+        if new > 0 { parts.append(new == 1 ? "1 PSP-Element neu" : "\(new) PSP-Elemente neu") }
+        if updated > 0 { parts.append("\(updated) aktualisiert") }
+        if deactivated > 0 { parts.append("\(deactivated) deaktiviert") }
+        if !created.isEmpty { parts.append(created.count == 1 ? "1 Kunde angelegt" : "\(created.count) Kunden angelegt") }
+        return parts.isEmpty ? "Alles war schon auf dem Stand." : parts.joined(separator: ", ") + "."
+    }
+
     // MARK: Tagesabschluss und Buchung
 
     var bookingRules: BookingRules {
@@ -821,12 +863,37 @@ final class AppModel {
         }
     }
 
-    func testManageEngine() async -> String {
+    /// Ergebnis von „Verbindung testen“: Meldung und passende Techniker, falls die ID noch nicht stimmt.
+    struct ManageEngineCheck {
+        var ok: Bool
+        var message: String
+        var suggestions: [ManageEngineTechnician] = []
+    }
+
+    func testManageEngine() async -> ManageEngineCheck {
+        let config = manageEngine.config
         do {
-            try await manageEngine.testConnection()
-            return "Verbindung klappt."
+            let technicians = try await manageEngine.testConnection()
+            let entered = config.technicianID.trimmingCharacters(in: .whitespaces)
+            if let own = technicians.first(where: { $0.id == entered }) {
+                return ManageEngineCheck(ok: true, message: "Verbindung klappt. Die Techniker-ID gehört zu \(own.name).")
+            }
+            let matches = ManageEngineAPI.technicians(matching: entered, in: technicians)
+            if !matches.isEmpty {
+                return ManageEngineCheck(ok: true, message: "Verbindung klappt. Wähle deinen Eintrag, dann stimmt die Techniker-ID:", suggestions: matches)
+            }
+            if config.technicianIDIsNumeric {
+                return ManageEngineCheck(ok: true, message: "Verbindung klappt. Die Techniker-ID kam in den letzten Tickets nicht vor; das ist in Ordnung, wenn dir gerade nichts zugewiesen ist.")
+            }
+            return ManageEngineCheck(
+                ok: true,
+                message: technicians.isEmpty
+                    ? "Verbindung klappt, aber in den letzten Tickets steht kein Techniker. Die Techniker-ID (eine Zahl) findest du in ServiceDesk Plus unter Admin › Techniker."
+                    : "Verbindung klappt. Wer bist du? Wähle deinen Namen, dann ist die Techniker-ID eingetragen:",
+                suggestions: technicians
+            )
         } catch {
-            return String(describing: error)
+            return ManageEngineCheck(ok: false, message: String(describing: error))
         }
     }
 
@@ -987,7 +1054,7 @@ final class AppModel {
 
     // MARK: Sicherung und Export
 
-    private var dataFolder: URL {
+    var dataFolder: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Tagwerk", isDirectory: true)
     }
@@ -1060,6 +1127,14 @@ final class AppModel {
         }
     }
 
+    /// Hat ein anderes Programm (z. B. Claude über den MCP-Server) etwas geändert, neu laden.
+    private func reloadIfChangedElsewhere() {
+        guard let token = store.changeToken() else { return }
+        defer { lastChangeToken = token }
+        guard let last = lastChangeToken, last != token else { return }
+        reload()
+    }
+
     private func rollOverOpenTasks() {
         for var task in DayPlan.rollOver(tasks, to: today) {
             task.scheduledStart = nil
@@ -1090,6 +1165,7 @@ final class AppModel {
             backupIfDue()
         }
         autoSyncTicketsIfDue()
+        reloadIfChangedElsewhere()
         tickCount += 1
         if tickCount % 5 == 0 {
             checkIdle()

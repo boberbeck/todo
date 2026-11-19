@@ -31,13 +31,29 @@ jobs:
       - name: App-Bundle bauen
         run: scripts/make-app.sh debug
 
+      # Startet den MCP-Server mit einer leeren Datenbank und spricht ihn an wie Claude.
+      - name: MCP-Server prüfen
+        run: |
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"aufgabe_anlegen","arguments":{"titel":"Test aus CI 30m","datum":"heute"}}}' \
+            '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"tagesuebersicht","arguments":{}}}' \
+            | TAGWERK_DB="$RUNNER_TEMP/mcp-test.sqlite" build/Tagwerk.app/Contents/MacOS/tagwerk-mcp > mcp-output.txt
+          cat mcp-output.txt
+          grep -q '"protocolVersion":"2025-06-18"' mcp-output.txt
+          grep -q 'tagesuebersicht' mcp-output.txt
+          grep -q 'Test aus CI' mcp-output.txt
+          test "$(wc -l < mcp-output.txt)" -eq 4
+
       # Startet die App mit Beispieldaten. Sie zeigt jeden Bildschirm hell und dunkel und meldet sich
       # jeweils über die Datei .ready; dieses Skript fotografiert dann das Fenster.
       - name: Screenshots aufnehmen
         run: |
           mkdir -p screenshots
           open -n build/Tagwerk.app --args -TagwerkSnapshotDir "$PWD/screenshots" -AppleLanguages '(de)' -AppleLocale de_DE
-          for i in $(seq 1 600); do
+          for i in $(seq 1 1200); do
             if [ -f screenshots/.ready ]; then
               read -r NAME WID < screenshots/.ready
               if [ "$WID" = "0" ]; then

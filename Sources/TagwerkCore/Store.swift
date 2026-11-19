@@ -42,6 +42,13 @@ public protocol Store: AnyObject {
     func deleteTask(id: UUID) throws
     func deleteEntry(id: UUID) throws
     func deletePSP(id: UUID) throws
+    /// Ändert sich, wenn ein anderes Programm (z. B. der MCP-Server) Daten geschrieben hat.
+    /// `nil`, wenn der Speicher das nicht erkennen kann.
+    func changeToken() -> Int?
+}
+
+public extension Store {
+    func changeToken() -> Int? { nil }
 }
 
 public final class InMemoryStore: Store {

@@ -3,6 +3,7 @@ import TagwerkCore
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         @Bindable var model = model
@@ -49,11 +50,14 @@ struct RootView: View {
         .task {
             model.installQuickCapture()
             if let directory = SnapshotMode.directory {
-                await SnapshotMode.run(model: model, into: directory)
+                await SnapshotMode.run(model: model, into: directory) { openSettings() }
             }
         }
         .sheet(item: $model.idlePrompt) { prompt in
             IdlePromptView(prompt: prompt)
+        }
+        .sheet(isPresented: $model.showsSAPSync, onDismiss: { model.sapSyncRows = nil }) {
+            SAPSyncSheet(initialRows: model.sapSyncRows)
         }
         .alert(
             "Fehler",

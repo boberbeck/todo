@@ -50,6 +50,11 @@ struct CustomersView: View {
             }
         }
         .navigationTitle("Kunden")
+        .toolbar {
+            ToolbarItem {
+                SAPSyncButton()
+            }
+        }
     }
 
     private func add() {
@@ -177,6 +182,11 @@ struct CustomerDetailContent: View {
             NewTaskBar(plannedDate: nil, fixedCustomerID: customer.id)
         }
         .navigationTitle(customer.name)
+        .toolbar {
+            ToolbarItem {
+                SAPSyncButton()
+            }
+        }
         .onAppear {
             name = customer.name
             account = customer.manageEngineAccount ?? ""
@@ -302,5 +312,19 @@ struct PSPRow: View {
         .contextMenu {
             Button("Löschen", role: .destructive) { model.deletePSP(psp.id) }
         }
+    }
+}
+
+/// Öffnet den Abgleich mit SAP ByDesign.
+struct SAPSyncButton: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Button {
+            model.showsSAPSync = true
+        } label: {
+            Label("SAP-Abgleich", systemImage: "arrow.triangle.2.circlepath")
+        }
+        .help("Projektaufgaben aus SAP ByDesign als PSP-Elemente übernehmen")
     }
 }

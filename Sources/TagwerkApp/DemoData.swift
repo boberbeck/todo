@@ -44,7 +44,7 @@ enum DemoData {
             plannedDate: today,
             estimateMinutes: 30,
             workType: .wartung,
-            pspElement: "4702",
+            pspElement: "CPSO8643-1",
             workDescription: "Updates eingespielt, Neustart geprüft",
             status: .done,
             completedAt: now.addingTimeInterval(-3 * hour),
@@ -73,7 +73,7 @@ enum DemoData {
             plannedDate: today,
             estimateMinutes: 60,
             workType: .stoerung,
-            pspElement: "4711",
+            pspElement: "CPSO8643-2",
             workDescription: "VPN-Logs geprüft, Tunnel neu gestartet",
             sortIndex: 3,
             createdAt: now.addingTimeInterval(-4 * hour),
@@ -153,20 +153,20 @@ enum DemoData {
         }
 
         let psps = [
-            PSPElement(customerID: mueller.id, code: "4702", title: "Wartungsvertrag 2026", lastUsedAt: now.addingTimeInterval(-3 * hour)),
-            PSPElement(customerID: mueller.id, code: "4711", title: "Störungen", lastUsedAt: now.addingTimeInterval(-hour)),
-            PSPElement(customerID: mueller.id, code: "4690", title: "Projekt Netzumbau", isActive: false),
-            PSPElement(customerID: stadtwerke.id, code: "5120", title: "Support"),
-            PSPElement(customerID: becker.id, code: "6001", title: "Beratung"),
+            PSPElement(customerID: mueller.id, code: "CPSO8643-1", title: "Wartungsvertrag 2026", lastUsedAt: now.addingTimeInterval(-3 * hour)),
+            PSPElement(customerID: mueller.id, code: "CPSO8643-2", title: "Störungen", lastUsedAt: now.addingTimeInterval(-hour)),
+            PSPElement(customerID: mueller.id, code: "CPSO8643-4", title: "Projekt Netzumbau", isActive: false),
+            PSPElement(customerID: stadtwerke.id, code: "CPSO8710-1", title: "Support"),
+            PSPElement(customerID: becker.id, code: "CPSO8802-1", title: "Beratung"),
         ]
 
         // Das Server-Update ist schon gebucht: Worklog bestätigt, in SAP eingetragen.
         let bookings = [
             Booking(taskID: serverUpdate.id, day: today, target: .manageEngine, minutes: 30,
-                    description: serverUpdate.workDescription, pspElement: "4702", workType: .wartung,
+                    description: serverUpdate.workDescription, pspElement: "CPSO8643-1", workType: .wartung,
                     ticketKey: "100124", status: .confirmed, reference: "WL-8812", updatedAt: now.addingTimeInterval(-2 * hour)),
             Booking(taskID: serverUpdate.id, day: today, target: .sap, minutes: 30,
-                    description: "#1240 \(serverUpdate.workDescription)", pspElement: "4702", workType: .wartung,
+                    description: "#1240 \(serverUpdate.workDescription)", pspElement: "CPSO8643-1", workType: .wartung,
                     status: .entered, updatedAt: now.addingTimeInterval(-2 * hour)),
         ]
 
@@ -174,4 +174,16 @@ enum DemoData {
                         pspElements: psps, bookings: bookings,
                         goals: [goalOffer, goalStoerungen, goalMigration, goalNext])
     }
+
+    /// So sieht ein Excel-Export der Aufgabenliste aus ByDesign aus (für Bildschirmfotos).
+    static let sapRows: [SAPTaskRow] = SAPImport.rows(fromCells: [
+        ["Kategorie", "Aufgabennummer", "Aufgabenname", "Projekt", "Kunde"],
+        ["Projektaufgabenbestätigung", "CPSO8643-1", "Wartungsvertrag 2026", "CPSO8643", "Müller Logistik GmbH"],
+        ["Projektaufgabenbestätigung", "CPSO8643-2", "Störungen und Notfälle", "CPSO8643", "Müller Logistik GmbH"],
+        ["Projektaufgabenbestätigung", "CPSO8643-5", "Migration Exchange Online", "CPSO8643", "Müller Logistik GmbH"],
+        ["Projektaufgabenbestätigung", "CPSO8643-6", "Firewall-Erneuerung", "CPSO8643", "Müller Logistik GmbH"],
+        ["Projektaufgabenbestätigung", "CPSO8710-1", "Support", "CPSO8710", "Stadtwerke Nord"],
+        ["Projektaufgabenbestätigung", "CPSO8710-2", "Rollout Arbeitsplätze", "CPSO8710", "Stadtwerke Nord"],
+        ["Projektaufgabenbestätigung", "CPSO8955-1", "Beratung IT-Sicherheit", "CPSO8955", "Hansa Spedition"],
+    ])
 }

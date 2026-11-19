@@ -1,10 +1,12 @@
+<p align="center"><img src="docs/logo.png" width="128" alt="Tagwerk-Logo"></p>
+
 # Tagwerk
 
 Tagwerk ist der Arbeitsname einer schlanken Mac-App für Tagesplanung, Fokus und Zeiterfassung. Später bucht sie die Zeiten direkt in SAP Business ByDesign und als Worklog in ManageEngine.
 
 Der vollständige Plan steht im Dokument „Plan: Eigene Todo-App für den Mac“.
 
-## Stand: Phase 4 (Rückblick, Leerlauf, Schnell erfassen, Sicherung)
+## Stand: Phase 4 plus SAP-Abgleich und Claude-Anbindung
 
 | Bereich | Was geht |
 | --- | --- |
@@ -21,6 +23,8 @@ Der vollständige Plan steht im Dokument „Plan: Eigene Todo-App für den Mac�
 | Schnell erfassen | ⌃⌥ Leertaste öffnet von überall ein kleines Fenster für neue Aufgaben. |
 | Mails | Mails aus Outlook (oder .eml-Dateien) in den Eingang ziehen; Betreff und Absender werden übernommen. |
 | Sicherung | Täglich eine Kopie der Datenbank, die letzten 14 bleiben. |
+| SAP-Abgleich | Die Aufgabenliste aus ByDesign (Excel-Export oder kopierte Tabelle) wird zu PSP-Elementen bei den Kunden. Neue kommen dazu, geänderte Bezeichnungen werden übernommen, verschwundene auf Wunsch deaktiviert. |
+| Claude | Ein MCP-Server liegt in der App. Claude Desktop und Claude Code können damit Aufgaben, Timer, Zeiten und den Stand des Tagesabschlusses lesen und ändern. Gebucht wird weiter nur in Tagwerk. |
 | Menüleiste | Laufende Zeit, Stoppen, Erledigt, eine andere Aufgabe starten. |
 
 Außerdem:
@@ -50,6 +54,35 @@ Screenshots aller Bildschirme liegen unter `docs/screenshots`. Die CI erzeugt si
 
 Für den Kalenderzugriff am besten `scripts/make-app.sh` nutzen und `build/Tagwerk.app` starten. macOS fragt dann einmal nach dem Zugriff auf die Kalender. In den Einstellungen (⌘,) legst du Arbeitszeit, Kalender und Zeitblöcke fest. Ist dein Exchange-Konto im macOS-Kalender eingerichtet, erscheinen dort auch die Outlook-Termine.
 
+## Abgleich mit SAP ByDesign
+
+Ohne API-Zugriff auf SAP holt Tagwerk die Projektaufgaben über die Tabelle, die du in ByDesign ohnehin siehst:
+
+1. In ByDesign die Liste deiner Aufgaben öffnen (Spalten Kategorie und Aufgabennummer, z. B. `CPSO8643-12`).
+2. Am besten auch Aufgabenname, Projekt und Kunde einblenden.
+3. Nach Excel exportieren und die Datei in Tagwerk unter Kunden › SAP-Abgleich hineinziehen, oder die Zeilen kopieren und „Aus Zwischenablage einfügen“ wählen.
+4. Jedem Projekt einmal den Kunden zuordnen. Beim nächsten Abgleich merkt Tagwerk sich das über die schon bekannten Aufgaben.
+
+Gelesen werden `.xlsx`, Excel-XML (`.xls`), CSV und HTML-Tabellen. In SAP ändert sich dabei nichts.
+
+## Claude anbinden (MCP)
+
+`scripts/make-app.sh` legt den MCP-Server `tagwerk-mcp` neben die App: `Tagwerk.app/Contents/MacOS/tagwerk-mcp`.
+
+- **Claude Desktop:** Einstellungen › Claude › „In Claude Desktop eintragen“, danach Claude Desktop neu starten. Von Hand geht es über `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+  ```json
+  {
+    "mcpServers": {
+      "tagwerk": { "command": "/Applications/Tagwerk.app/Contents/MacOS/tagwerk-mcp" }
+    }
+  }
+  ```
+
+- **Claude Code:** `claude mcp add --scope user tagwerk -- /Applications/Tagwerk.app/Contents/MacOS/tagwerk-mcp`
+
+Werkzeuge: `tagesuebersicht`, `aufgaben`, `aufgabe_anlegen`, `aufgabe_aendern`, `timer_starten`, `timer_stoppen`, `zeitauswertung`, `tagesabschluss`, `kunden`, `wochenziele`, `wochenziel_anlegen`. Der Server arbeitet direkt auf der Datenbank; die geöffnete App lädt Änderungen innerhalb einer Sekunde nach. Nach SAP oder ManageEngine bucht Claude nicht. Mit der Umgebungsvariable `TAGWERK_DB` lässt sich eine andere Datenbank angeben, z. B. zum Ausprobieren.
+
 ## Daten
 
 Alle Daten liegen lokal in `~/Library/Application Support/Tagwerk/tagwerk.sqlite`. Time Machine sichert die Datei mit. Die App nutzt die SQLite-Bibliothek von macOS und braucht keine Fremdpakete.
@@ -73,4 +106,8 @@ Alle Daten liegen lokal in `~/Library/Application Support/Tagwerk/tagwerk.sqlite
 | --- | --- |
 | `Sources/TagwerkCore` | Datenmodell, Zeitlogik, Tagesplan-Regeln, SQLite-Speicher. Ohne Oberfläche und unter Linux testbar. |
 | `Sources/TagwerkApp` | SwiftUI-Oberfläche, nur macOS |
+| `Sources/TagwerkMCP` | MCP-Server (JSON-RPC über stdin/stdout) und die Werkzeuge für Claude |
+| `Sources/tagwerk-mcp` | Startprogramm des MCP-Servers |
+| `Support` | Info.plist und App-Symbol (`AppIcon.svg` ist die Vorlage) |
 | `Tests/TagwerkCoreTests` | Tests für die Kernlogik |
+| `Tests/TagwerkMCPTests` | Tests für den MCP-Server |

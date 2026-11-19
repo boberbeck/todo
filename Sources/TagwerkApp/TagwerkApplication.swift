@@ -63,6 +63,8 @@ struct TagwerkCommands: Commands {
                 .keyboardShortcut("t", modifiers: .command)
             Button("Erledigt") { model.completeFocused() }
                 .keyboardShortcut(.return, modifiers: .command)
+            Divider()
+            Button("SAP-Aufgaben abgleichen …") { model.showsSAPSync = true }
         }
         CommandMenu("Gehe zu") {
             Button("Heute") { model.selection = .today }
