@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import TagwerkCore
+import UniformTypeIdentifiers
 
 /// Tagesplan: Aufgaben des Tages mit Ist- und Plan-Zeit, rechts der Eingang.
 struct TodayView: View {
@@ -202,6 +203,7 @@ struct TaskRow: View {
 /// Noch nicht eingeplante Aufgaben. Später kommen hier Tickets und markierte Mails dazu.
 struct InboxPanel: View {
     @Environment(AppModel.self) private var model
+    @State private var isDropTarget = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -209,7 +211,7 @@ struct InboxPanel: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Eingang")
                         .font(.title3.weight(.semibold))
-                    Text(model.ticketSyncMessage ?? "Noch nicht eingeplant")
+                    Text(model.inboxMessage ?? model.ticketSyncMessage ?? "Noch nicht eingeplant · Mails hierher ziehen")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -248,7 +250,10 @@ struct InboxPanel: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Color.primary.opacity(0.03))
+        .background(Color.primary.opacity(isDropTarget ? 0.08 : 0.03))
+        .onDrop(of: DropImporter.acceptedTypes, isTargeted: $isDropTarget) { providers in
+            DropImporter.handle(providers, model: model)
+        }
     }
 }
 

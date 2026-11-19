@@ -47,6 +47,11 @@ struct TaskMetaLine: View {
                 Text("·")
                 Text("PSP \(psp)")
             }
+            if showsBooking, let goal = model.goal(task.goalID) {
+                Text("·")
+                Image(systemName: "target")
+                Text(goal.title)
+            }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -116,6 +121,13 @@ struct TaskContextMenu: View {
             }
             Divider()
             Button("Keine") { model.setWorkType(nil, for: task.id) }
+        }
+        Menu("Wochenziel") {
+            ForEach(model.goals(forWeekStarting: model.currentWeekStart)) { goal in
+                Button(goal.title) { model.setGoal(goal.id, for: task.id) }
+            }
+            Divider()
+            Button("Kein Wochenziel") { model.setGoal(nil, for: task.id) }
         }
         Menu("Schätzung") {
             ForEach([15, 30, 45, 60, 90, 120, 180, 240], id: \.self) { minutes in

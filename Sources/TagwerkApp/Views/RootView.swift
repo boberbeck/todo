@@ -47,9 +47,13 @@ struct RootView: View {
             }
         }
         .task {
+            model.installQuickCapture()
             if let directory = SnapshotMode.directory {
                 await SnapshotMode.run(model: model, into: directory)
             }
+        }
+        .sheet(item: $model.idlePrompt) { prompt in
+            IdlePromptView(prompt: prompt)
         }
         .alert(
             "Fehler",
@@ -62,5 +66,39 @@ struct RootView: View {
         } message: {
             Text(model.lastError ?? "")
         }
+    }
+}
+
+/// Nachfrage nach einer erkannten Pause während eines laufenden Timers.
+struct IdlePromptView: View {
+    @Environment(AppModel.self) private var model
+    let prompt: IdlePrompt
+
+    var body: some View {
+        let task = model.task(prompt.taskID)
+        let others = model.todayTasks.filter { $0.id != prompt.taskID && !$0.isDone }
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Du warst \(prompt.minutes) Minuten weg", systemImage: "cup.and.saucer")
+                .font(.title2.weight(.semibold))
+            Text("Von \(prompt.start.formatted(date: .omitted, time: .shortened)) bis \(prompt.end.formatted(date: .omitted, time: .shortened)) gab es keine Eingabe, der Timer für „\(task?.title ?? "die Aufgabe")“ lief weiter.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                Button("Zeit behalten") { model.resolveIdle(.keep) }
+                Menu("Anderer Aufgabe geben") {
+                    ForEach(others) { other in
+                        Button(other.title) { model.resolveIdle(.assign(to: other.id)) }
+                    }
+                }
+                .fixedSize()
+                .disabled(others.isEmpty)
+                Spacer()
+                Button("Pause abziehen") { model.resolveIdle(.discard) }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 520)
     }
 }

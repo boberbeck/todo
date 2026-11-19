@@ -58,6 +58,7 @@ struct TagwerkCommands: Commands {
                 .keyboardShortcut("n", modifiers: .command)
         }
         CommandMenu("Aufgabe") {
+            Button("Schnell erfassen (⌃⌥ Leertaste)") { model.showQuickCapture() }
             Button("Timer starten oder stoppen") { model.toggleTimerForFocus() }
                 .keyboardShortcut("t", modifiers: .command)
             Button("Erledigt") { model.completeFocused() }
@@ -96,6 +97,7 @@ enum Preferences {
     static let meAuthKindKey = "manageEngineAuthKind"
     static let meTechnicianKey = "manageEngineTechnicianID"
     static let meAutoFetchKey = "manageEngineAutoFetch"
+    static let idleMinutesKey = "idleMinutes"
 
     static func serviceKey(for workType: WorkType) -> String { "serviceProduct.\(workType.rawValue)" }
 
@@ -116,6 +118,7 @@ enum Preferences {
             roundingStepKey: 15,
             roundingModeKey: RoundingMode.nearest.rawValue,
             meAutoFetchKey: true,
+            idleMinutesKey: 10,
         ])
     }
 }

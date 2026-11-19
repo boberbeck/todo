@@ -70,6 +70,23 @@ enum SnapshotMode {
                 model.selection = .today
                 try? await Task.sleep(for: .seconds(1))
                 await capture(nil, name: "bildschirm", in: directory)
+
+                // Schnell erfassen
+                if let panel = model.showQuickCapture() {
+                    try? await Task.sleep(for: .seconds(1))
+                    await capture(panel, name: "schnellerfassen", in: directory)
+                    model.hideQuickCapture()
+                }
+
+                // Nachfrage nach einer Pause
+                if let running = model.runningEntry, let taskID = running.taskID {
+                    model.idlePrompt = IdlePrompt(start: Date().addingTimeInterval(-25 * 60), end: Date(), taskID: taskID)
+                    try? await Task.sleep(for: .seconds(1.5))
+                    await capture(window.attachedSheet ?? window, name: "leerlauf", in: directory)
+                    model.idlePrompt = nil
+                    try? await Task.sleep(for: .seconds(0.5))
+                }
+                window.makeKeyAndOrderFront(nil)
             }
         }
         finish(in: directory)

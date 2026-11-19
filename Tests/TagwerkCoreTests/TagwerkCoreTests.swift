@@ -528,3 +528,130 @@ final class ManageEngineAPITests: XCTestCase {
         }
     }
 }
+
+final class ReviewTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        return calendar
+    }
+
+    private let thursday = LocalDate(year: 2026, month: 11, day: 19)
+
+    private func at(_ day: LocalDate, _ hour: Int, _ minute: Int = 0) -> Date {
+        FreeTime.date(on: day, minutes: hour * 60 + minute, calendar: calendar)
+    }
+
+    func testWeekDays() {
+        let days = WeeklyReview.days(ofWeekContaining: thursday, calendar: calendar)
+        XCTAssertEqual(days.first, LocalDate(year: 2026, month: 11, day: 16))
+        XCTAssertEqual(days.last, LocalDate(year: 2026, month: 11, day: 22))
+    }
+
+    func testGoalTimeCountsOnlyLinkedTasksInThatWeek() {
+        let monday = thursday.startOfWeek(calendar: calendar)
+        let goal = WeeklyGoal(weekStart: monday, title: "Netzumbau vorbereiten")
+        let linked = TaskItem(title: "Plan", goalID: goal.id)
+        let other = TaskItem(title: "Sonstiges")
+        let entries = [
+            TimeEntry(taskID: linked.id, start: at(thursday, 9), end: at(thursday, 10)),
+            TimeEntry(taskID: linked.id, start: at(monday.adding(days: -1, calendar: calendar), 9), end: at(monday.adding(days: -1, calendar: calendar), 10)),
+            TimeEntry(taskID: other.id, start: at(thursday, 11), end: at(thursday, 12)),
+        ]
+        XCTAssertEqual(
+            WeeklyReview.trackedSeconds(for: goal, tasks: [linked, other], entries: entries, now: at(thursday, 18), calendar: calendar),
+            3600
+        )
+    }
+
+    func testIdleDiscardEndsEntryAtIdleStartAndContinues() {
+        let task = UUID()
+        let running = TimeEntry(taskID: task, start: at(thursday, 9))
+        let change = TimerLogic.resolveIdle(entries: [running], idleStart: at(thursday, 10), now: at(thursday, 10, 25), decision: .discard)
+        XCTAssertEqual(change.stopped.first?.end, at(thursday, 10))
+        XCTAssertEqual(change.started?.taskID, task)
+        XCTAssertEqual(change.started?.start, at(thursday, 10, 25))
+    }
+
+    func testIdleAssignMovesPauseToOtherTask() {
+        let task = UUID()
+        let call = UUID()
+        let running = TimeEntry(taskID: task, start: at(thursday, 9))
+        let change = TimerLogic.resolveIdle(entries: [running], idleStart: at(thursday, 10), now: at(thursday, 10, 25), decision: .assign(to: call))
+        XCTAssertEqual(change.stopped.count, 2)
+        XCTAssertEqual(change.stopped.last?.taskID, call)
+        XCTAssertEqual(change.stopped.last?.start, at(thursday, 10))
+        XCTAssertEqual(change.stopped.last?.end, at(thursday, 10, 25))
+        XCTAssertEqual(change.started?.taskID, task)
+    }
+
+    func testIdleKeepChangesNothing() {
+        let running = TimeEntry(taskID: UUID(), start: at(thursday, 9))
+        XCTAssertEqual(TimerLogic.resolveIdle(entries: [running], idleStart: at(thursday, 10), now: at(thursday, 11), decision: .keep), TimerLogic.Change())
+    }
+
+    func testEmailHeaderParsing() {
+        let mail = """
+        Received: from mail.example.com
+        From: =?UTF-8?Q?J=C3=BCrgen_M=C3=BCller?= <juergen@example.com>
+        To: ich@example.com
+        Subject: =?UTF-8?B?UsO8Y2tmcmFnZQ==?= zur
+         Rechnung 4711
+        Date: Thu, 19 Nov 2026 09:12:00 +0100
+        Message-ID: <abc@example.com>
+
+        Hallo, Subject: nicht hier
+        """
+        let header = EmailHeaderParser.parse(Data(mail.utf8))
+        XCTAssertEqual(header.subject, "Rückfrage zur Rechnung 4711")
+        XCTAssertEqual(header.from, "Jürgen Müller")
+        XCTAssertEqual(header.messageID, "<abc@example.com>")
+    }
+
+    func testEmailFromWithoutName() {
+        let header = EmailHeaderParser.parse(Data("From: <service@example.com>\nSubject: Test\n\nx".utf8))
+        XCTAssertEqual(header.from, "service@example.com")
+        XCTAssertEqual(header.subject, "Test")
+    }
+
+    func testBackupRotation() {
+        let names = [
+            "tagwerk-2026-11-19.sqlite", "tagwerk-2026-11-17.sqlite", "tagwerk-2026-11-18.sqlite",
+            "tagwerk-2026-11-01.sqlite", "notiz.txt",
+        ]
+        XCTAssertEqual(BackupPolicy.filesToDelete(names, keep: 2), ["tagwerk-2026-11-17.sqlite", "tagwerk-2026-11-01.sqlite"])
+        XCTAssertEqual(BackupPolicy.fileName(for: thursday), "tagwerk-2026-11-19.sqlite")
+    }
+
+    func testTimeExport() {
+        let customer = Customer(name: "Müller; Logistik")
+        let task = TaskItem(title: "VPN", customerID: customer.id, source: .ticket, externalID: "1234", workType: .stoerung, pspElement: "4711")
+        let entry = TimeEntry(taskID: task.id, start: at(thursday, 9), end: at(thursday, 9, 45))
+        let csv = TimeExport.csv(entries: [entry], tasks: [task], customers: [customer], now: at(thursday, 18), calendar: calendar)
+        let lines = csv.split(separator: "\n")
+        XCTAssertEqual(lines.count, 2)
+        XCTAssertEqual(lines[1], "19.11.2026;09:00;09:45;45;\"Müller; Logistik\";VPN;Ticket;1234;Störung;4711;")
+    }
+
+    func testSQLiteGoalsAndBackup() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tagwerk-goal-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = try SQLiteStore(url: folder.appendingPathComponent("tagwerk.sqlite"))
+        let goal = WeeklyGoal(weekStart: thursday.startOfWeek(calendar: calendar), title: "Angebote raus", createdAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let task = TaskItem(title: "Angebot A", createdAt: Date(timeIntervalSince1970: 1_700_000_000), goalID: goal.id)
+        try store.save(goal)
+        try store.save(task)
+        XCTAssertEqual(try store.load().goals, [goal])
+        XCTAssertEqual(try store.load().tasks.first?.goalID, goal.id)
+
+        let backupURL = folder.appendingPathComponent("Backups/tagwerk-2026-11-19.sqlite")
+        try store.backup(to: backupURL)
+        let restored = try SQLiteStore(url: backupURL).load()
+        XCTAssertEqual(restored.goals, [goal], "die Sicherung lässt sich wieder öffnen")
+
+        try store.deleteGoal(id: goal.id)
+        let after = try store.load()
+        XCTAssertTrue(after.goals.isEmpty)
+        XCTAssertNil(after.tasks.first?.goalID, "Aufgaben verlieren nur die Verknüpfung")
+    }
+}

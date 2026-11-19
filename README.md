@@ -4,7 +4,7 @@ Tagwerk ist der Arbeitsname einer schlanken Mac-App für Tagesplanung, Fokus und
 
 Der vollständige Plan steht im Dokument „Plan: Eigene Todo-App für den Mac“.
 
-## Stand: Phase 3 (Tagesabschluss, SAP-Assistent, ManageEngine)
+## Stand: Phase 4 (Rückblick, Leerlauf, Schnell erfassen, Sicherung)
 
 | Bereich | Was geht |
 | --- | --- |
@@ -16,7 +16,11 @@ Der vollständige Plan steht im Dokument „Plan: Eigene Todo-App für den Mac�
 | Eingang | Noch nicht eingeplante Todos. Per Pfeil oder Drag-and-drop in den Tag holen. |
 | Fokus | Eine Aufgabe groß mit Timer, Arbeitsart, PSP-Element und dem Feld „Bearbeitung“. Daneben die Done-Liste, unten die Fokuszeit des Tages. |
 | Kunden | Lokale Todos pro Kunde, Farbe, Stunden im laufenden Monat. Diese Todos verlassen die App nie. |
-| Rückblick | Stunden der Woche je Tag und je Kunde. |
+| Rückblick | Wochenziele je Kunde mit erfasster Zeit, Stunden der Woche je Tag und je Kunde, Ziele für nächste Woche, Export aller Zeiten als CSV. |
+| Leerlauf | Läuft der Timer und kommt länger keine Eingabe, fragt Tagwerk nach der Rückkehr: Zeit behalten, Pause abziehen oder einer anderen Aufgabe geben. |
+| Schnell erfassen | ⌃⌥ Leertaste öffnet von überall ein kleines Fenster für neue Aufgaben. |
+| Mails | Mails aus Outlook (oder .eml-Dateien) in den Eingang ziehen; Betreff und Absender werden übernommen. |
+| Sicherung | Täglich eine Kopie der Datenbank, die letzten 14 bleiben. |
 | Menüleiste | Laufende Zeit, Stoppen, Erledigt, eine andere Aufgabe starten. |
 
 Außerdem:
@@ -29,7 +33,6 @@ Noch nicht enthalten:
 
 | Phase | Inhalt |
 | --- | --- |
-| 4 | Wochenrückblick, Wochenziele, Leerlauf-Erkennung |
 | 5 | Outlook |
 
 ## Starten
@@ -61,6 +64,7 @@ Alle Daten liegen lokal in `~/Library/Application Support/Tagwerk/tagwerk.sqlite
 | ⌘1 bis ⌘4 | Heute, Fokus, Kunden, Rückblick |
 | ⌘0 | Tag planen |
 | ⌘9 | Tag abschließen |
+| ⌃⌥ Leertaste | Schnell erfassen, auch wenn Tagwerk im Hintergrund ist |
 | Doppelklick auf eine Aufgabe | im Fokus öffnen |
 
 ## Aufbau

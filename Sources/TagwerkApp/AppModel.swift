@@ -1,3 +1,5 @@
+import AppKit
+import CoreGraphics
 import Foundation
 import Observation
 import TagwerkCore
@@ -21,6 +23,10 @@ final class AppModel {
     private(set) var entries: [TimeEntry] = []
     private(set) var pspElements: [PSPElement] = []
     private(set) var bookings: [Booking] = []
+    private(set) var goals: [WeeklyGoal] = []
+    /// Erkannte Pause während eines laufenden Timers, wartet auf eine Entscheidung.
+    var idlePrompt: IdlePrompt?
+    private(set) var inboxMessage: String?
     private(set) var lastTicketSync: Date?
     private(set) var ticketSyncMessage: String?
     private(set) var isSyncingTickets = false
@@ -50,6 +56,16 @@ final class AppModel {
     private let calendarProvider: CalendarProviding
     private let manageEngine = ManageEngineClient()
     @ObservationIgnored private var ticker: Timer?
+    @ObservationIgnored private var tickCount = 0
+    @ObservationIgnored private var idleSince: Date?
+    @ObservationIgnored private var quickCaptureController: QuickCaptureController?
+
+    private var quickCapture: QuickCaptureController {
+        if let existing = quickCaptureController { return existing }
+        let created = QuickCaptureController(model: self)
+        quickCaptureController = created
+        return created
+    }
 
     init(store: Store, calendar: CalendarProviding) {
         self.store = store
@@ -66,6 +82,7 @@ final class AppModel {
         startTicker()
         if SnapshotMode.directory == nil {
             showPlanningIfDue()
+            backupIfDue()
         }
     }
 
@@ -843,6 +860,175 @@ final class AppModel {
         Task { await importTickets() }
     }
 
+    // MARK: Wochenziele
+
+    var currentWeekStart: LocalDate { today.startOfWeek() }
+
+    func goals(forWeekStarting week: LocalDate) -> [WeeklyGoal] {
+        goals
+            .filter { $0.weekStart == week }
+            .sorted { lhs, rhs in
+                if lhs.isDone != rhs.isDone { return !lhs.isDone }
+                return lhs.createdAt < rhs.createdAt
+            }
+    }
+
+    func goal(_ id: UUID?) -> WeeklyGoal? {
+        guard let id else { return nil }
+        return goals.first { $0.id == id }
+    }
+
+    @discardableResult
+    func addGoal(title rawTitle: String, customerID: UUID?, weekStart: LocalDate) -> WeeklyGoal? {
+        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        let goal = WeeklyGoal(weekStart: weekStart, customerID: customerID, title: title)
+        save(goal)
+        return goal
+    }
+
+    func toggleGoal(_ id: UUID) {
+        guard var goal = goal(id) else { return }
+        goal.isDone.toggle()
+        save(goal)
+    }
+
+    func deleteGoal(_ id: UUID) {
+        do {
+            try store.deleteGoal(id: id)
+            goals.removeAll { $0.id == id }
+            for index in tasks.indices where tasks[index].goalID == id {
+                tasks[index].goalID = nil
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    func setGoal(_ goalID: UUID?, for taskID: UUID) {
+        guard var task = self.task(taskID), task.goalID != goalID else { return }
+        task.goalID = goalID
+        persist(task)
+    }
+
+    func trackedSeconds(for goal: WeeklyGoal) -> TimeInterval {
+        WeeklyReview.trackedSeconds(for: goal, tasks: tasks, entries: entries, now: now)
+    }
+
+    // MARK: Leerlauf
+
+    /// Prüft, ob während eines laufenden Timers länger keine Eingabe kam, und fragt nach der Rückkehr nach.
+    private func checkIdle() {
+        guard SnapshotMode.directory == nil, idlePrompt == nil, let running = runningEntry, let taskID = running.taskID else {
+            idleSince = nil
+            return
+        }
+        let thresholdMinutes = UserDefaults.standard.integer(forKey: Preferences.idleMinutesKey)
+        guard thresholdMinutes > 0 else { return }
+        let idle = IdleMonitor.secondsSinceLastInput()
+        if idle >= TimeInterval(thresholdMinutes * 60) {
+            if idleSince == nil {
+                idleSince = max(running.start, now.addingTimeInterval(-idle))
+            }
+        } else if let since = idleSince, idle < 10 {
+            idleSince = nil
+            idlePrompt = IdlePrompt(start: since, end: now, taskID: taskID)
+            NSApp.activate()
+        }
+    }
+
+    func resolveIdle(_ decision: IdleDecision) {
+        guard let prompt = idlePrompt else { return }
+        idlePrompt = nil
+        apply(TimerLogic.resolveIdle(entries: entries, idleStart: prompt.start, now: Date(), decision: decision))
+    }
+
+    // MARK: Schnell erfassen und Drag-and-drop
+
+    func installQuickCapture() {
+        guard SnapshotMode.directory == nil else { return }
+        quickCapture.installHotKey()
+    }
+
+    @discardableResult
+    func showQuickCapture() -> NSWindow? {
+        quickCapture.show()
+    }
+
+    func hideQuickCapture() {
+        quickCapture.hide()
+    }
+
+    /// Mail als Aufgabe im Eingang (z. B. aus Outlook hineingezogen).
+    func addMailTask(subject: String?, from: String?, link: String?) {
+        let title = (subject?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? "Mail ohne Betreff"
+        let task = TaskItem(
+            title: title,
+            notes: from.map { "Von: \($0)" } ?? "",
+            source: .mail,
+            externalURL: link
+        )
+        persist(task)
+        inboxMessage = "„\(title)“ liegt im Eingang."
+    }
+
+    func addLinkTask(_ url: URL) {
+        let title = url.host.map { "Link: \($0)" } ?? url.absoluteString
+        persist(TaskItem(title: title, externalURL: url.absoluteString))
+        inboxMessage = "Link liegt im Eingang."
+    }
+
+    func addTextTask(_ text: String) {
+        let firstLine = text.split(separator: "\n").first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? ""
+        guard !firstLine.isEmpty else { return }
+        addTask(title: String(firstLine.prefix(200)), customerID: nil, plannedDate: nil)
+        inboxMessage = "Text liegt im Eingang."
+    }
+
+    // MARK: Sicherung und Export
+
+    private var dataFolder: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Tagwerk", isDirectory: true)
+    }
+
+    var backupFolder: URL { dataFolder.appendingPathComponent("Backups", isDirectory: true) }
+
+    /// Eine Sicherung pro Tag, die letzten 14 bleiben.
+    func backupIfDue() {
+        let target = backupFolder.appendingPathComponent(BackupPolicy.fileName(for: today))
+        guard !FileManager.default.fileExists(atPath: target.path) else { return }
+        do {
+            try store.backup(to: target)
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: backupFolder.path)) ?? []
+            for name in BackupPolicy.filesToDelete(names, keep: 14) {
+                try? FileManager.default.removeItem(at: backupFolder.appendingPathComponent(name))
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    var backupCount: Int {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: backupFolder.path)) ?? []
+        return names.filter { $0.hasPrefix(BackupPolicy.filePrefix) }.count
+    }
+
+    /// Alle Zeiten als CSV im Export-Ordner. Gibt die Datei zurück.
+    func exportAllTimes() -> URL? {
+        let text = TimeExport.csv(entries: entries, tasks: tasks, customers: customers, now: now)
+        let folder = dataFolder.appendingPathComponent("Exporte", isDirectory: true)
+        let file = folder.appendingPathComponent("Zeiten-\(today.string).csv")
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try text.data(using: .utf8)?.write(to: file)
+            return file
+        } catch {
+            report(error)
+            return nil
+        }
+    }
+
     // MARK: Kunden
 
     @discardableResult
@@ -868,6 +1054,7 @@ final class AppModel {
             entries = snapshot.entries
             pspElements = snapshot.pspElements
             bookings = snapshot.bookings
+            goals = snapshot.goals
         } catch {
             report(error)
         }
@@ -900,8 +1087,13 @@ final class AppModel {
             rollOverOpenTasks()
             refreshEvents()
             showPlanningIfDue()
+            backupIfDue()
         }
         autoSyncTicketsIfDue()
+        tickCount += 1
+        if tickCount % 5 == 0 {
+            checkIdle()
+        }
     }
 
     private func persist(_ task: TaskItem) {
@@ -943,6 +1135,19 @@ final class AppModel {
         }
     }
 
+    private func save(_ goal: WeeklyGoal) {
+        do {
+            try store.save(goal)
+            if let index = goals.firstIndex(where: { $0.id == goal.id }) {
+                goals[index] = goal
+            } else {
+                goals.append(goal)
+            }
+        } catch {
+            report(error)
+        }
+    }
+
     private func save(_ booking: Booking) {
         do {
             try store.save(booking)
@@ -966,5 +1171,24 @@ final class AppModel {
 
     private func report(_ error: Error) {
         lastError = String(describing: error)
+    }
+}
+
+struct IdlePrompt: Identifiable, Equatable {
+    let id = UUID()
+    let start: Date
+    let end: Date
+    let taskID: UUID
+
+    var minutes: Int { max(1, Int(end.timeIntervalSince(start) / 60)) }
+}
+
+enum IdleMonitor {
+    /// Sekunden seit der letzten Maus- oder Tastatureingabe.
+    static func secondsSinceLastInput() -> TimeInterval {
+        let types: [CGEventType] = [.mouseMoved, .keyDown, .leftMouseDown, .rightMouseDown, .scrollWheel]
+        return types
+            .map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }
+            .min() ?? 0
     }
 }

@@ -16,6 +16,16 @@ enum DemoData {
         var tasks: [TaskItem] = []
         var entries: [TimeEntry] = []
 
+        let week = today.startOfWeek(calendar: calendar)
+        let goalOffer = WeeklyGoal(weekStart: week, customerID: becker.id, title: "Angebot Wartungsvertrag verschicken",
+                                   createdAt: now.addingTimeInterval(-3 * 86400))
+        let goalStoerungen = WeeklyGoal(weekStart: week, customerID: mueller.id, title: "Offene Störungen Müller abarbeiten",
+                                        createdAt: now.addingTimeInterval(-3 * 86400))
+        let goalMigration = WeeklyGoal(weekStart: week, customerID: becker.id, title: "Mailserver-Migration abschließen",
+                                       isDone: true, createdAt: now.addingTimeInterval(-3 * 86400))
+        let goalNext = WeeklyGoal(weekStart: week.adding(days: 7, calendar: calendar), customerID: stadtwerke.id,
+                                  title: "Backup-Konzept vorstellen", createdAt: now)
+
         func at(_ hour: Int, _ minute: Int = 0) -> Date {
             FreeTime.date(on: today, minutes: hour * 60 + minute, calendar: calendar)
         }
@@ -68,7 +78,8 @@ enum DemoData {
             sortIndex: 3,
             createdAt: now.addingTimeInterval(-4 * hour),
             scheduledStart: at(12),
-            externalKey: "100123"
+            externalKey: "100123",
+            goalID: goalStoerungen.id
         )
         let offer = TaskItem(
             title: "Angebot Wartungsvertrag",
@@ -78,7 +89,8 @@ enum DemoData {
             workType: .beratung,
             sortIndex: 4,
             createdAt: now.addingTimeInterval(-30 * hour),
-            scheduledStart: at(15, 30)
+            scheduledStart: at(15, 30),
+            goalID: goalOffer.id
         )
         let invoice = TaskItem(
             title: "Rückfrage zur Rechnung",
@@ -133,7 +145,10 @@ enum DemoData {
                 sortIndex: 1,
                 createdAt: start.addingTimeInterval(-hour)
             )
-            tasks.append(task)
+            var linked = task
+            if item.title == "Migration Mailserver" { linked.goalID = goalMigration.id }
+            if item.customer.id == mueller.id && item.work == .wartung { linked.goalID = goalStoerungen.id }
+            tasks.append(linked)
             entries.append(TimeEntry(taskID: task.id, start: start, end: start.addingTimeInterval(item.minutes * minute)))
         }
 
@@ -156,6 +171,7 @@ enum DemoData {
         ]
 
         return Snapshot(customers: [mueller, stadtwerke, becker], tasks: tasks, entries: entries,
-                        pspElements: psps, bookings: bookings)
+                        pspElements: psps, bookings: bookings,
+                        goals: [goalOffer, goalStoerungen, goalMigration, goalNext])
     }
 }

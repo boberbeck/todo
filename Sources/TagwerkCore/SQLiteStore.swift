@@ -26,7 +26,7 @@ public final class SQLiteStore: Store {
     private var db: OpaquePointer?
 
     /// Aktuelle Version des Datenbankschemas.
-    public static let schemaVersion = 3
+    public static let schemaVersion = 4
 
     public init(url: URL) throws {
         try FileManager.default.createDirectory(
@@ -139,6 +139,23 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+        if version < 4 {
+            try exec("""
+            BEGIN;
+            ALTER TABLE task ADD COLUMN goal_id TEXT;
+            CREATE TABLE IF NOT EXISTS weekly_goal (
+                id TEXT PRIMARY KEY NOT NULL,
+                week_start TEXT NOT NULL,
+                customer_id TEXT,
+                title TEXT NOT NULL,
+                is_done INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS weekly_goal_week ON weekly_goal (week_start);
+            PRAGMA user_version = 4;
+            COMMIT;
+            """)
+        }
     }
 
     private func userVersion() throws -> Int {
@@ -168,7 +185,7 @@ public final class SQLiteStore: Store {
         let tasks = try prepare("""
         SELECT id, title, notes, customer_id, source, external_id, external_url, planned_date,
                estimate_minutes, work_type, psp_element, work_description, status, completed_at,
-               sort_index, created_at, scheduled_start, calendar_event_id, external_key
+               sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id
         FROM task;
         """)
         while try tasks.step() {
@@ -192,7 +209,8 @@ public final class SQLiteStore: Store {
                 createdAt: tasks.date(15) ?? Date(),
                 scheduledStart: tasks.date(16),
                 calendarEventID: tasks.text(17),
-                externalKey: tasks.text(18)
+                externalKey: tasks.text(18),
+                goalID: tasks.uuid(19)
             ))
         }
 
@@ -249,6 +267,19 @@ public final class SQLiteStore: Store {
             ))
         }
 
+        let goals = try prepare("SELECT id, week_start, customer_id, title, is_done, created_at FROM weekly_goal;")
+        while try goals.step() {
+            guard let id = goals.uuid(0), let week = goals.text(1).flatMap({ LocalDate(string: $0) }) else { continue }
+            snapshot.goals.append(WeeklyGoal(
+                id: id,
+                weekStart: week,
+                customerID: goals.uuid(2),
+                title: goals.text(3) ?? "",
+                isDone: (goals.int(4) ?? 0) != 0,
+                createdAt: goals.date(5) ?? Date()
+            ))
+        }
+
         return snapshot
     }
 
@@ -277,8 +308,8 @@ public final class SQLiteStore: Store {
         try run("""
         INSERT INTO task (id, title, notes, customer_id, source, external_id, external_url, planned_date,
                           estimate_minutes, work_type, psp_element, work_description, status, completed_at,
-                          sort_index, created_at, scheduled_start, calendar_event_id, external_key)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             notes = excluded.notes,
@@ -296,7 +327,8 @@ public final class SQLiteStore: Store {
             sort_index = excluded.sort_index,
             scheduled_start = excluded.scheduled_start,
             calendar_event_id = excluded.calendar_event_id,
-            external_key = excluded.external_key;
+            external_key = excluded.external_key,
+            goal_id = excluded.goal_id;
         """, [
             .text(task.id.uuidString),
             .text(task.title),
@@ -317,6 +349,7 @@ public final class SQLiteStore: Store {
             .optionalDouble(task.scheduledStart?.timeIntervalSince1970),
             .optionalText(task.calendarEventID),
             .optionalText(task.externalKey),
+            .optionalText(task.goalID?.uuidString),
         ])
     }
 
@@ -390,6 +423,47 @@ public final class SQLiteStore: Store {
             .int(booking.attempts),
             .double(booking.updatedAt.timeIntervalSince1970),
         ])
+    }
+
+    public func save(_ goal: WeeklyGoal) throws {
+        try run("""
+        INSERT INTO weekly_goal (id, week_start, customer_id, title, is_done, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            week_start = excluded.week_start,
+            customer_id = excluded.customer_id,
+            title = excluded.title,
+            is_done = excluded.is_done;
+        """, [
+            .text(goal.id.uuidString),
+            .text(goal.weekStart.string),
+            .optionalText(goal.customerID?.uuidString),
+            .text(goal.title),
+            .int(goal.isDone ? 1 : 0),
+            .double(goal.createdAt.timeIntervalSince1970),
+        ])
+    }
+
+    public func deleteGoal(id: UUID) throws {
+        try exec("BEGIN;")
+        do {
+            try run("UPDATE task SET goal_id = NULL WHERE goal_id = ?;", [.text(id.uuidString)])
+            try run("DELETE FROM weekly_goal WHERE id = ?;", [.text(id.uuidString)])
+            try exec("COMMIT;")
+        } catch {
+            try? exec("ROLLBACK;")
+            throw error
+        }
+    }
+
+    /// Sichert die Datenbank im laufenden Betrieb in eine neue Datei (SQLite `VACUUM INTO`).
+    public func backup(to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+        let escaped = url.path.replacingOccurrences(of: "'", with: "''")
+        try exec("VACUUM INTO '\(escaped)';")
     }
 
     public func deletePSP(id: UUID) throws {

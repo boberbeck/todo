@@ -90,6 +90,7 @@ struct SettingsView: View {
     @AppStorage(Preferences.meAuthKindKey) private var meAuthKind = ManageEngineConfig.AuthKind.authtoken.rawValue
     @AppStorage(Preferences.meTechnicianKey) private var meTechnician = ""
     @AppStorage(Preferences.meAutoFetchKey) private var meAutoFetch = true
+    @AppStorage(Preferences.idleMinutesKey) private var idleMinutes = 10
     @State private var meToken = ""
     @State private var meTestResult: String?
 
@@ -105,6 +106,19 @@ struct SettingsView: View {
 
             Section("Tagesplanung") {
                 Toggle("Beim ersten Öffnen am Tag zeigen", isOn: $planningOnLaunch)
+            }
+
+            Section("Leerlauf und Schnell erfassen") {
+                Picker("Bei Pause nachfragen nach", selection: $idleMinutes) {
+                    Text("nie").tag(0)
+                    ForEach([5, 10, 15, 30], id: \.self) { minutes in
+                        Text("\(minutes) Minuten").tag(minutes)
+                    }
+                }
+                LabeledContent("Schnell erfassen", value: "⌃⌥ Leertaste, von überall")
+                Text("Mails ziehst du aus Outlook einfach in den Eingang. Sie werden zur Aufgabe mit Betreff und Absender.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Kalender") {
@@ -189,6 +203,10 @@ struct SettingsView: View {
 
             Section("Daten") {
                 LabeledContent("Speicherort", value: "~/Library/Application Support/Tagwerk")
+                LabeledContent("Sicherungen", value: "\(model.backupCount) (täglich, die letzten 14)")
+                Button("Sicherungen zeigen") {
+                    NSWorkspace.shared.activateFileViewerSelecting([model.backupFolder])
+                }
                 Button("Im Finder zeigen") {
                     let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                         .appendingPathComponent("Tagwerk", isDirectory: true)
