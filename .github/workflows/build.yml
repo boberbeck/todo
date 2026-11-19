@@ -5,13 +5,16 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   macos:
     name: macOS
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Werkzeuge anzeigen
         run: |
@@ -24,3 +27,41 @@ jobs:
 
       - name: Testen
         run: swift test
+
+      # Startet die App mit Beispieldaten; sie fotografiert jeden Bildschirm hell und dunkel und beendet sich.
+      - name: Screenshots aufnehmen
+        run: |
+          mkdir -p screenshots
+          TAGWERK_SNAPSHOT_DIR="$PWD/screenshots" .build/debug/Tagwerk &
+          APP=$!
+          sleep 6
+          screencapture -x screenshots/bildschirm.png || echo "screencapture nicht möglich"
+          for i in $(seq 1 90); do
+            kill -0 "$APP" 2>/dev/null || break
+            sleep 1
+          done
+          kill "$APP" 2>/dev/null || true
+          ls -la screenshots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots
+          if-no-files-found: warn
+
+      # Nur bei Bedarf: Commit-Nachricht mit [screenshots] oder manueller Start.
+      - name: Screenshots ins Repository legen
+        if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[screenshots]')
+        run: |
+          rm -rf docs/screenshots
+          mkdir -p docs/screenshots
+          cp screenshots/*.png docs/screenshots/ 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A docs/screenshots
+          if git diff --cached --quiet; then
+            echo "Keine neuen Screenshots"
+          else
+            git commit -m "Screenshots aktualisieren [skip ci]"
+            git push || echo "Push nicht möglich, der Branch hat sich inzwischen geändert"
+          fi

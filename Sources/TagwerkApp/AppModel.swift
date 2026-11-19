@@ -40,6 +40,9 @@ final class AppModel {
     }
 
     static func live() -> AppModel {
+        if SnapshotMode.usesDemoData {
+            return AppModel(store: InMemoryStore(DemoData.snapshot()))
+        }
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Tagwerk", isDirectory: true)
         let url = folder.appendingPathComponent("tagwerk.sqlite")

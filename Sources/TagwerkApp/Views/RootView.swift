@@ -42,6 +42,11 @@ struct RootView: View {
                 CustomerDetailView(customerID: id)
             }
         }
+        .task {
+            if let directory = SnapshotMode.directory {
+                await SnapshotMode.run(model: model, into: directory)
+            }
+        }
         .alert(
             "Fehler",
             isPresented: Binding(
