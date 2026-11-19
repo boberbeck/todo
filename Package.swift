@@ -28,7 +28,17 @@ products.append(.executable(name: "Tagwerk", targets: ["TagwerkApp"]))
 targets.append(
     .executableTarget(
         name: "TagwerkApp",
-        dependencies: ["TagwerkCore"]
+        dependencies: ["TagwerkCore"],
+        linkerSettings: [
+            // Info.plist mit Berechtigungstexten in die Programmdatei einbetten,
+            // damit auch `swift run` nach dem Kalender fragen darf.
+            .unsafeFlags([
+                "-Xlinker", "-sectcreate",
+                "-Xlinker", "__TEXT",
+                "-Xlinker", "__info_plist",
+                "-Xlinker", Context.packageDirectory + "/Support/Info.plist",
+            ]),
+        ]
     )
 )
 #endif

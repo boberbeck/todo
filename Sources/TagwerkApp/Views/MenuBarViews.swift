@@ -78,19 +78,61 @@ struct MenuBarContent: View {
 }
 
 struct SettingsView: View {
-    @AppStorage(Preferences.workdayMinutesKey) private var workdayMinutes = Preferences.defaultWorkdayMinutes
+    @Environment(AppModel.self) private var model
+    @AppStorage(Preferences.workdayStartKey) private var workdayStart = Preferences.defaultWorkdayStart
+    @AppStorage(Preferences.workdayEndKey) private var workdayEnd = Preferences.defaultWorkdayEnd
     @AppStorage(Preferences.focusGoalMinutesKey) private var focusGoalMinutes = Preferences.defaultFocusGoalMinutes
+    @AppStorage(Preferences.writeBlocksKey) private var writeBlocks = false
+    @AppStorage(Preferences.planningOnLaunchKey) private var planningOnLaunch = true
 
     var body: some View {
         Form {
-            Section("Tag") {
-                Stepper(value: $workdayMinutes, in: 60...720, step: 15) {
-                    LabeledContent("Freie Zeit pro Tag", value: "\(TimeMath.format(minutes: workdayMinutes)) h")
-                }
+            Section("Arbeitszeit") {
+                DatePicker("Beginn", selection: timeBinding($workdayStart), displayedComponents: .hourAndMinute)
+                DatePicker("Ende", selection: timeBinding($workdayEnd), displayedComponents: .hourAndMinute)
                 Stepper(value: $focusGoalMinutes, in: 30...720, step: 15) {
                     LabeledContent("Tagesziel Fokuszeit", value: "\(TimeMath.format(minutes: focusGoalMinutes)) h")
                 }
             }
+
+            Section("Tagesplanung") {
+                Toggle("Beim ersten Öffnen am Tag zeigen", isOn: $planningOnLaunch)
+            }
+
+            Section("Kalender") {
+                switch model.calendarAccess {
+                case .granted:
+                    ForEach(model.calendarList) { calendar in
+                        Picker(selection: Binding(
+                            get: { calendar.mode },
+                            set: { model.setCalendarMode($0, for: calendar.id) }
+                        )) {
+                            ForEach(CalendarDisplayMode.allCases) { mode in
+                                Text(mode.label).tag(mode)
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(calendar.title)
+                                Text(calendar.sourceTitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    Toggle("Zeitblöcke in den Kalender „Tagwerk“ schreiben", isOn: $writeBlocks)
+                case .notDetermined:
+                    Button("Zugriff auf Kalender erlauben") {
+                        Task { await model.requestCalendarAccess() }
+                    }
+                case .denied:
+                    Text("Kein Zugriff. Erlaube ihn in den Systemeinstellungen unter Datenschutz & Sicherheit › Kalender.")
+                        .foregroundStyle(.secondary)
+                case .unavailable:
+                    Text("Kalender gehen nur, wenn Tagwerk als App läuft (scripts/make-app.sh).")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Daten") {
                 LabeledContent("Speicherort", value: "~/Library/Application Support/Tagwerk")
                 Button("Im Finder zeigen") {
@@ -101,7 +143,17 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
-        .padding()
+        .frame(width: 520)
+        .frame(minHeight: 480)
+        .onChange(of: workdayStart) { model.settingsChanged() }
+        .onChange(of: workdayEnd) { model.settingsChanged() }
+        .onChange(of: writeBlocks) { model.settingsChanged() }
+    }
+
+    private func timeBinding(_ minutes: Binding<Int>) -> Binding<Date> {
+        Binding(
+            get: { FreeTime.date(on: LocalDate.today(), minutes: minutes.wrappedValue) },
+            set: { minutes.wrappedValue = FreeTime.minutesSinceMidnight($0) }
+        )
     }
 }

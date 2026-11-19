@@ -5,7 +5,7 @@ import TagwerkCore
 /// Tagesplan: Aufgaben des Tages mit Ist- und Plan-Zeit, rechts der Eingang.
 struct TodayView: View {
     @Environment(AppModel.self) private var model
-    @AppStorage(Preferences.workdayMinutesKey) private var workdayMinutes = Preferences.defaultWorkdayMinutes
+    @AppStorage(Preferences.showInboxKey) private var showInbox = true
 
     var body: some View {
         HStack(spacing: 0) {
@@ -35,7 +35,7 @@ struct TodayView: View {
                 Divider()
                 NewTaskBar(plannedDate: model.today)
             }
-            .frame(maxWidth: .infinity)
+            .frame(minWidth: 320, maxWidth: .infinity)
             .dropDestination(for: String.self) { items, _ in
                 let ids = items.compactMap { UUID(uuidString: $0) }
                 for id in ids {
@@ -46,17 +46,46 @@ struct TodayView: View {
 
             Divider()
 
-            InboxPanel()
-                .frame(width: 280)
+            CalendarColumn()
+                .frame(width: 230)
+
+            if showInbox {
+                Divider()
+                InboxPanel()
+                    .frame(width: 250)
+            }
         }
         .navigationTitle("Heute")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Toggle(isOn: $showInbox) {
+                    Label("Eingang", systemImage: "tray")
+                }
+                .help("Eingang ein- oder ausblenden")
+            }
+        }
     }
 
     private var header: some View {
         let planned = DayPlan.plannedMinutes(model.todayTasks)
-        let overplanned = DayPlan.isOverplanned(plannedMinutes: planned, availableMinutes: workdayMinutes)
+        let free = model.freeMinutesToday
+        let overplanned = DayPlan.isOverplanned(plannedMinutes: planned, availableMinutes: free)
         let tracked = model.trackedToday(now: model.runningEntry == nil ? Date() : model.now)
-        return VStack(alignment: .leading, spacing: 4) {
+        return HStack(alignment: .top) {
+            dayTitle(planned: planned, free: free, overplanned: overplanned, tracked: tracked)
+            Spacer()
+            Button {
+                model.selection = .planning
+            } label: {
+                Label("Tag planen", systemImage: "sunrise")
+            }
+            .buttonStyle(.bordered)
+            .help("Geführte Tagesplanung (⌘0)")
+        }
+    }
+
+    private func dayTitle(planned: Int, free: Int, overplanned: Bool, tracked: TimeInterval) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             Text(model.today.startDate().formatted(.dateTime.weekday(.wide).day().month(.wide)))
                 .font(.title2.weight(.semibold))
             HStack(spacing: 6) {
@@ -65,7 +94,7 @@ struct TodayView: View {
                         .foregroundStyle(.orange)
                         .help("Mehr geplant, als Zeit da ist")
                 }
-                Text("\(TimeMath.format(minutes: planned)) h geplant von \(TimeMath.format(minutes: workdayMinutes)) h frei")
+                Text("\(TimeMath.format(minutes: planned)) h geplant von \(TimeMath.format(minutes: free)) h frei")
                     .foregroundStyle(overplanned ? Color.orange : Color.secondary)
                 Text("·")
                     .foregroundStyle(.secondary)
@@ -104,6 +133,13 @@ struct TaskRow: View {
             }
 
             Spacer(minLength: 8)
+
+            if let start = task.scheduledStart, !task.isDone {
+                Label(start.formatted(date: .omitted, time: .shortened), systemImage: "clock")
+                    .labelStyle(.titleAndIcon)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Text(model.timeLabel(for: task, now: running ? model.now : Date()))
                 .font(.callout.monospacedDigit())

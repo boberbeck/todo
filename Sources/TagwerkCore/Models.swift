@@ -96,6 +96,10 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
     /// Reihenfolge innerhalb eines Tages.
     public var sortIndex: Double
     public var createdAt: Date
+    /// Beginn des Zeitblocks im Kalender. Dauer = Schätzung (sonst 30 Minuten).
+    public var scheduledStart: Date?
+    /// Termin im Kalender „Tagwerk“, falls Zeitblöcke dorthin geschrieben werden.
+    public var calendarEventID: String?
 
     public init(
         id: UUID = UUID(),
@@ -113,7 +117,9 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         status: TaskStatus = .open,
         completedAt: Date? = nil,
         sortIndex: Double = 0,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        scheduledStart: Date? = nil,
+        calendarEventID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -131,9 +137,18 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         self.completedAt = completedAt
         self.sortIndex = sortIndex
         self.createdAt = createdAt
+        self.scheduledStart = scheduledStart
+        self.calendarEventID = calendarEventID
     }
 
     public var isDone: Bool { status == .done }
+
+    /// Länge des Zeitblocks im Kalender.
+    public var blockMinutes: Int { max(15, estimateMinutes ?? 30) }
+
+    public var scheduledInterval: DateInterval? {
+        scheduledStart.map { DateInterval(start: $0, duration: TimeInterval(blockMinutes * 60)) }
+    }
 
     /// Wohin die Zeit dieser Aufgabe beim Tagesabschluss gebucht wird.
     public var bookingTargets: String {

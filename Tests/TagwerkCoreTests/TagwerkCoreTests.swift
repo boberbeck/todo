@@ -202,7 +202,9 @@ final class SQLiteStoreTests: XCTestCase {
             pspElement: "4711",
             workDescription: "Logs geprüft",
             sortIndex: 3,
-            createdAt: created
+            createdAt: created,
+            scheduledStart: created.addingTimeInterval(3600),
+            calendarEventID: "EK-123"
         )
         let entry = TimeEntry(taskID: task.id, start: created, end: created.addingTimeInterval(900), note: "")
         let running = TimeEntry(taskID: task.id, start: created.addingTimeInterval(1000))
@@ -232,5 +234,93 @@ final class SQLiteStoreTests: XCTestCase {
         let empty = try reopened.load()
         XCTAssertTrue(empty.tasks.isEmpty)
         XCTAssertTrue(empty.entries.isEmpty, "Zeiten einer gelöschten Aufgabe verschwinden mit")
+    }
+}
+
+final class FreeTimeTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        return calendar
+    }
+
+    private let day = LocalDate(year: 2026, month: 11, day: 19)
+
+    private func at(_ hour: Int, _ minute: Int = 0) -> Date {
+        FreeTime.date(on: day, minutes: hour * 60 + minute, calendar: calendar)
+    }
+
+    private func event(_ from: Date, _ to: Date, allDay: Bool = false) -> CalendarEvent {
+        CalendarEvent(id: UUID().uuidString, title: "Termin", start: from, end: to, isAllDay: allDay)
+    }
+
+    func testWorkdayInterval() {
+        let window = Workday(startMinutes: 8 * 60, endMinutes: 17 * 60).interval(on: day, calendar: calendar)
+        XCTAssertEqual(window.start, at(8))
+        XCTAssertEqual(window.end, at(17))
+        XCTAssertEqual(Workday(startMinutes: 600, endMinutes: 500).durationMinutes, 0, "Ende vor Beginn ergibt keine Arbeitszeit")
+    }
+
+    func testMergeJoinsOverlaps() {
+        let merged = FreeTime.merge([
+            DateInterval(start: at(10), end: at(11)),
+            DateInterval(start: at(9), end: at(10, 30)),
+            DateInterval(start: at(13), end: at(14)),
+        ])
+        XCTAssertEqual(merged, [DateInterval(start: at(9), end: at(11)), DateInterval(start: at(13), end: at(14))])
+    }
+
+    func testFreeMinutesIgnoreAllDayAndOutsideEvents() {
+        let window = DateInterval(start: at(8), end: at(17))
+        let events = [
+            event(at(9), at(9, 30)),
+            event(at(10), at(11)),
+            event(at(10, 30), at(11, 30)),
+            event(at(7), at(8, 15)),
+            event(at(18), at(19)),
+            event(at(0), at(23, 59), allDay: true),
+        ]
+        // belegt: 8:00–8:15, 9:00–9:30, 10:00–11:30 → 15 + 30 + 90 = 135 Minuten
+        XCTAssertEqual(FreeTime.freeMinutes(window: window, events: events), 9 * 60 - 135)
+    }
+
+    func testGaps() {
+        let window = DateInterval(start: at(8), end: at(12))
+        let gaps = FreeTime.gaps(in: window, busy: [DateInterval(start: at(9), end: at(10)), DateInterval(start: at(11), end: at(13))])
+        XCTAssertEqual(gaps, [DateInterval(start: at(8), end: at(9)), DateInterval(start: at(10), end: at(11))])
+    }
+
+    func testSnapping() {
+        XCTAssertEqual(FreeTime.snapUp(at(9, 7), stepMinutes: 15, calendar: calendar), at(9, 15))
+        XCTAssertEqual(FreeTime.snapUp(at(9, 15), stepMinutes: 15, calendar: calendar), at(9, 15))
+        XCTAssertEqual(FreeTime.snapNearest(at(9, 7), stepMinutes: 15, calendar: calendar), at(9))
+        XCTAssertEqual(FreeTime.snapNearest(at(9, 8), stepMinutes: 15, calendar: calendar), at(9, 15))
+    }
+
+    func testAutoScheduleFillsGapsInOrder() {
+        let gaps = [DateInterval(start: at(8), end: at(9)), DateInterval(start: at(10), end: at(12))]
+        let a = UUID(), b = UUID(), c = UUID(), d = UUID()
+        let result = FreeTime.autoSchedule(
+            [(a, 45), (b, 90), (c, 30), (d, 120)],
+            gaps: gaps,
+            notBefore: at(8, 5),
+            calendar: calendar
+        )
+        XCTAssertEqual(result[a], at(8, 15), "frühestens ab jetzt, auf 15 Minuten gerundet")
+        XCTAssertEqual(result[b], at(10), "passt nicht mehr vor 9 Uhr")
+        XCTAssertEqual(result[c], at(11, 30))
+        XCTAssertNil(result[d], "kein Platz mehr")
+    }
+
+    func testDailyPlanningDue() {
+        XCTAssertTrue(DailyPlanning.isDue(lastPlanned: nil, today: day))
+        XCTAssertTrue(DailyPlanning.isDue(lastPlanned: day.adding(days: -1, calendar: calendar), today: day))
+        XCTAssertFalse(DailyPlanning.isDue(lastPlanned: day, today: day))
+    }
+
+    func testTaskBlockLength() {
+        XCTAssertEqual(TaskItem(title: "a").blockMinutes, 30)
+        XCTAssertEqual(TaskItem(title: "b", estimateMinutes: 90).blockMinutes, 90)
+        XCTAssertEqual(TaskItem(title: "c", estimateMinutes: 5).blockMinutes, 15)
     }
 }

@@ -38,6 +38,8 @@ struct RootView: View {
                 CustomersView()
             case .review:
                 ReviewView()
+            case .planning:
+                PlanningView()
             case .customer(let id):
                 CustomerDetailView(customerID: id)
             }

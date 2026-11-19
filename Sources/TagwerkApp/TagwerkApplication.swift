@@ -28,6 +28,7 @@ struct TagwerkApplication: App {
 
         Settings {
             SettingsView()
+                .environment(model)
         }
     }
 }
@@ -71,13 +72,35 @@ struct TagwerkCommands: Commands {
                 .keyboardShortcut("3", modifiers: .command)
             Button("Rückblick") { model.selection = .review }
                 .keyboardShortcut("4", modifiers: .command)
+            Divider()
+            Button("Tag planen") { model.selection = .planning }
+                .keyboardShortcut("0", modifiers: .command)
         }
     }
 }
 
 enum Preferences {
-    static let workdayMinutesKey = "workdayMinutes"
+    static let workdayStartKey = "workdayStartMinutes"
+    static let workdayEndKey = "workdayEndMinutes"
     static let focusGoalMinutesKey = "focusGoalMinutes"
-    static let defaultWorkdayMinutes = 480
+    static let calendarModesKey = "calendarModes"
+    static let writeBlocksKey = "writeTimeBlocksToCalendar"
+    static let planningOnLaunchKey = "showPlanningOnLaunch"
+    static let lastPlannedDayKey = "lastPlannedDay"
+    static let showInboxKey = "showInbox"
+
+    static let defaultWorkdayStart = 8 * 60
+    static let defaultWorkdayEnd = 17 * 60
     static let defaultFocusGoalMinutes = 360
+
+    static func registerDefaults() {
+        UserDefaults.standard.register(defaults: [
+            workdayStartKey: defaultWorkdayStart,
+            workdayEndKey: defaultWorkdayEnd,
+            focusGoalMinutesKey: defaultFocusGoalMinutes,
+            writeBlocksKey: false,
+            planningOnLaunchKey: true,
+            showInboxKey: true,
+        ])
+    }
 }

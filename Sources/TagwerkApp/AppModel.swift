@@ -7,6 +7,7 @@ enum SidebarItem: Hashable {
     case focus
     case customers
     case review
+    case planning
     case customer(UUID)
 }
 
@@ -29,27 +30,48 @@ final class AppModel {
     private(set) var now = Date()
     private(set) var today = LocalDate.today()
 
+    /// Termine des heutigen Tages aus den sichtbaren Kalendern.
+    private(set) var events: [CalendarEvent] = []
+    private(set) var calendarAccess: CalendarAccess = .notDetermined
+    /// Aufgaben, die heute früh von gestern übernommen wurden (für die Tagesplanung).
+    private(set) var rolledOverIDs: Set<UUID> = []
+    private(set) var lastPlannedDay: LocalDate?
+    /// Wird bei Änderungen in den Einstellungen hochgezählt, damit abhängige Ansichten neu rechnen.
+    private(set) var settingsVersion = 0
+
     private let store: Store
+    private let calendarProvider: CalendarProviding
     @ObservationIgnored private var ticker: Timer?
 
-    init(store: Store) {
+    init(store: Store, calendar: CalendarProviding) {
         self.store = store
+        self.calendarProvider = calendar
+        Preferences.registerDefaults()
+        lastPlannedDay = UserDefaults.standard.string(forKey: Preferences.lastPlannedDayKey).flatMap { LocalDate(string: $0) }
         reload()
         rollOverOpenTasks()
+        calendarAccess = calendar.access
+        calendar.onChange = { [weak self] in
+            self?.refreshEvents()
+        }
+        refreshEvents()
         startTicker()
+        if SnapshotMode.directory == nil {
+            showPlanningIfDue()
+        }
     }
 
     static func live() -> AppModel {
         if SnapshotMode.usesDemoData {
-            return AppModel(store: InMemoryStore(DemoData.snapshot()))
+            return AppModel(store: InMemoryStore(DemoData.snapshot()), calendar: DemoCalendar())
         }
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Tagwerk", isDirectory: true)
         let url = folder.appendingPathComponent("tagwerk.sqlite")
         do {
-            return AppModel(store: try SQLiteStore(url: url))
+            return AppModel(store: try SQLiteStore(url: url), calendar: EventKitCalendar())
         } catch {
-            let model = AppModel(store: InMemoryStore())
+            let model = AppModel(store: InMemoryStore(), calendar: EventKitCalendar())
             model.lastError = "Die Datenbank konnte nicht geöffnet werden. Änderungen werden nicht gespeichert.\n\(error)"
             return model
         }
@@ -222,6 +244,10 @@ final class AppModel {
         guard var task = self.task(id), task.plannedDate != day else { return }
         task.plannedDate = day
         task.sortIndex = DayPlan.nextSortIndex(in: tasks.filter { $0.plannedDate == day })
+        if task.scheduledStart != nil {
+            task.scheduledStart = nil
+            syncBlock(&task)
+        }
         persist(task)
     }
 
@@ -232,6 +258,10 @@ final class AppModel {
     }
 
     func delete(_ id: UUID) {
+        if var task = self.task(id), task.calendarEventID != nil {
+            task.scheduledStart = nil
+            syncBlock(&task)
+        }
         do {
             try store.deleteTask(id: id)
             tasks.removeAll { $0.id == id }
@@ -336,6 +366,214 @@ final class AppModel {
         now = Date()
     }
 
+    // MARK: Kalender und Zeitblöcke
+
+    var workday: Workday {
+        _ = settingsVersion
+        let defaults = UserDefaults.standard
+        return Workday(
+            startMinutes: defaults.integer(forKey: Preferences.workdayStartKey),
+            endMinutes: defaults.integer(forKey: Preferences.workdayEndKey)
+        )
+    }
+
+    var workdayInterval: DateInterval { workday.interval(on: today) }
+
+    /// Freie Minuten der Arbeitszeit neben den Terminen.
+    var freeMinutesToday: Int {
+        FreeTime.freeMinutes(window: workdayInterval, events: events)
+    }
+
+    var timedEvents: [CalendarEvent] { events.filter { !$0.isAllDay } }
+
+    var allDayEvents: [CalendarEvent] { events.filter(\.isAllDay) }
+
+    /// Heutige Aufgaben mit Zeitblock.
+    var scheduledToday: [TaskItem] {
+        todayTasks.filter { $0.scheduledStart != nil }
+    }
+
+    /// Zeiteinträge, die heute stattfinden.
+    var entriesToday: [TimeEntry] {
+        let interval = today.interval()
+        return entries.filter { TimeMath.overlap(of: $0, with: interval, now: now) > 0 }
+    }
+
+    var calendarModes: [String: CalendarDisplayMode] {
+        _ = settingsVersion
+        let raw = UserDefaults.standard.dictionary(forKey: Preferences.calendarModesKey) as? [String: String] ?? [:]
+        return raw.compactMapValues { CalendarDisplayMode(rawValue: $0) }
+    }
+
+    var calendarList: [CalendarInfo] {
+        _ = calendarAccess
+        return calendarProvider.calendars(modes: calendarModes)
+    }
+
+    var writesBlocksToCalendar: Bool {
+        _ = settingsVersion
+        return UserDefaults.standard.bool(forKey: Preferences.writeBlocksKey)
+    }
+
+    var isPlanningDue: Bool {
+        DailyPlanning.isDue(lastPlanned: lastPlannedDay, today: today)
+    }
+
+    func isLogged(_ event: CalendarEvent) -> Bool {
+        tasks.contains { $0.source == .calendar && $0.externalID == event.id }
+    }
+
+    func requestCalendarAccess() async {
+        calendarAccess = await calendarProvider.requestAccess()
+        refreshEvents()
+    }
+
+    func refreshEvents() {
+        calendarAccess = calendarProvider.access
+        events = calendarProvider.events(on: today, modes: calendarModes)
+    }
+
+    func setCalendarMode(_ mode: CalendarDisplayMode, for calendarID: String) {
+        var raw = UserDefaults.standard.dictionary(forKey: Preferences.calendarModesKey) as? [String: String] ?? [:]
+        raw[calendarID] = mode.rawValue
+        UserDefaults.standard.set(raw, forKey: Preferences.calendarModesKey)
+        settingsChanged()
+    }
+
+    func settingsChanged() {
+        settingsVersion += 1
+        refreshEvents()
+    }
+
+    /// Legt den Zeitblock einer Aufgabe auf eine Uhrzeit (`nil` = Block entfernen).
+    func schedule(_ id: UUID, at start: Date?) {
+        guard var task = self.task(id) else { return }
+        if let start {
+            let snapped = FreeTime.snapNearest(start, stepMinutes: 15)
+            let day = LocalDate(snapped)
+            if task.plannedDate != day {
+                task.plannedDate = day
+                task.sortIndex = DayPlan.nextSortIndex(in: tasks.filter { $0.plannedDate == day })
+            }
+            task.scheduledStart = snapped
+        } else {
+            task.scheduledStart = nil
+        }
+        syncBlock(&task)
+        persist(task)
+    }
+
+    func moveBlock(_ id: UUID, byMinutes minutes: Double) {
+        guard let start = task(id)?.scheduledStart else { return }
+        schedule(id, at: start.addingTimeInterval(minutes * 60))
+    }
+
+    /// Legt die Aufgabe in die nächste freie Lücke ab jetzt.
+    func scheduleInNextGap(_ id: UUID) {
+        guard let task = self.task(id) else { return }
+        let placed = FreeTime.autoSchedule(
+            [(id: task.id, minutes: task.blockMinutes)],
+            gaps: freeGaps(excluding: id),
+            notBefore: max(Date(), workdayInterval.start)
+        )
+        if let start = placed[id] {
+            schedule(id, at: start)
+        } else {
+            lastError = "Heute ist keine Lücke mehr frei, in die „\(task.title)“ passt."
+        }
+    }
+
+    /// Legt alle offenen Aufgaben ohne Zeitblock der Reihe nach in freie Lücken.
+    @discardableResult
+    func autoScheduleToday() -> Int {
+        let open = todayTasks.filter { !$0.isDone && $0.scheduledStart == nil }
+        let placed = FreeTime.autoSchedule(
+            open.map { (id: $0.id, minutes: $0.blockMinutes) },
+            gaps: freeGaps(excluding: nil),
+            notBefore: max(Date(), workdayInterval.start)
+        )
+        for task in open {
+            if let start = placed[task.id] {
+                schedule(task.id, at: start)
+            }
+        }
+        return open.count - placed.count
+    }
+
+    /// Macht aus einem Termin einen erledigten Zeiteintrag (z. B. den Jour fixe).
+    func logEvent(_ event: CalendarEvent) {
+        guard !isLogged(event) else { return }
+        let task = TaskItem(
+            title: event.showsTitle ? event.displayTitle : "Termin",
+            source: .calendar,
+            externalID: event.id,
+            plannedDate: LocalDate(event.start),
+            estimateMinutes: event.minutes,
+            status: .done,
+            completedAt: event.end,
+            sortIndex: DayPlan.nextSortIndex(in: todayTasks)
+        )
+        persist(task)
+        let entry = TimeEntry(taskID: task.id, start: event.start, end: event.end)
+        do {
+            try store.save(entry)
+            entries.append(entry)
+        } catch {
+            report(error)
+        }
+    }
+
+    // MARK: Tagesplanung
+
+    func showPlanningIfDue() {
+        guard isPlanningDue, UserDefaults.standard.bool(forKey: Preferences.planningOnLaunchKey) else { return }
+        selection = .planning
+    }
+
+    func finishPlanning() {
+        lastPlannedDay = today
+        UserDefaults.standard.set(today.string, forKey: Preferences.lastPlannedDayKey)
+        rolledOverIDs = []
+        selection = .today
+    }
+
+    /// Von gestern übernommene, noch offene Aufgaben.
+    var rolledOverTasks: [TaskItem] {
+        todayTasks.filter { rolledOverIDs.contains($0.id) && !$0.isDone }
+    }
+
+    func acknowledgeRolledOver(_ id: UUID) {
+        rolledOverIDs.remove(id)
+    }
+
+    private func freeGaps(excluding taskID: UUID?) -> [DateInterval] {
+        let window = workdayInterval
+        var busy = FreeTime.busy(events: events, within: window)
+        busy += scheduledToday
+            .filter { $0.id != taskID }
+            .compactMap(\.scheduledInterval)
+        return FreeTime.gaps(in: window, busy: busy)
+    }
+
+    /// Schreibt den Zeitblock in den Kalender „Tagwerk“, wenn das eingeschaltet ist.
+    private func syncBlock(_ task: inout TaskItem) {
+        do {
+            if let interval = task.scheduledInterval, writesBlocksToCalendar {
+                task.calendarEventID = try calendarProvider.saveBlock(
+                    title: task.title,
+                    start: interval.start,
+                    end: interval.end,
+                    existingID: task.calendarEventID
+                )
+            } else if task.scheduledStart == nil, let eventID = task.calendarEventID {
+                try calendarProvider.removeBlock(id: eventID)
+                task.calendarEventID = nil
+            }
+        } catch {
+            report(error)
+        }
+    }
+
     // MARK: Kunden
 
     @discardableResult
@@ -365,8 +603,10 @@ final class AppModel {
     }
 
     private func rollOverOpenTasks() {
-        for task in DayPlan.rollOver(tasks, to: today) {
+        for var task in DayPlan.rollOver(tasks, to: today) {
+            task.scheduledStart = nil
             persist(task)
+            rolledOverIDs.insert(task.id)
         }
     }
 
@@ -385,7 +625,10 @@ final class AppModel {
         let current = LocalDate(now)
         if current != today {
             today = current
+            rolledOverIDs = []
             rollOverOpenTasks()
+            refreshEvents()
+            showPlanningIfDue()
         }
     }
 

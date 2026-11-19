@@ -15,6 +15,10 @@ enum DemoData {
         var tasks: [TaskItem] = []
         var entries: [TimeEntry] = []
 
+        func at(_ hour: Int, _ minute: Int = 0) -> Date {
+            FreeTime.date(on: today, minutes: hour * 60 + minute, calendar: calendar)
+        }
+
         func entry(_ task: TaskItem, startsAgo: TimeInterval, minutes: Double) {
             let start = now.addingTimeInterval(-startsAgo)
             entries.append(TimeEntry(taskID: task.id, start: start, end: start.addingTimeInterval(minutes * minute)))
@@ -34,11 +38,13 @@ enum DemoData {
             status: .done,
             completedAt: now.addingTimeInterval(-3 * hour),
             sortIndex: 1,
-            createdAt: now.addingTimeInterval(-26 * hour)
+            createdAt: now.addingTimeInterval(-26 * hour),
+            scheduledStart: at(8)
         )
         let jourFixe = TaskItem(
             title: "Jour fixe",
             source: .calendar,
+            externalID: "demo-jourfixe",
             plannedDate: today,
             estimateMinutes: 30,
             workType: .beratung,
@@ -58,7 +64,8 @@ enum DemoData {
             pspElement: "4711",
             workDescription: "VPN-Logs geprüft, Tunnel neu gestartet",
             sortIndex: 3,
-            createdAt: now.addingTimeInterval(-4 * hour)
+            createdAt: now.addingTimeInterval(-4 * hour),
+            scheduledStart: at(12)
         )
         let offer = TaskItem(
             title: "Angebot Wartungsvertrag",
@@ -67,20 +74,21 @@ enum DemoData {
             estimateMinutes: 90,
             workType: .beratung,
             sortIndex: 4,
-            createdAt: now.addingTimeInterval(-30 * hour)
+            createdAt: now.addingTimeInterval(-30 * hour),
+            scheduledStart: at(15, 30)
         )
         let invoice = TaskItem(
             title: "Rückfrage zur Rechnung",
             customerID: stadtwerke.id,
             source: .mail,
-            plannedDate: today,
+            plannedDate: today.adding(days: -1, calendar: calendar),
             estimateMinutes: 15,
             sortIndex: 5,
             createdAt: now.addingTimeInterval(-3 * hour)
         )
         tasks += [serverUpdate, jourFixe, vpn, offer, invoice]
         entry(serverUpdate, startsAgo: 4 * hour, minutes: 23)
-        entry(jourFixe, startsAgo: 2.5 * hour, minutes: 30)
+        entries.append(TimeEntry(taskID: jourFixe.id, start: at(9), end: at(9, 30)))
         entry(vpn, startsAgo: 95 * minute, minutes: 10)
         // läuft gerade; zusammen mit dem Eintrag davor 0:42:15
         entries.append(TimeEntry(taskID: vpn.id, start: now.addingTimeInterval(-(32 * minute + 15))))

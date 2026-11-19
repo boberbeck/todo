@@ -26,7 +26,7 @@ public final class SQLiteStore: Store {
     private var db: OpaquePointer?
 
     /// Aktuelle Version des Datenbankschemas.
-    public static let schemaVersion = 1
+    public static let schemaVersion = 2
 
     public init(url: URL) throws {
         try FileManager.default.createDirectory(
@@ -95,6 +95,15 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+        if version < 2 {
+            try exec("""
+            BEGIN;
+            ALTER TABLE task ADD COLUMN scheduled_start REAL;
+            ALTER TABLE task ADD COLUMN calendar_event_id TEXT;
+            PRAGMA user_version = 2;
+            COMMIT;
+            """)
+        }
     }
 
     private func userVersion() throws -> Int {
@@ -123,7 +132,7 @@ public final class SQLiteStore: Store {
         let tasks = try prepare("""
         SELECT id, title, notes, customer_id, source, external_id, external_url, planned_date,
                estimate_minutes, work_type, psp_element, work_description, status, completed_at,
-               sort_index, created_at
+               sort_index, created_at, scheduled_start, calendar_event_id
         FROM task;
         """)
         while try tasks.step() {
@@ -144,7 +153,9 @@ public final class SQLiteStore: Store {
                 status: TaskStatus(rawValue: tasks.text(12) ?? "") ?? .open,
                 completedAt: tasks.date(13),
                 sortIndex: tasks.double(14) ?? 0,
-                createdAt: tasks.date(15) ?? Date()
+                createdAt: tasks.date(15) ?? Date(),
+                scheduledStart: tasks.date(16),
+                calendarEventID: tasks.text(17)
             ))
         }
 
@@ -186,8 +197,8 @@ public final class SQLiteStore: Store {
         try run("""
         INSERT INTO task (id, title, notes, customer_id, source, external_id, external_url, planned_date,
                           estimate_minutes, work_type, psp_element, work_description, status, completed_at,
-                          sort_index, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          sort_index, created_at, scheduled_start, calendar_event_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             notes = excluded.notes,
@@ -202,7 +213,9 @@ public final class SQLiteStore: Store {
             work_description = excluded.work_description,
             status = excluded.status,
             completed_at = excluded.completed_at,
-            sort_index = excluded.sort_index;
+            sort_index = excluded.sort_index,
+            scheduled_start = excluded.scheduled_start,
+            calendar_event_id = excluded.calendar_event_id;
         """, [
             .text(task.id.uuidString),
             .text(task.title),
@@ -220,6 +233,8 @@ public final class SQLiteStore: Store {
             .optionalDouble(task.completedAt?.timeIntervalSince1970),
             .double(task.sortIndex),
             .double(task.createdAt.timeIntervalSince1970),
+            .optionalDouble(task.scheduledStart?.timeIntervalSince1970),
+            .optionalText(task.calendarEventID),
         ])
     }
 

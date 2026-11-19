@@ -44,12 +44,13 @@ enum SnapshotMode {
 
         var screens: [(name: String, item: SidebarItem)] = [
             ("heute", .today),
+            ("tagesplanung", .planning),
             ("fokus", .focus),
             ("kunden", .customers),
             ("rueckblick", .review),
         ]
         if let customer = model.activeCustomers.first {
-            screens.insert(("kunde", .customer(customer.id)), at: 3)
+            screens.insert(("kunde", .customer(customer.id)), at: 4)
         }
 
         let appearances: [(name: NSAppearance.Name, suffix: String)] = [(.aqua, "hell"), (.darkAqua, "dunkel")]

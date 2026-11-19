@@ -92,6 +92,13 @@ struct TaskContextMenu: View {
         if task.plannedDate != model.today {
             Button("Für heute einplanen") { model.plan(task.id, for: model.today) }
         }
+        if !task.isDone {
+            if task.scheduledStart == nil {
+                Button("In die nächste freie Lücke legen") { model.scheduleInNextGap(task.id) }
+            } else {
+                Button("Zeitblock entfernen") { model.schedule(task.id, at: nil) }
+            }
+        }
         Button("Auf morgen verschieben") { model.plan(task.id, for: model.today.adding(days: 1)) }
         if task.plannedDate != nil {
             Button("Zurück in den Eingang") { model.plan(task.id, for: nil) }

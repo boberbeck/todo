@@ -24,5 +24,9 @@
     <string>public.app-category.productivity</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Tagwerk zeigt deine Termine in der Tagesplanung und legt auf Wunsch Zeitblöcke für Aufgaben an.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Tagwerk zeigt deine Termine in der Tagesplanung und legt auf Wunsch Zeitblöcke für Aufgaben an.</string>
 </dict>
 </plist>
