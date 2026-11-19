@@ -6,63 +6,91 @@ import TagwerkCore
 struct TodayView: View {
     @Environment(AppModel.self) private var model
     @AppStorage(Preferences.showInboxKey) private var showInbox = true
+    @State private var showsInboxPopover = false
+
+    /// Ab dieser Breite passt der Eingang als eigene Spalte neben Liste und Kalender.
+    private let inboxColumnMinWidth: CGFloat = 1000
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                header
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, 8)
-                if model.todayTasks.isEmpty {
-                    ContentUnavailableView(
-                        "Noch nichts geplant",
-                        systemImage: "sun.max",
-                        description: Text("Lege unten eine Aufgabe an oder hole eine aus dem Eingang.")
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List {
-                        ForEach(model.todayTasks) { task in
-                            TaskRow(task: task)
-                        }
-                        .onMove { source, destination in
-                            model.moveTodayTasks(from: source, to: destination)
-                        }
+        GeometryReader { geometry in
+            let wide = geometry.size.width >= inboxColumnMinWidth
+            HStack(spacing: 0) {
+                taskColumn
+                    .frame(minWidth: 320, maxWidth: .infinity)
+
+                Divider()
+
+                CalendarColumn()
+                    .frame(width: 230)
+
+                if showInbox && wide {
+                    Divider()
+                    InboxPanel()
+                        .frame(width: 250)
+                }
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        model.selection = .planning
+                    } label: {
+                        Label("Tag planen", systemImage: "sunrise")
                     }
-                    .listStyle(.inset)
+                    .help("Geführte Tagesplanung (⌘0)")
+
+                    Button {
+                        if wide {
+                            showInbox.toggle()
+                        } else {
+                            showsInboxPopover.toggle()
+                        }
+                    } label: {
+                        Label("Eingang", systemImage: showInbox && wide ? "tray.fill" : "tray")
+                    }
+                    .help("Eingang ein- oder ausblenden")
+                    .popover(isPresented: $showsInboxPopover, arrowEdge: .bottom) {
+                        InboxPanel()
+                            .frame(width: 300, height: 460)
+                    }
                 }
-                Divider()
-                NewTaskBar(plannedDate: model.today)
-            }
-            .frame(minWidth: 320, maxWidth: .infinity)
-            .dropDestination(for: String.self) { items, _ in
-                let ids = items.compactMap { UUID(uuidString: $0) }
-                for id in ids {
-                    model.plan(id, for: model.today)
-                }
-                return !ids.isEmpty
-            }
-
-            Divider()
-
-            CalendarColumn()
-                .frame(width: 230)
-
-            if showInbox {
-                Divider()
-                InboxPanel()
-                    .frame(width: 250)
             }
         }
         .navigationTitle("Heute")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Toggle(isOn: $showInbox) {
-                    Label("Eingang", systemImage: "tray")
+    }
+
+    private var taskColumn: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+            if model.todayTasks.isEmpty {
+                ContentUnavailableView(
+                    "Noch nichts geplant",
+                    systemImage: "sun.max",
+                    description: Text("Lege unten eine Aufgabe an oder hole eine aus dem Eingang.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(model.todayTasks) { task in
+                        TaskRow(task: task)
+                    }
+                    .onMove { source, destination in
+                        model.moveTodayTasks(from: source, to: destination)
+                    }
                 }
-                .help("Eingang ein- oder ausblenden")
+                .listStyle(.inset)
             }
+            Divider()
+            NewTaskBar(plannedDate: model.today)
+        }
+        .dropDestination(for: String.self) { items, _ in
+            let ids = items.compactMap { UUID(uuidString: $0) }
+            for id in ids {
+                model.plan(id, for: model.today)
+            }
+            return !ids.isEmpty
         }
     }
 
@@ -71,23 +99,10 @@ struct TodayView: View {
         let free = model.freeMinutesToday
         let overplanned = DayPlan.isOverplanned(plannedMinutes: planned, availableMinutes: free)
         let tracked = model.trackedToday(now: model.runningEntry == nil ? Date() : model.now)
-        return HStack(alignment: .top) {
-            dayTitle(planned: planned, free: free, overplanned: overplanned, tracked: tracked)
-            Spacer()
-            Button {
-                model.selection = .planning
-            } label: {
-                Label("Tag planen", systemImage: "sunrise")
-            }
-            .buttonStyle(.bordered)
-            .help("Geführte Tagesplanung (⌘0)")
-        }
-    }
-
-    private func dayTitle(planned: Int, free: Int, overplanned: Bool, tracked: TimeInterval) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        return VStack(alignment: .leading, spacing: 4) {
             Text(model.today.startDate().formatted(.dateTime.weekday(.wide).day().month(.wide)))
                 .font(.title2.weight(.semibold))
+                .lineLimit(1)
             HStack(spacing: 6) {
                 if overplanned {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -103,6 +118,7 @@ struct TodayView: View {
                     .foregroundStyle(.secondary)
             }
             .font(.callout)
+            .lineLimit(1)
         }
     }
 }
@@ -129,6 +145,7 @@ struct TaskRow: View {
                     .fontWeight(running ? .semibold : .regular)
                     .strikethrough(task.isDone, color: .secondary)
                     .foregroundStyle(task.isDone ? Color.secondary : Color.primary)
+                    .lineLimit(2)
                 TaskMetaLine(task: task)
             }
 
