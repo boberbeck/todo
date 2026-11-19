@@ -57,19 +57,54 @@ public struct Customer: Identifiable, Hashable, Codable, Sendable {
     public var colorIndex: Int
     public var isArchived: Bool
     public var createdAt: Date
+    /// Name des Kontos in ManageEngine, über das Tickets diesem Kunden zugeordnet werden.
+    public var manageEngineAccount: String?
 
     public init(
         id: UUID = UUID(),
         name: String,
         colorIndex: Int = 0,
         isArchived: Bool = false,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        manageEngineAccount: String? = nil
     ) {
         self.id = id
         self.name = name
         self.colorIndex = colorIndex
         self.isArchived = isArchived
         self.createdAt = createdAt
+        self.manageEngineAccount = manageEngineAccount
+    }
+}
+
+/// Ein PSP-Element (Projektaufgabe in SAP ByDesign), auf das Zeiten eines Kunden gebucht werden.
+public struct PSPElement: Identifiable, Hashable, Codable, Sendable {
+    public var id: UUID
+    public var customerID: UUID
+    /// ID in ByDesign, z. B. die Projektaufgabe
+    public var code: String
+    public var title: String
+    public var isActive: Bool
+    public var lastUsedAt: Date?
+
+    public init(
+        id: UUID = UUID(),
+        customerID: UUID,
+        code: String,
+        title: String = "",
+        isActive: Bool = true,
+        lastUsedAt: Date? = nil
+    ) {
+        self.id = id
+        self.customerID = customerID
+        self.code = code
+        self.title = title
+        self.isActive = isActive
+        self.lastUsedAt = lastUsedAt
+    }
+
+    public var label: String {
+        title.isEmpty ? code : "\(code) · \(title)"
     }
 }
 
@@ -100,6 +135,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
     public var scheduledStart: Date?
     /// Termin im Kalender „Tagwerk“, falls Zeitblöcke dorthin geschrieben werden.
     public var calendarEventID: String?
+    /// Interne ID im Quellsystem (bei ManageEngine die Request-ID für den Worklog).
+    public var externalKey: String?
 
     public init(
         id: UUID = UUID(),
@@ -119,7 +156,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         sortIndex: Double = 0,
         createdAt: Date = Date(),
         scheduledStart: Date? = nil,
-        calendarEventID: String? = nil
+        calendarEventID: String? = nil,
+        externalKey: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -139,6 +177,7 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         self.createdAt = createdAt
         self.scheduledStart = scheduledStart
         self.calendarEventID = calendarEventID
+        self.externalKey = externalKey
     }
 
     public var isDone: Bool { status == .done }

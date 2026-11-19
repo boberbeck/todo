@@ -230,10 +230,36 @@ final class SQLiteStoreTests: XCTestCase {
         try reopened.save(changed)
         XCTAssertEqual(try reopened.load().tasks, [changed], "Speichern überschreibt statt zu verdoppeln")
 
+        let psp = PSPElement(customerID: customer.id, code: "4711", title: "Wartung 2026", lastUsedAt: created)
+        let booking = Booking(
+            taskID: task.id,
+            day: LocalDate(year: 2026, month: 11, day: 19),
+            target: .manageEngine,
+            minutes: 45,
+            description: "Logs geprüft",
+            pspElement: "4711",
+            workType: .stoerung,
+            ticketKey: "998877",
+            status: .failed,
+            lastError: "Zeitüberschreitung",
+            attempts: 2,
+            updatedAt: created
+        )
+        try reopened.save(psp)
+        try reopened.save(booking)
+        var account = customer
+        account.manageEngineAccount = "Müller Logistik GmbH"
+        try reopened.save(account)
+        let withBookings = try reopened.load()
+        XCTAssertEqual(withBookings.pspElements, [psp])
+        XCTAssertEqual(withBookings.bookings, [booking])
+        XCTAssertEqual(withBookings.customers.first?.manageEngineAccount, "Müller Logistik GmbH")
+
         try reopened.deleteTask(id: task.id)
         let empty = try reopened.load()
         XCTAssertTrue(empty.tasks.isEmpty)
         XCTAssertTrue(empty.entries.isEmpty, "Zeiten einer gelöschten Aufgabe verschwinden mit")
+        XCTAssertTrue(empty.bookings.isEmpty, "Buchungen einer gelöschten Aufgabe verschwinden mit")
     }
 }
 
@@ -322,5 +348,183 @@ final class FreeTimeTests: XCTestCase {
         XCTAssertEqual(TaskItem(title: "a").blockMinutes, 30)
         XCTAssertEqual(TaskItem(title: "b", estimateMinutes: 90).blockMinutes, 90)
         XCTAssertEqual(TaskItem(title: "c", estimateMinutes: 5).blockMinutes, 15)
+    }
+}
+
+final class DailyCloseTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        return calendar
+    }
+
+    private let day = LocalDate(year: 2026, month: 11, day: 19)
+
+    private func at(_ hour: Int, _ minute: Int = 0) -> Date {
+        FreeTime.date(on: day, minutes: hour * 60 + minute, calendar: calendar)
+    }
+
+    func testLinesRoundAndPickTargets() {
+        let ticket = TaskItem(
+            title: "VPN-Störung", source: .ticket, externalID: "1234", workType: .stoerung,
+            pspElement: "4711", workDescription: "Logs geprüft", externalKey: "998877"
+        )
+        let todo = TaskItem(title: "Angebot schreiben")
+        let entries = [
+            TimeEntry(taskID: ticket.id, start: at(9), end: at(9, 20)),
+            TimeEntry(taskID: ticket.id, start: at(11), end: at(11, 18)),
+            TimeEntry(taskID: todo.id, start: at(8), end: at(8, 50)),
+        ]
+        let lines = DailyClose.lines(
+            for: day, tasks: [ticket, todo], entries: entries, bookings: [],
+            rules: BookingRules(roundingStep: 15, roundingMode: .nearest), now: at(18), calendar: calendar
+        )
+        XCTAssertEqual(lines.map(\.task.id), [todo.id, ticket.id], "sortiert nach erstem Start")
+        let ticketLine = lines[1]
+        XCTAssertEqual(ticketLine.minutes, 45, "38 Minuten werden zu 45")
+        XCTAssertEqual(ticketLine.targets, [.sap, .manageEngine])
+        XCTAssertTrue(ticketLine.issues.isEmpty)
+        XCTAssertEqual(ticketLine.sapComment, "#1234 Logs geprüft")
+        let todoLine = lines[0]
+        XCTAssertEqual(todoLine.targets, [.sap])
+        XCTAssertEqual(Set(todoLine.issues), [.missingPSP, .missingWorkType])
+    }
+
+    func testPrepareSkipsDoneAndIncompleteTargets() {
+        let ticket = TaskItem(
+            title: "Drucker", source: .ticket, externalID: "1241", workType: .wartung,
+            pspElement: "4702", workDescription: "", externalKey: "555"
+        )
+        let entries = [TimeEntry(taskID: ticket.id, start: at(10), end: at(10, 30))]
+        let lines = DailyClose.lines(
+            for: day, tasks: [ticket], entries: entries, bookings: [],
+            rules: BookingRules(), now: at(18), calendar: calendar
+        )
+        let prepared = DailyClose.prepare(lines[0], now: at(18))
+        XCTAssertEqual(prepared.map(\.target), [.sap], "ohne Beschreibung kein Worklog")
+
+        let entered = BookingQueue.entered(prepared[0], now: at(18))
+        let again = DailyClose.lines(
+            for: day, tasks: [ticket], entries: entries, bookings: [entered],
+            rules: BookingRules(), now: at(18), calendar: calendar
+        )
+        XCTAssertTrue(DailyClose.prepare(again[0], now: at(18)).isEmpty, "Eingetragenes wird nie doppelt vorbereitet")
+        XCTAssertFalse(again[0].changedAfterBooking)
+
+        let longer = entries + [TimeEntry(taskID: ticket.id, start: at(14), end: at(14, 30))]
+        let changed = DailyClose.lines(
+            for: day, tasks: [ticket], entries: longer, bookings: [entered],
+            rules: BookingRules(), now: at(18), calendar: calendar
+        )
+        XCTAssertTrue(changed[0].changedAfterBooking, "nachträglich geänderte Zeit wird gemeldet")
+    }
+
+    func testQueueRetriesWithBackoff() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        let booking = Booking(taskID: UUID(), day: day, target: .manageEngine, minutes: 30, description: "x")
+        XCTAssertEqual(BookingQueue.due([booking], target: .manageEngine, now: start).count, 1)
+        XCTAssertTrue(BookingQueue.due([booking], target: .sap, now: start).isEmpty)
+
+        let failed = BookingQueue.failed(booking, error: "offline", now: start)
+        XCTAssertEqual(failed.attempts, 1)
+        XCTAssertTrue(BookingQueue.due([failed], target: .manageEngine, now: start.addingTimeInterval(10)).isEmpty)
+        XCTAssertEqual(BookingQueue.due([failed], target: .manageEngine, now: start.addingTimeInterval(31)).count, 1)
+        XCTAssertEqual(BookingQueue.retryDelay(attempts: 3), 120)
+        XCTAssertEqual(BookingQueue.retryDelay(attempts: 20), 3600)
+
+        let confirmed = BookingQueue.confirmed(failed, reference: "WL-1", now: start)
+        XCTAssertTrue(BookingQueue.due([confirmed], target: .manageEngine, now: start.addingTimeInterval(9999)).isEmpty)
+        XCTAssertNil(confirmed.lastError)
+    }
+
+    func testSAPTransferList() {
+        let booking = Booking(
+            taskID: UUID(), day: day, target: .sap, minutes: 75,
+            description: "#1234 Logs \"VPN\"; neu gestartet", pspElement: "4711", workType: .stoerung
+        )
+        let csv = SAPTransfer.csv([booking]) { $0 == .stoerung ? "S-100" : "" }
+        XCTAssertEqual(csv, "Datum;PSP-Element;Leistung;Stunden;Kommentar\n19.11.2026;4711;S-100;1,25;\"#1234 Logs \"\"VPN\"\"; neu gestartet\"\n")
+        XCTAssertEqual(SAPTransfer.hours(30), "0,50")
+    }
+}
+
+final class ManageEngineAPITests: XCTestCase {
+    private let config = ManageEngineConfig(baseURL: "https://helpdesk.example.com/", authKind: .authtoken, technicianID: "301")
+
+    private func inputData(_ request: URLRequest) throws -> [String: Any] {
+        let components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)
+        let value = components?.queryItems?.first { $0.name == "input_data" }?.value ?? ""
+        return try JSONSerialization.jsonObject(with: Data(value.utf8)) as? [String: Any] ?? [:]
+    }
+
+    func testNotConfigured() {
+        XCTAssertThrowsError(try ManageEngineAPI.connectionTest(config: ManageEngineConfig(), token: "x"))
+    }
+
+    func testAssignedRequestsRequest() throws {
+        let request = try ManageEngineAPI.assignedRequests(config: config, token: "SECRET")
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url?.path, "/api/v3/requests")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "authtoken"), "SECRET")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), ManageEngineAPI.acceptHeader)
+        let listInfo = try inputData(request)["list_info"] as? [String: Any]
+        let criteria = listInfo?["search_criteria"] as? [[String: Any]]
+        XCTAssertEqual(criteria?.first?["value"] as? String, "301")
+    }
+
+    func testCloudUsesZohoHeader() throws {
+        let cloud = ManageEngineConfig(baseURL: "https://sdpondemand.manageengine.eu/app/itdesk", authKind: .zohoOAuth, technicianID: "7")
+        let request = try ManageEngineAPI.connectionTest(config: cloud, token: "T")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Zoho-oauthtoken T")
+        XCTAssertEqual(request.url?.path, "/app/itdesk/api/v3/requests")
+        XCTAssertEqual(ManageEngineAPI.webURL(for: "55", config: cloud), "https://sdpondemand.manageengine.eu/app/itdesk/ui/requests/55/details")
+    }
+
+    func testWorklogRequest() throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let request = try ManageEngineAPI.addWorklog(
+            config: config, token: "SECRET", requestKey: "998877",
+            description: "Logs geprüft & Tunnel neu", minutes: 90, start: start
+        )
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.absoluteString, "https://helpdesk.example.com/api/v3/requests/998877/worklogs")
+        let body = String(decoding: request.httpBody ?? Data(), as: UTF8.self)
+        XCTAssertTrue(body.hasPrefix("input_data="))
+        let json = String(body.dropFirst("input_data=".count)).removingPercentEncoding ?? ""
+        let worklog = (try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])?["worklog"] as? [String: Any]
+        XCTAssertEqual(worklog?["description"] as? String, "Logs geprüft & Tunnel neu")
+        XCTAssertEqual((worklog?["owner"] as? [String: Any])?["id"] as? String, "301")
+        XCTAssertEqual((worklog?["time_spent"] as? [String: Any])?["hours"] as? String, "1")
+        XCTAssertEqual((worklog?["time_spent"] as? [String: Any])?["minutes"] as? String, "30")
+        XCTAssertEqual((worklog?["start_time"] as? [String: Any])?["value"] as? String, "1800000000000")
+        XCTAssertEqual((worklog?["end_time"] as? [String: Any])?["value"] as? String, "1800005400000")
+    }
+
+    func testParseTickets() throws {
+        let json = """
+        {"requests": [
+          {"id": "998877", "display_id": "1234", "subject": "VPN geht nicht", "status": {"name": "Open", "in_progress": true}, "account": {"name": "Müller Logistik"}},
+          {"id": 555, "subject": "Drucker", "status": {"name": "Closed"}}
+        ], "response_status": [{"status_code": 2000, "status": "success"}]}
+        """
+        let tickets = try ManageEngineAPI.parseTickets(Data(json.utf8), config: config)
+        XCTAssertEqual(tickets.count, 2)
+        XCTAssertEqual(tickets[0].key, "998877")
+        XCTAssertEqual(tickets[0].number, "1234")
+        XCTAssertEqual(tickets[0].accountName, "Müller Logistik")
+        XCTAssertTrue(tickets[0].isOpen)
+        XCTAssertEqual(tickets[1].key, "555")
+        XCTAssertEqual(tickets[1].number, "555")
+        XCTAssertFalse(tickets[1].isOpen)
+        XCTAssertEqual(tickets[1].webURL, "https://helpdesk.example.com/WorkOrder.do?woMode=viewWO&woID=555")
+    }
+
+    func testParseWorklogAndErrors() throws {
+        let ok = #"{"worklog": {"id": "WL-42"}, "response_status": {"status_code": 2000, "status": "success"}}"#
+        XCTAssertEqual(try ManageEngineAPI.parseWorklogID(Data(ok.utf8)), "WL-42")
+        let error = #"{"response_status": {"status_code": 4000, "status": "failed", "messages": [{"message": "Ungültiger Schlüssel"}]}}"#
+        XCTAssertThrowsError(try ManageEngineAPI.parseWorklogID(Data(error.utf8))) { thrown in
+            XCTAssertEqual(thrown as? ManageEngineError, .server("Ungültiger Schlüssel"))
+        }
     }
 }

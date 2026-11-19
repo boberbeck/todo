@@ -26,7 +26,7 @@ public final class SQLiteStore: Store {
     private var db: OpaquePointer?
 
     /// Aktuelle Version des Datenbankschemas.
-    public static let schemaVersion = 2
+    public static let schemaVersion = 3
 
     public init(url: URL) throws {
         try FileManager.default.createDirectory(
@@ -104,6 +104,41 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+        if version < 3 {
+            try exec("""
+            BEGIN;
+            ALTER TABLE customer ADD COLUMN manage_engine_account TEXT;
+            ALTER TABLE task ADD COLUMN external_key TEXT;
+            CREATE TABLE IF NOT EXISTS psp_element (
+                id TEXT PRIMARY KEY NOT NULL,
+                customer_id TEXT NOT NULL,
+                code TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                last_used_at REAL
+            );
+            CREATE INDEX IF NOT EXISTS psp_customer ON psp_element (customer_id);
+            CREATE TABLE IF NOT EXISTS booking (
+                id TEXT PRIMARY KEY NOT NULL,
+                task_id TEXT NOT NULL,
+                day TEXT NOT NULL,
+                target TEXT NOT NULL,
+                minutes INTEGER NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                psp_element TEXT,
+                work_type TEXT,
+                ticket_key TEXT,
+                status TEXT NOT NULL,
+                reference TEXT,
+                last_error TEXT,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                updated_at REAL NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS booking_unique ON booking (task_id, day, target);
+            PRAGMA user_version = 3;
+            COMMIT;
+            """)
+        }
     }
 
     private func userVersion() throws -> Int {
@@ -117,7 +152,7 @@ public final class SQLiteStore: Store {
     public func load() throws -> Snapshot {
         var snapshot = Snapshot()
 
-        let customers = try prepare("SELECT id, name, color_index, is_archived, created_at FROM customer;")
+        let customers = try prepare("SELECT id, name, color_index, is_archived, created_at, manage_engine_account FROM customer;")
         while try customers.step() {
             guard let id = customers.uuid(0) else { continue }
             snapshot.customers.append(Customer(
@@ -125,14 +160,15 @@ public final class SQLiteStore: Store {
                 name: customers.text(1) ?? "",
                 colorIndex: customers.int(2) ?? 0,
                 isArchived: (customers.int(3) ?? 0) != 0,
-                createdAt: customers.date(4) ?? Date()
+                createdAt: customers.date(4) ?? Date(),
+                manageEngineAccount: customers.text(5)
             ))
         }
 
         let tasks = try prepare("""
         SELECT id, title, notes, customer_id, source, external_id, external_url, planned_date,
                estimate_minutes, work_type, psp_element, work_description, status, completed_at,
-               sort_index, created_at, scheduled_start, calendar_event_id
+               sort_index, created_at, scheduled_start, calendar_event_id, external_key
         FROM task;
         """)
         while try tasks.step() {
@@ -155,7 +191,8 @@ public final class SQLiteStore: Store {
                 sortIndex: tasks.double(14) ?? 0,
                 createdAt: tasks.date(15) ?? Date(),
                 scheduledStart: tasks.date(16),
-                calendarEventID: tasks.text(17)
+                calendarEventID: tasks.text(17),
+                externalKey: tasks.text(18)
             ))
         }
 
@@ -171,6 +208,47 @@ public final class SQLiteStore: Store {
             ))
         }
 
+        let psps = try prepare("SELECT id, customer_id, code, title, is_active, last_used_at FROM psp_element;")
+        while try psps.step() {
+            guard let id = psps.uuid(0), let customerID = psps.uuid(1) else { continue }
+            snapshot.pspElements.append(PSPElement(
+                id: id,
+                customerID: customerID,
+                code: psps.text(2) ?? "",
+                title: psps.text(3) ?? "",
+                isActive: (psps.int(4) ?? 1) != 0,
+                lastUsedAt: psps.date(5)
+            ))
+        }
+
+        let bookings = try prepare("""
+        SELECT id, task_id, day, target, minutes, description, psp_element, work_type, ticket_key,
+               status, reference, last_error, attempts, updated_at
+        FROM booking;
+        """)
+        while try bookings.step() {
+            guard let id = bookings.uuid(0),
+                  let taskID = bookings.uuid(1),
+                  let day = bookings.text(2).flatMap({ LocalDate(string: $0) }),
+                  let target = bookings.text(3).flatMap({ BookingTarget(rawValue: $0) }) else { continue }
+            snapshot.bookings.append(Booking(
+                id: id,
+                taskID: taskID,
+                day: day,
+                target: target,
+                minutes: bookings.int(4) ?? 0,
+                description: bookings.text(5) ?? "",
+                pspElement: bookings.text(6),
+                workType: bookings.text(7).flatMap { WorkType(rawValue: $0) },
+                ticketKey: bookings.text(8),
+                status: bookings.text(9).flatMap { BookingStatus(rawValue: $0) } ?? .pending,
+                reference: bookings.text(10),
+                lastError: bookings.text(11),
+                attempts: bookings.int(12) ?? 0,
+                updatedAt: bookings.date(13) ?? Date()
+            ))
+        }
+
         return snapshot
     }
 
@@ -178,18 +256,20 @@ public final class SQLiteStore: Store {
 
     public func save(_ customer: Customer) throws {
         try run("""
-        INSERT INTO customer (id, name, color_index, is_archived, created_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO customer (id, name, color_index, is_archived, created_at, manage_engine_account)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             color_index = excluded.color_index,
-            is_archived = excluded.is_archived;
+            is_archived = excluded.is_archived,
+            manage_engine_account = excluded.manage_engine_account;
         """, [
             .text(customer.id.uuidString),
             .text(customer.name),
             .int(customer.colorIndex),
             .int(customer.isArchived ? 1 : 0),
             .double(customer.createdAt.timeIntervalSince1970),
+            .optionalText(customer.manageEngineAccount),
         ])
     }
 
@@ -197,8 +277,8 @@ public final class SQLiteStore: Store {
         try run("""
         INSERT INTO task (id, title, notes, customer_id, source, external_id, external_url, planned_date,
                           estimate_minutes, work_type, psp_element, work_description, status, completed_at,
-                          sort_index, created_at, scheduled_start, calendar_event_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          sort_index, created_at, scheduled_start, calendar_event_id, external_key)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             notes = excluded.notes,
@@ -215,7 +295,8 @@ public final class SQLiteStore: Store {
             completed_at = excluded.completed_at,
             sort_index = excluded.sort_index,
             scheduled_start = excluded.scheduled_start,
-            calendar_event_id = excluded.calendar_event_id;
+            calendar_event_id = excluded.calendar_event_id,
+            external_key = excluded.external_key;
         """, [
             .text(task.id.uuidString),
             .text(task.title),
@@ -235,6 +316,7 @@ public final class SQLiteStore: Store {
             .double(task.createdAt.timeIntervalSince1970),
             .optionalDouble(task.scheduledStart?.timeIntervalSince1970),
             .optionalText(task.calendarEventID),
+            .optionalText(task.externalKey),
         ])
     }
 
@@ -256,9 +338,68 @@ public final class SQLiteStore: Store {
         ])
     }
 
+    public func save(_ psp: PSPElement) throws {
+        try run("""
+        INSERT INTO psp_element (id, customer_id, code, title, is_active, last_used_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            customer_id = excluded.customer_id,
+            code = excluded.code,
+            title = excluded.title,
+            is_active = excluded.is_active,
+            last_used_at = excluded.last_used_at;
+        """, [
+            .text(psp.id.uuidString),
+            .text(psp.customerID.uuidString),
+            .text(psp.code),
+            .text(psp.title),
+            .int(psp.isActive ? 1 : 0),
+            .optionalDouble(psp.lastUsedAt?.timeIntervalSince1970),
+        ])
+    }
+
+    public func save(_ booking: Booking) throws {
+        try run("""
+        INSERT INTO booking (id, task_id, day, target, minutes, description, psp_element, work_type, ticket_key,
+                             status, reference, last_error, attempts, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            minutes = excluded.minutes,
+            description = excluded.description,
+            psp_element = excluded.psp_element,
+            work_type = excluded.work_type,
+            ticket_key = excluded.ticket_key,
+            status = excluded.status,
+            reference = excluded.reference,
+            last_error = excluded.last_error,
+            attempts = excluded.attempts,
+            updated_at = excluded.updated_at;
+        """, [
+            .text(booking.id.uuidString),
+            .text(booking.taskID.uuidString),
+            .text(booking.day.string),
+            .text(booking.target.rawValue),
+            .int(booking.minutes),
+            .text(booking.description),
+            .optionalText(booking.pspElement),
+            .optionalText(booking.workType?.rawValue),
+            .optionalText(booking.ticketKey),
+            .text(booking.status.rawValue),
+            .optionalText(booking.reference),
+            .optionalText(booking.lastError),
+            .int(booking.attempts),
+            .double(booking.updatedAt.timeIntervalSince1970),
+        ])
+    }
+
+    public func deletePSP(id: UUID) throws {
+        try run("DELETE FROM psp_element WHERE id = ?;", [.text(id.uuidString)])
+    }
+
     public func deleteTask(id: UUID) throws {
         try exec("BEGIN;")
         do {
+            try run("DELETE FROM booking WHERE task_id = ?;", [.text(id.uuidString)])
             try run("DELETE FROM time_entry WHERE task_id = ?;", [.text(id.uuidString)])
             try run("DELETE FROM task WHERE id = ?;", [.text(id.uuidString)])
             try exec("COMMIT;")
