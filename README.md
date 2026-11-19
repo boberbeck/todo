@@ -37,7 +37,11 @@ Voraussetzungen: macOS 14 oder neuer und Xcode 15.3 oder neuer.
 1. Repository klonen und den Branch auschecken.
 2. `open Package.swift` ausführen. Xcode öffnet das Paket. Das Schema „Tagwerk“ wählen und mit ⌘R starten.
 3. Alternativ im Terminal: `swift run Tagwerk`.
-4. Tests laufen mit `swift test`.
+4. Als App zum Doppelklicken: `scripts/make-app.sh` baut `build/Tagwerk.app`. Die kannst du in den Programme-Ordner ziehen.
+5. Tests laufen mit `swift test`.
+6. Zum Ausprobieren ohne eigene Daten: `swift run Tagwerk -TagwerkDemo YES` startet mit Beispieldaten. Die werden nicht gespeichert.
+
+Screenshots aller Bildschirme liegen unter `docs/screenshots`. Die CI erzeugt sie neu, wenn eine Commit-Nachricht `[screenshots]` enthält.
 
 Die App läuft vorerst als Swift-Paket, noch ohne signiertes App-Bundle. Für den Kalenderzugriff in Phase 2 kommt ein Xcode-Projekt mit Bundle-ID und Berechtigungstexten dazu.
 

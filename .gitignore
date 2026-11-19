@@ -8,3 +8,4 @@ DerivedData/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+/build

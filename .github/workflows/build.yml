@@ -28,19 +28,30 @@ jobs:
       - name: Testen
         run: swift test
 
-      # Startet die App mit Beispieldaten; sie fotografiert jeden Bildschirm hell und dunkel und beendet sich.
+      - name: App-Bundle bauen
+        run: scripts/make-app.sh debug
+
+      # Startet die App mit Beispieldaten. Sie zeigt jeden Bildschirm hell und dunkel und meldet sich
+      # jeweils über die Datei .ready; dieses Skript fotografiert dann das Fenster.
       - name: Screenshots aufnehmen
         run: |
           mkdir -p screenshots
-          TAGWERK_SNAPSHOT_DIR="$PWD/screenshots" .build/debug/Tagwerk &
-          APP=$!
-          sleep 6
-          screencapture -x screenshots/bildschirm.png || echo "screencapture nicht möglich"
-          for i in $(seq 1 90); do
-            kill -0 "$APP" 2>/dev/null || break
-            sleep 1
+          open -n build/Tagwerk.app --args -TagwerkSnapshotDir "$PWD/screenshots" -AppleLanguages '(de)' -AppleLocale de_DE
+          for i in $(seq 1 600); do
+            if [ -f screenshots/.ready ]; then
+              read -r NAME WID < screenshots/.ready
+              if [ "$WID" = "0" ]; then
+                screencapture -x "screenshots/$NAME.png" || echo "screencapture fehlgeschlagen: $NAME"
+              else
+                screencapture -x -o -l"$WID" "screenshots/$NAME.png" || echo "screencapture fehlgeschlagen: $NAME"
+              fi
+              rm -f screenshots/.ready
+            fi
+            [ -f screenshots/.done ] && break
+            sleep 0.2
           done
-          kill "$APP" 2>/dev/null || true
+          rm -f screenshots/.done screenshots/.ready
+          pkill -x Tagwerk || true
           ls -la screenshots
 
       - uses: actions/upload-artifact@v4

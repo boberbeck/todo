@@ -27,6 +27,8 @@ struct CustomerDot: View {
 struct TaskMetaLine: View {
     @Environment(AppModel.self) private var model
     let task: TaskItem
+    /// Arbeitsart und PSP-Element mit anzeigen (im Fokus stehen sie als eigene Felder daneben).
+    var showsBooking = true
 
     var body: some View {
         HStack(spacing: 5) {
@@ -37,11 +39,11 @@ struct TaskMetaLine: View {
                 CustomerDot(colorIndex: customer.colorIndex, size: 6)
                 Text(customer.name)
             }
-            if let workType = task.workType {
+            if showsBooking, let workType = task.workType {
                 Text("·")
                 Text(workType.label)
             }
-            if let psp = task.pspElement {
+            if showsBooking, let psp = task.pspElement {
                 Text("·")
                 Text("PSP \(psp)")
             }

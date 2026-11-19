@@ -49,7 +49,7 @@ struct FocusTaskPane: View {
                     .font(.system(size: 26, weight: .semibold))
                     .lineLimit(3)
                 HStack(spacing: 10) {
-                    TaskMetaLine(task: task)
+                    TaskMetaLine(task: task, showsBooking: false)
                     WorkTypeMenu(task: task)
                     TextField("PSP-Element", text: $pspText)
                         .textFieldStyle(.roundedBorder)

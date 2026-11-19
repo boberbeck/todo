@@ -2,19 +2,25 @@ import AppKit
 import SwiftUI
 import TagwerkCore
 
-/// Screenshot-Modus für die CI: `TAGWERK_SNAPSHOT_DIR=/pfad swift run Tagwerk`
-/// startet mit Beispieldaten, fotografiert jeden Bildschirm hell und dunkel und beendet sich.
+/// Screenshot-Modus für die CI.
+///
+/// Start mit `-TagwerkSnapshotDir /pfad` (oder Umgebungsvariable `TAGWERK_SNAPSHOT_DIR`).
+/// Die App zeigt nacheinander jeden Bildschirm hell und dunkel und legt jeweils eine Datei `.ready`
+/// mit Name und Fensternummer ab. Das CI-Skript fotografiert das Fenster mit `screencapture -l`
+/// und löscht die Datei. Antwortet niemand, zeichnet die App das Fenster selbst.
 enum SnapshotMode {
     static var directory: URL? {
-        guard let path = ProcessInfo.processInfo.environment["TAGWERK_SNAPSHOT_DIR"], !path.isEmpty else {
-            return nil
-        }
+        let environment = ProcessInfo.processInfo.environment["TAGWERK_SNAPSHOT_DIR"]
+        let argument = UserDefaults.standard.string(forKey: "TagwerkSnapshotDir")
+        guard let path = environment ?? argument, !path.isEmpty else { return nil }
         return URL(fileURLWithPath: path, isDirectory: true)
     }
 
     /// Beispieldaten statt der echten Datenbank.
     static var usesDemoData: Bool {
-        directory != nil || ProcessInfo.processInfo.environment["TAGWERK_DEMO"] == "1"
+        directory != nil
+            || ProcessInfo.processInfo.environment["TAGWERK_DEMO"] == "1"
+            || UserDefaults.standard.bool(forKey: "TagwerkDemo")
     }
 
     @MainActor
@@ -24,11 +30,16 @@ enum SnapshotMode {
 
         guard let window = NSApp.windows.first(where: { $0.isVisible && $0.frame.width >= 600 }) else {
             print("Snapshot: kein Fenster gefunden")
-            NSApp.terminate(nil)
+            finish(in: directory)
             return
         }
-        window.setContentSize(NSSize(width: 1280, height: 800))
-        window.center()
+        if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
+            let width = min(1280, visible.width)
+            let height = min(800, visible.height)
+            let frame = NSRect(x: visible.midX - width / 2, y: visible.midY - height / 2, width: width, height: height)
+            window.setFrame(frame, display: true)
+        }
+        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
 
         var screens: [(name: String, item: SidebarItem)] = [
@@ -47,30 +58,55 @@ enum SnapshotMode {
             for screen in screens {
                 model.selection = screen.item
                 try? await Task.sleep(for: .seconds(1.5))
-                let url = directory.appendingPathComponent("\(screen.name)-\(appearance.suffix).png")
-                if capture(window, to: url) {
-                    print("Snapshot: \(url.lastPathComponent)")
-                } else {
-                    print("Snapshot fehlgeschlagen: \(url.lastPathComponent)")
-                }
+                await capture(window, name: "\(screen.name)-\(appearance.suffix)", in: directory)
+            }
+            if appearance.suffix == "hell" {
+                // ganzer Bildschirm mit Menüleisten-Uhr
+                model.selection = .today
+                try? await Task.sleep(for: .seconds(1))
+                await capture(nil, name: "bildschirm", in: directory)
             }
         }
+        finish(in: directory)
+    }
+
+    @MainActor
+    private static func finish(in directory: URL) {
+        try? Data().write(to: directory.appendingPathComponent(".done"))
         NSApp.terminate(nil)
     }
 
-    /// Zeichnet das ganze Fenster samt Titelleiste in eine PNG-Datei. Braucht keine Bildschirmfreigabe.
+    /// Bittet das CI-Skript um ein Foto. Ohne Antwort zeichnet die App das Fenster selbst.
     @MainActor
-    private static func capture(_ window: NSWindow, to url: URL) -> Bool {
+    private static func capture(_ window: NSWindow?, name: String, in directory: URL) async {
+        let marker = directory.appendingPathComponent(".ready")
+        let windowNumber = window?.windowNumber ?? 0
+        try? "\(name) \(windowNumber)\n".data(using: .utf8)?.write(to: marker, options: .atomic)
+
+        for _ in 0..<50 {
+            if !FileManager.default.fileExists(atPath: marker.path) {
+                print("Snapshot: \(name)")
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+
+        try? FileManager.default.removeItem(at: marker)
+        if let window, draw(window, to: directory.appendingPathComponent("\(name).png")) {
+            print("Snapshot selbst gezeichnet: \(name)")
+        } else {
+            print("Snapshot fehlgeschlagen: \(name)")
+        }
+    }
+
+    /// Zeichnet das Fenster ohne Bildschirmfreigabe. Glas-Effekte (Seitenleiste) fehlen dabei.
+    @MainActor
+    private static func draw(_ window: NSWindow, to url: URL) -> Bool {
         guard let view = window.contentView?.superview ?? window.contentView else { return false }
         let bounds = view.bounds
         guard let rep = view.bitmapImageRepForCachingDisplay(in: bounds) else { return false }
         view.cacheDisplay(in: bounds, to: rep)
         guard let data = rep.representation(using: .png, properties: [:]) else { return false }
-        do {
-            try data.write(to: url)
-            return true
-        } catch {
-            return false
-        }
+        return (try? data.write(to: url)) != nil
     }
 }
