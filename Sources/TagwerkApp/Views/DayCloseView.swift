@@ -161,12 +161,14 @@ struct CloseLineRow: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Stepper(value: $minutes, in: 0...720, step: model.bookingRules.roundingStep) {
+                    HStack(spacing: 6) {
                         Text("\(TimeMath.format(minutes: minutes)) h")
                             .font(.title3.weight(.semibold))
                             .monospacedDigit()
+                        Stepper("Zeit", value: $minutes, in: 0...720, step: model.bookingRules.roundingStep)
+                            .labelsHidden()
+                            .disabled(line.isDone)
                     }
-                    .disabled(line.isDone)
                     Text("erfasst \(TimeMath.format(line.trackedSeconds))")
                         .font(.caption)
                         .foregroundStyle(.secondary)

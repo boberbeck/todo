@@ -4,13 +4,15 @@ Tagwerk ist der Arbeitsname einer schlanken Mac-App für Tagesplanung, Fokus und
 
 Der vollständige Plan steht im Dokument „Plan: Eigene Todo-App für den Mac“.
 
-## Stand: Phase 2 (Kalender und Tagesplanung)
+## Stand: Phase 3 (Tagesabschluss, SAP-Assistent, ManageEngine)
 
 | Bereich | Was geht |
 | --- | --- |
 | Heute | Aufgaben des Tages mit erfasster und geplanter Zeit. Erledigtes bleibt abgehakt stehen. Reihenfolge per Drag-and-drop. Warnung, wenn mehr geplant ist als Zeit da ist. |
 | Kalender | Zeitleiste neben dem Tagesplan mit den Terminen aus dem Apple Kalender (private nur als „belegt“), den Zeitblöcken der Aufgaben und der erfassten Zeit. Aufgaben aus dem Eingang lassen sich hineinziehen, Blöcke mit der Maus verschieben. Ein Termin wird per Rechtsklick zur erfassten Zeit. |
 | Tag planen | Geführte Planung beim ersten Öffnen am Tag: Übriges von gestern, Eingang, schätzen, in freie Lücken legen. |
+| Tag abschließen | Zeiten je Aufgabe gerundet prüfen und anpassen. Worklogs gehen an ManageEngine. SAP-Zeilen überträgst du mit Kopier-Knöpfen oder als Excel-Liste und hakst sie ab; nichts wird doppelt gebucht. |
+| ManageEngine | Eigene offene Tickets landen im Eingang (Konto → Kunde). Zugang in den Einstellungen, der API-Schlüssel liegt im Schlüsselbund. |
 | Eingang | Noch nicht eingeplante Todos. Per Pfeil oder Drag-and-drop in den Tag holen. |
 | Fokus | Eine Aufgabe groß mit Timer, Arbeitsart, PSP-Element und dem Feld „Bearbeitung“. Daneben die Done-Liste, unten die Fokuszeit des Tages. |
 | Kunden | Lokale Todos pro Kunde, Farbe, Stunden im laufenden Monat. Diese Todos verlassen die App nie. |
@@ -27,7 +29,6 @@ Noch nicht enthalten:
 
 | Phase | Inhalt |
 | --- | --- |
-| 3 | SAP ByDesign und ManageEngine mit Tagesabschluss |
 | 4 | Wochenrückblick, Wochenziele, Leerlauf-Erkennung |
 | 5 | Outlook |
 
@@ -59,6 +60,7 @@ Alle Daten liegen lokal in `~/Library/Application Support/Tagwerk/tagwerk.sqlite
 | ⌘↩ | Fokus-Aufgabe erledigt |
 | ⌘1 bis ⌘4 | Heute, Fokus, Kunden, Rückblick |
 | ⌘0 | Tag planen |
+| ⌘9 | Tag abschließen |
 | Doppelklick auf eine Aufgabe | im Fokus öffnen |
 
 ## Aufbau

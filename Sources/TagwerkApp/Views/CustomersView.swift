@@ -281,6 +281,11 @@ struct PSPRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if !psp.isActive {
+                Text("inaktiv")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Toggle("aktiv", isOn: Binding(
                 get: { psp.isActive },
                 set: { active in
@@ -289,6 +294,7 @@ struct PSPRow: View {
                     model.update(changed)
                 }
             ))
+            .labelsHidden()
             .toggleStyle(.switch)
             .controlSize(.small)
             .help("Inaktive Elemente erscheinen nicht mehr in der Auswahl")
