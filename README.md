@@ -85,6 +85,17 @@ Gelesen werden `.xlsx`, Excel-XML (`.xls`), CSV und HTML-Tabellen. In SAP änder
 
 Werkzeuge: `tagesuebersicht`, `aufgaben`, `aufgabe_anlegen`, `aufgabe_aendern`, `timer_starten`, `timer_stoppen`, `zeitauswertung`, `tagesabschluss`, `kunden`, `wochenziele`, `wochenziel_anlegen`. Der Server arbeitet direkt auf der Datenbank; die geöffnete App lädt Änderungen innerhalb einer Sekunde nach. Nach SAP oder ManageEngine bucht Claude nicht. Mit der Umgebungsvariable `TAGWERK_DB` lässt sich eine andere Datenbank angeben, z. B. zum Ausprobieren.
 
+## Signieren (einmal einrichten)
+
+macOS merkt sich Freigaben für den Schlüsselbund (ManageEngine-Schlüssel), die Kalender und die Musik-App anhand der Signatur der App. `scripts/make-app.sh` signiert ohne eigenes Zertifikat nur „ad hoc“; diese Signatur ändert sich bei jedem Neubau, und macOS fragt danach einmal neu. Mit einem eigenen Zertifikat bleibt sie gleich:
+
+1. Schlüsselbundverwaltung öffnen › Menü „Schlüsselbundverwaltung“ › Zertifikatsassistent › Zertifikat erstellen …
+2. Name: `Tagwerk Lokal`, Identitätstyp: Selbst signiertes Stammzertifikat, Zertifikattyp: Codesignatur › Erstellen.
+3. `scripts/make-app.sh` erneut ausführen. Es meldet „Signiere mit „Tagwerk Lokal““.
+4. Beim nächsten Start einmal „Immer erlauben“ wählen, wenn macOS nach dem Schlüsselbund fragt.
+
+Den API-Schlüssel liest Tagwerk erst, wenn es wirklich mit ManageEngine spricht, und nur einmal pro Start.
+
 ## Daten
 
 Alle Daten liegen lokal in `~/Library/Application Support/Tagwerk/tagwerk.sqlite`. Time Machine sichert die Datei mit. Die App nutzt die SQLite-Bibliothek von macOS und braucht keine Fremdpakete.

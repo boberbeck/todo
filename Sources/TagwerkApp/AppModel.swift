@@ -1024,13 +1024,13 @@ final class AppModel {
     }
 
     func setManageEngineToken(_ token: String) {
-        Keychain.set(token.trimmingCharacters(in: .whitespacesAndNewlines), account: ManageEngineClient.tokenAccount)
+        manageEngine.setToken(token.trimmingCharacters(in: .whitespacesAndNewlines))
         settingsChanged()
     }
 
     var hasManageEngineToken: Bool {
         _ = settingsVersion
-        return !(manageEngine.token ?? "").isEmpty
+        return manageEngine.hasToken
     }
 
     private func customerID(forAccount account: String?) -> UUID? {

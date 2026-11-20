@@ -29,8 +29,20 @@ done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 rm -rf "$ICONSET"
 
-codesign --force --sign - "$APP/Contents/MacOS/tagwerk-mcp"
-codesign --force --sign - "$APP"
+# Signieren. Mit einem eigenen Zertifikat „Tagwerk Lokal“ (siehe README) bleibt die Signatur
+# bei jedem Neubau gleich; dann behält macOS die Freigaben für Schlüsselbund, Kalender und Musik.
+# Ohne Zertifikat wird ad hoc signiert, und macOS fragt nach jedem Neubau einmal neu.
+IDENTITY="${TAGWERK_SIGN_IDENTITY:-Tagwerk Lokal}"
+if security find-identity -p codesigning 2>/dev/null | grep -q "\"$IDENTITY\""; then
+  SIGN="$IDENTITY"
+  echo "Signiere mit „$IDENTITY“"
+else
+  SIGN="-"
+  echo "Hinweis: Kein Zertifikat „$IDENTITY“ gefunden, signiere ad hoc."
+  echo "         macOS fragt dann nach jedem Neubau einmal nach dem Schlüsselbund (README › Signieren)."
+fi
+codesign --force --sign "$SIGN" --identifier local.tagwerk.mcp "$APP/Contents/MacOS/tagwerk-mcp"
+codesign --force --sign "$SIGN" "$APP"
 
 echo "Fertig: $APP"
 echo "Starten mit: open $APP"

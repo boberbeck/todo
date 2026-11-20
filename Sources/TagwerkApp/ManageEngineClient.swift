@@ -32,6 +32,19 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
+    /// Gibt es einen Eintrag? Liest nur die Merkmale, nicht das Geheimnis; macOS fragt dafür nicht nach.
+    static func exists(account: String) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: CFTypeRef?
+        return SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess
+    }
+
     static func delete(account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -56,10 +69,27 @@ final class ManageEngineClient {
         )
     }
 
-    var token: String? { Keychain.get(account: Self.tokenAccount) }
+    /// Der Schlüssel selbst wird erst gelesen, wenn Tagwerk wirklich mit ManageEngine spricht,
+    /// und dann für die Laufzeit der App gemerkt. So fragt macOS höchstens einmal nach.
+    private var cachedToken: String?
+    private var cachedHasToken: Bool?
+
+    /// Ist ein Schlüssel gespeichert? Ohne das Geheimnis zu lesen.
+    var hasToken: Bool {
+        if let cachedHasToken { return cachedHasToken }
+        let exists = Keychain.exists(account: Self.tokenAccount)
+        cachedHasToken = exists
+        return exists
+    }
 
     var isReady: Bool {
-        config.isComplete && !(token ?? "").isEmpty
+        config.isComplete && hasToken
+    }
+
+    func setToken(_ value: String) {
+        Keychain.set(value, account: Self.tokenAccount)
+        cachedToken = value.isEmpty ? nil : value
+        cachedHasToken = !value.isEmpty
     }
 
     func fetchTickets() async throws -> [ManageEngineTicket] {
@@ -91,7 +121,11 @@ final class ManageEngineClient {
     }
 
     private func requireToken() throws -> String {
-        guard let token, !token.isEmpty else { throw ManageEngineError.notConfigured }
+        if let cachedToken { return cachedToken }
+        guard hasToken, let token = Keychain.get(account: Self.tokenAccount), !token.isEmpty else {
+            throw ManageEngineError.notConfigured
+        }
+        cachedToken = token
         return token
     }
 
