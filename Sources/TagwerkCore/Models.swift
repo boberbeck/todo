@@ -86,6 +86,8 @@ public struct PSPElement: Identifiable, Hashable, Codable, Sendable {
     public var title: String
     public var isActive: Bool
     public var lastUsedAt: Date?
+    /// Tätigkeit aus SAP, z. B. „Beratung“ oder „Interne Besprechung“
+    public var activity: String?
 
     public init(
         id: UUID = UUID(),
@@ -93,7 +95,8 @@ public struct PSPElement: Identifiable, Hashable, Codable, Sendable {
         code: String,
         title: String = "",
         isActive: Bool = true,
-        lastUsedAt: Date? = nil
+        lastUsedAt: Date? = nil,
+        activity: String? = nil
     ) {
         self.id = id
         self.customerID = customerID
@@ -101,10 +104,15 @@ public struct PSPElement: Identifiable, Hashable, Codable, Sendable {
         self.title = title
         self.isActive = isActive
         self.lastUsedAt = lastUsedAt
+        self.activity = activity
     }
 
+    /// „CPSO8643-5 · Firewall · Beratung“
     public var label: String {
-        title.isEmpty ? code : "\(code) · \(title)"
+        var parts = [code]
+        if !title.isEmpty { parts.append(title) }
+        if let activity, !activity.isEmpty, activity != title { parts.append(activity) }
+        return parts.joined(separator: " · ")
     }
 }
 

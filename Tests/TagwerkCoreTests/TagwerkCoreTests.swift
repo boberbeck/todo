@@ -716,6 +716,32 @@ final class SAPImportTests: XCTestCase {
         XCTAssertEqual(rows.map(\.title), ["Firewall erneuern", "Wartung 2026"])
     }
 
+    func testActivityColumn() {
+        let cells = [
+            ["Kategorie", "Aufgabennummer", "Tätigkeit"],
+            ["Projektaufgabenbestätigung", "CPSO9001-1", "Interne Besprechung"],
+        ]
+        let rows = SAPImport.rows(fromCells: cells)
+        XCTAssertEqual(rows.first?.activity, "Interne Besprechung")
+        XCTAssertEqual(rows.first?.title, "Interne Besprechung", "ohne Namensspalte wird die Tätigkeit zum Namen")
+
+        let customer = Customer(name: "Intern", colorIndex: 0)
+        let existing = [PSPElement(customerID: customer.id, code: "CPSO9001-1", title: "Interne Besprechung")]
+        let plan = SAPImport.plan(rows: rows, existing: existing, customers: [customer])
+        let saved = SAPImport.apply(plan, customerFor: { $0.suggestedCustomerID }, deactivateMissing: false)
+        XCTAssertEqual(saved.first?.activity, "Interne Besprechung")
+        XCTAssertEqual(saved.first?.label, "CPSO9001-1 · Interne Besprechung")
+    }
+
+    func testSQLiteKeepsActivity() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tagwerk-psp-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = try SQLiteStore(url: folder.appendingPathComponent("tagwerk.sqlite"))
+        let psp = PSPElement(customerID: UUID(), code: "CPSO9001-1", title: "Besprechung", activity: "Interne Tätigkeit")
+        try store.save(psp)
+        XCTAssertEqual(try store.load().pspElements, [psp])
+    }
+
     func testGroupRowsAreNoTitles() {
         let cells = [
             ["Kategorie: Projektaufgabenbestätigung (null)", "CPSO8643-1"],

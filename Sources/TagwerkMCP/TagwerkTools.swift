@@ -416,7 +416,11 @@ public final class TagwerkTools {
                     "minuten_im_monat": minutes(monthSeconds),
                     "psp_elemente": snapshot.pspElements
                         .filter { $0.customerID == customer.id }
-                        .map { ["code": $0.code, "titel": $0.title, "aktiv": $0.isActive] },
+                        .map { psp -> [String: Any] in
+                            var entry: [String: Any] = ["code": psp.code, "titel": psp.title, "aktiv": psp.isActive]
+                            if let activity = psp.activity { entry["taetigkeit"] = activity }
+                            return entry
+                        },
                 ]
                 if let account = customer.manageEngineAccount { entry["manageengine_konto"] = account }
                 return entry

@@ -26,7 +26,7 @@ public final class SQLiteStore: Store {
     private var db: OpaquePointer?
 
     /// Aktuelle Version des Datenbankschemas.
-    public static let schemaVersion = 4
+    public static let schemaVersion = 5
 
     public init(url: URL) throws {
         try FileManager.default.createDirectory(
@@ -158,6 +158,14 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+        if version < 5 {
+            try exec("""
+            BEGIN;
+            ALTER TABLE psp_element ADD COLUMN activity TEXT;
+            PRAGMA user_version = 5;
+            COMMIT;
+            """)
+        }
     }
 
     /// Zählt Änderungen durch andere Verbindungen (`PRAGMA data_version`).
@@ -234,7 +242,7 @@ public final class SQLiteStore: Store {
             ))
         }
 
-        let psps = try prepare("SELECT id, customer_id, code, title, is_active, last_used_at FROM psp_element;")
+        let psps = try prepare("SELECT id, customer_id, code, title, is_active, last_used_at, activity FROM psp_element;")
         while try psps.step() {
             guard let id = psps.uuid(0), let customerID = psps.uuid(1) else { continue }
             snapshot.pspElements.append(PSPElement(
@@ -243,7 +251,8 @@ public final class SQLiteStore: Store {
                 code: psps.text(2) ?? "",
                 title: psps.text(3) ?? "",
                 isActive: (psps.int(4) ?? 1) != 0,
-                lastUsedAt: psps.date(5)
+                lastUsedAt: psps.date(5),
+                activity: psps.text(6)
             ))
         }
 
@@ -381,14 +390,15 @@ public final class SQLiteStore: Store {
 
     public func save(_ psp: PSPElement) throws {
         try run("""
-        INSERT INTO psp_element (id, customer_id, code, title, is_active, last_used_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO psp_element (id, customer_id, code, title, is_active, last_used_at, activity)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             customer_id = excluded.customer_id,
             code = excluded.code,
             title = excluded.title,
             is_active = excluded.is_active,
-            last_used_at = excluded.last_used_at;
+            last_used_at = excluded.last_used_at,
+            activity = excluded.activity;
         """, [
             .text(psp.id.uuidString),
             .text(psp.customerID.uuidString),
@@ -396,6 +406,7 @@ public final class SQLiteStore: Store {
             .text(psp.title),
             .int(psp.isActive ? 1 : 0),
             .optionalDouble(psp.lastUsedAt?.timeIntervalSince1970),
+            .optionalText(psp.activity),
         ])
     }
 

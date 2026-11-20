@@ -297,6 +297,15 @@ struct SAPSyncSheet: View {
                             Text(item.row.title.isEmpty ? "ohne Bezeichnung" : item.row.title)
                                 .foregroundStyle(item.row.title.isEmpty ? Color.secondary : Color.primary)
                                 .lineLimit(1)
+                            if let activity = item.row.activity, !activity.isEmpty, activity != item.row.title {
+                                Text(activity)
+                                    .font(.caption)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 1)
+                                    .background(Capsule().fill(Color.primary.opacity(0.08)))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                             Spacer()
                             badge(for: item.change)
                         }
@@ -362,6 +371,10 @@ struct SAPSyncSheet: View {
                 }
                 if !model.activeCustomers.isEmpty || !pendingNewCustomers.isEmpty {
                     Divider()
+                }
+                if !model.activeCustomers.contains(where: { $0.name.caseInsensitiveCompare("Intern") == .orderedSame }),
+                   !pendingNewCustomers.contains("Intern") {
+                    Button("Intern (eigene Firma)") { choices[group.project] = .new("Intern") }
                 }
                 Button("Neuer Kunde …") {
                     newCustomerName = group.customerName ?? group.projectName ?? ""

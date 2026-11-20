@@ -209,13 +209,13 @@ enum DemoData {
 
     /// So sieht ein Excel-Export der Aufgabenliste aus ByDesign aus (für Bildschirmfotos).
     static let sapRows: [SAPTaskRow] = SAPImport.rows(fromCells: [
-        ["Kategorie", "Aufgabennummer", "Aufgabenname", "Projekt", "Kunde"],
-        ["Projektaufgabenbestätigung", "CPSO8643-1", "Wartungsvertrag 2026", "CPSO8643", "Müller Logistik GmbH"],
-        ["Projektaufgabenbestätigung", "CPSO8643-2", "Störungen und Notfälle", "CPSO8643", "Müller Logistik GmbH"],
-        ["Projektaufgabenbestätigung", "CPSO8643-5", "Migration Exchange Online", "CPSO8643", "Müller Logistik GmbH"],
-        ["Projektaufgabenbestätigung", "CPSO8643-6", "Firewall-Erneuerung", "CPSO8643", "Müller Logistik GmbH"],
-        ["Projektaufgabenbestätigung", "CPSO8710-1", "Support", "CPSO8710", "Stadtwerke Nord"],
-        ["Projektaufgabenbestätigung", "CPSO8710-2", "Rollout Arbeitsplätze", "CPSO8710", "Stadtwerke Nord"],
-        ["Projektaufgabenbestätigung", "CPSO8955-1", "Beratung IT-Sicherheit", "CPSO8955", "Hansa Spedition"],
+        ["Kategorie", "Aufgabennummer", "Aufgabenname", "Tätigkeit", "Projekt", "Kunde"],
+        ["Projektaufgabenbestätigung", "CPSO8643-1", "Wartungsvertrag 2026", "Wartung", "CPSO8643", "Müller Logistik GmbH"],
+        ["Projektaufgabenbestätigung", "CPSO8643-2", "Störungen und Notfälle", "Störungsbehebung", "CPSO8643", "Müller Logistik GmbH"],
+        ["Projektaufgabenbestätigung", "CPSO8643-5", "Migration Exchange Online", "Projektarbeit", "CPSO8643", "Müller Logistik GmbH"],
+        ["Projektaufgabenbestätigung", "CPSO8643-6", "Firewall-Erneuerung", "Beratung", "CPSO8643", "Müller Logistik GmbH"],
+        ["Projektaufgabenbestätigung", "CPSO8710-1", "Support", "Wartung", "CPSO8710", "Stadtwerke Nord"],
+        ["Projektaufgabenbestätigung", "CPSO8710-2", "Rollout Arbeitsplätze", "Projektarbeit", "CPSO8710", "Stadtwerke Nord"],
+        ["Projektaufgabenbestätigung", "CPSO8955-1", "Interne Besprechungen", "Interne Tätigkeit", "CPSO8955", "Intern"],
     ])
 }

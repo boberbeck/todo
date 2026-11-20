@@ -13,14 +13,17 @@ public struct SAPTaskRow: Hashable, Sendable {
     public var projectName: String?
     public var customerName: String?
     public var category: String?
+    /// Tätigkeit aus SAP, z. B. „Beratung“ oder „Interne Besprechung“
+    public var activity: String?
 
-    public init(code: String, title: String = "", project: String? = nil, projectName: String? = nil, customerName: String? = nil, category: String? = nil) {
+    public init(code: String, title: String = "", project: String? = nil, projectName: String? = nil, customerName: String? = nil, category: String? = nil, activity: String? = nil) {
         self.code = code
         self.title = title
         self.project = project ?? SAPImport.projectKey(of: code)
         self.projectName = projectName
         self.customerName = customerName
         self.category = category
+        self.activity = activity
     }
 }
 
@@ -157,7 +160,7 @@ public enum SAPImport {
             }
             guard looksLikeTaskID(code), seen.insert(code).inserted else { return nil }
             guard code != row.code else { return row }
-            return SAPTaskRow(code: code, title: row.title, projectName: row.projectName, customerName: row.customerName, category: row.category)
+            return SAPTaskRow(code: code, title: row.title, projectName: row.projectName, customerName: row.customerName, category: row.category, activity: row.activity)
         }
     }
 
@@ -172,9 +175,13 @@ public enum SAPImport {
             guard let code = cell(codeColumn), looksLikeTaskID(code) else { return nil }
             var title = cell(columns.title) ?? ""
             if isNoise(title) { title = "" }
+            let activity = cell(columns.activity).flatMap { isNoise($0) ? nil : $0 }
+            if title.isEmpty, columns.title == nil, let activity {
+                title = activity
+            }
             if title.isEmpty {
                 // Erste sinnvolle Textspalte, die nicht schon belegt ist
-                let used = Set([columns.code, columns.project, columns.projectName, columns.customer, columns.category].compactMap { $0 })
+                let used = Set([columns.code, columns.project, columns.projectName, columns.customer, columns.category, columns.activity].compactMap { $0 })
                 title = row.enumerated().first { index, value in
                     !used.contains(index) && !value.isEmpty && !looksLikeTaskID(value) && value.contains(where: \.isLetter) && !isNoise(value)
                 }?.element ?? ""
@@ -186,7 +193,8 @@ public enum SAPImport {
                 project: project ?? projectKey(of: code),
                 projectName: cell(columns.projectName),
                 customerName: cell(columns.customer),
-                category: cell(columns.category)
+                category: cell(columns.category),
+                activity: activity
             )
         }
 
@@ -238,6 +246,7 @@ public enum SAPImport {
         var projectName: Int?
         var customer: Int?
         var category: Int?
+        var activity: Int?
 
         init() {}
 
@@ -261,11 +270,14 @@ public enum SAPImport {
                     if customer == nil { customer = index }
                 case "kategorie", "category", "typ", "art":
                     if category == nil { category = index }
+                case "tätigkeit", "tatigkeit", "taetigkeit", "tätigkeitsart", "tatigkeitsart", "aktivität", "aktivitat", "activity", "leistung", "leistungsart", "service", "serviceprodukt":
+                    if activity == nil { activity = index }
                 default:
                     if code == nil, name.hasPrefix("aufgabennummer") || name.hasPrefix("aufgabenid") { code = index }
                     if title == nil, name.hasPrefix("aufgabenname") || name.hasPrefix("aufgabenbezeichnung") { title = index }
                     if customer == nil, name.hasPrefix("kunde") { customer = index }
                     if projectName == nil, name.hasPrefix("projektname") { projectName = index }
+                    if activity == nil, name.hasPrefix("tätigkeit") || name.hasPrefix("tatigkeit") || name.hasPrefix("leistung") { activity = index }
                 }
             }
         }
@@ -325,6 +337,8 @@ public enum SAPImport {
                 if !known.isActive {
                     change = .reactivated
                 } else if !row.title.isEmpty, row.title != known.title {
+                    change = .renamed(known.title)
+                } else if let activity = row.activity, !activity.isEmpty, activity != known.activity {
                     change = .renamed(known.title)
                 } else {
                     change = .unchanged
@@ -402,11 +416,12 @@ public enum SAPImport {
                 if var psp = item.existing {
                     var changed = false
                     if !item.row.title.isEmpty, psp.title != item.row.title { psp.title = item.row.title; changed = true }
+                    if let activity = item.row.activity, !activity.isEmpty, psp.activity != activity { psp.activity = activity; changed = true }
                     if !psp.isActive { psp.isActive = true; changed = true }
                     if psp.customerID != customerID { psp.customerID = customerID; changed = true }
                     if changed { result.append(psp) }
                 } else {
-                    result.append(PSPElement(customerID: customerID, code: item.row.code, title: item.row.title))
+                    result.append(PSPElement(customerID: customerID, code: item.row.code, title: item.row.title, activity: item.row.activity))
                 }
             }
         }
