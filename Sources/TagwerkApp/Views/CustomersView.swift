@@ -39,11 +39,12 @@ struct CustomersView: View {
                     }
                 }
 
-                HStack(spacing: 16) {
+                HStack(alignment: .top, spacing: 16) {
                     StatCard(title: "Stunden · dieser Monat", value: "\(TimeMath.format(monthTotal)) h")
                     StatCard(title: "Offene Aufgaben", value: "\(openCount)")
                     StatCard(title: "PSP-Elemente", value: "\(pspCount)", detail: "aktiv, aus SAP oder von Hand")
                 }
+                .fixedSize(horizontal: false, vertical: true)
 
                 HStack {
                     Picker("Anzeigen", selection: $showsArchived) {
@@ -137,7 +138,7 @@ struct StatCard: View {
                     .foregroundStyle(Theme.tertiary)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .card(padding: 22)
     }
 }

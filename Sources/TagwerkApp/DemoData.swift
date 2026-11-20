@@ -157,9 +157,13 @@ enum DemoData {
             ("Patchday Clients", mueller, .wartung, 3, 90),
             ("Abstimmung Projektplan", becker, .projekt, 3, 60),
         ]
+        var startHourByDay: [Int: Double] = [:]
         for item in earlier {
             let day = today.adding(days: -item.daysAgo, calendar: calendar)
-            let start = day.startDate(calendar: calendar).addingTimeInterval(9 * hour)
+            // Einträge eines Tages nacheinander, nicht übereinander
+            let startHour = startHourByDay[item.daysAgo] ?? 13
+            startHourByDay[item.daysAgo] = startHour + item.minutes / 60 + 0.5
+            let start = day.startDate(calendar: calendar).addingTimeInterval(startHour * hour)
             let task = TaskItem(
                 title: item.title,
                 customerID: item.customer.id,

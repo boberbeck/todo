@@ -48,7 +48,7 @@ struct ReviewView: View {
                         .foregroundStyle(Theme.tertiary)
                 }
 
-                HStack(spacing: 16) {
+                HStack(alignment: .top, spacing: 16) {
                     StatCard(
                         title: "Stunden",
                         value: "\(TimeMath.format(total)) / \(TimeMath.format(minutes: model.weeklyGoalMinutes)) h",
@@ -66,6 +66,7 @@ struct ReviewView: View {
                         detail: "\(TimeMath.format(customerTime)) h für Kunden, \(TimeMath.format(total - customerTime)) h Sonstiges"
                     )
                 }
+                .fixedSize(horizontal: false, vertical: true)
 
                 HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 16) {

@@ -206,14 +206,29 @@ final class DemoCalendar: CalendarProviding {
         func at(_ hour: Int, _ minute: Int = 0) -> Date {
             FreeTime.date(on: day, minutes: hour * 60 + minute)
         }
-        let all = [
-            CalendarEvent(id: "demo-jourfixe", title: "Jour fixe", start: at(9), end: at(9, 30),
-                          calendarID: "demo-work", calendarTitle: "Kalender"),
-            CalendarEvent(id: "demo-privat", title: "Zahnarzt", start: at(10, 30), end: at(11, 30),
-                          calendarID: "demo-private", calendarTitle: "Privat"),
-            CalendarEvent(id: "demo-kunde", title: "Kundentermin Stadtwerke", start: at(14), end: at(15),
-                          calendarID: "demo-work", calendarTitle: "Kalender"),
-        ]
+        // Am Wochenende frei, an anderen Werktagen nur der Jour fixe und mal ein Termin
+        guard !Calendar.current.isDateInWeekend(day.startDate()) else { return [] }
+        let all: [CalendarEvent]
+        if day == LocalDate.today() {
+            all = [
+                CalendarEvent(id: "demo-jourfixe", title: "Jour fixe", start: at(9), end: at(9, 30),
+                              calendarID: "demo-work", calendarTitle: "Kalender"),
+                CalendarEvent(id: "demo-privat", title: "Zahnarzt", start: at(10, 30), end: at(11, 30),
+                              calendarID: "demo-private", calendarTitle: "Privat"),
+                CalendarEvent(id: "demo-kunde", title: "Kundentermin Stadtwerke", start: at(14), end: at(15),
+                              calendarID: "demo-work", calendarTitle: "Kalender"),
+            ]
+        } else {
+            var events = [
+                CalendarEvent(id: "demo-jourfixe-\(day.string)", title: "Jour fixe", start: at(9), end: at(9, 30),
+                              calendarID: "demo-work", calendarTitle: "Kalender"),
+            ]
+            if day.day % 2 == 0 {
+                events.append(CalendarEvent(id: "demo-call-\(day.string)", title: "Abstimmung Team", start: at(11), end: at(12),
+                                            calendarID: "demo-work", calendarTitle: "Kalender"))
+            }
+            all = events
+        }
         let modeByCalendar = Dictionary(uniqueKeysWithValues: calendars(modes: modes).map { ($0.id, $0.mode) })
         return all.compactMap { event in
             let mode = modeByCalendar[event.calendarID] ?? .busy

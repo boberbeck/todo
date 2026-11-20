@@ -69,6 +69,8 @@ struct GhostButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .lineLimit(1)
+            .fixedSize()
             .font(.callout.weight(.medium))
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
@@ -400,7 +402,7 @@ struct CardMeta: View {
         var parts: [String] = []
         if task.source == .ticket, let number = task.externalID { parts.append("#\(number)") }
         if task.source == .mail { parts.append("Mail") }
-        if let start = task.scheduledStart, !task.isDone { parts.append(start.formatted(date: .omitted, time: .shortened)) }
+        if !compact, let start = task.scheduledStart, !task.isDone { parts.append(start.formatted(date: .omitted, time: .shortened)) }
         if let estimate = task.estimateMinutes, compact || task.isDone { parts.append("\(TimeMath.format(minutes: estimate)) h") }
         if !compact, let workType = task.workType { parts.append(workType.label) }
         return parts
