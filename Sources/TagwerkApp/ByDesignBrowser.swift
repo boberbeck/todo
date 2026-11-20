@@ -41,6 +41,55 @@ final class ByDesignBrowserModel {
         canGoBack = webView?.canGoBack ?? false
     }
 
+    private(set) var isLoginPage = false
+    var hasPage: Bool { !currentURL.isEmpty && !currentURL.hasPrefix("about:") }
+
+    /// Schaut alle zwei Sekunden auf die Seite: Anmeldeseite? Aufgabennummern zu sehen? Sammelt still mit.
+    func watchPage() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(2))
+            guard let webView, !isReading else { continue }
+            _ = webView
+            isLoginPage = await pageHasPasswordField()
+            if !isLoginPage { await readFromPage() }
+        }
+    }
+
+    /// Scrollt die Liste Stück für Stück durch und sammelt dabei, bis drei Schritte lang nichts Neues kommt.
+    /// ByDesign lädt nur die sichtbaren Zeilen; so kommen auch die weiter unten dazu.
+    @discardableResult
+    func collectAll() async -> Int {
+        guard let webView, !isReading else { return collected.count }
+        isReading = true
+        defer { isReading = false }
+        status = "Scrollt durch die Liste und sammelt …"
+        var quietSteps = 0
+        for _ in 0..<80 {
+            let before = collected.count
+            await readFromPage()
+            let moved = (try? await webView.evaluateJavaScript(ByDesignDemoPage.scrollScript) as? Bool) ?? false
+            try? await Task.sleep(for: .milliseconds(800))
+            await readFromPage()
+            quietSteps = collected.count > before ? 0 : quietSteps + 1
+            if !moved && quietSteps >= 1 { break }
+            if quietSteps >= 3 { break }
+        }
+        _ = try? await webView.evaluateJavaScript(ByDesignDemoPage.scrollToTopScript)
+        status = "\(collected.count) Aufgaben eingesammelt."
+        return collected.count
+    }
+
+    /// Liest die Seite ohne Texterkennung und sammelt die Treffer.
+    private func readFromPage() async {
+        guard let webView,
+              let json = try? await webView.evaluateJavaScript(ByDesignDemoPage.extractionScript) as? String,
+              let data = json.data(using: .utf8),
+              let page = try? JSONDecoder().decode(PageContent.self, from: data) else { return }
+        var found = SAPImport.rows(fromCells: page.rows)
+        if found.isEmpty { found = SAPImport.rows(fromText: page.text) }
+        merge(found)
+    }
+
     /// Seite fertig geladen: bei einer Anmeldeseite Benutzer und Passwort einsetzen.
     func pageLoaded() {
         updateNavigation()
@@ -86,6 +135,7 @@ final class ByDesignBrowserModel {
                 continue
             }
             if await readTasks(allowsTextRecognition: false) > 0 {
+                await collectAll()
                 return collected
             }
         }
@@ -198,8 +248,45 @@ struct ByDesignBrowserView: View {
     @State private var isAutomaticRun = false
 
     var body: some View {
+        let count = browser.collected.count
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: 14) {
+                step(1, "Anmelden", done: browser.hasPage && !browser.isLoginPage)
+                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                step(2, count == 0 ? "Aufgabenliste öffnen" : "\(count) Aufgaben erkannt", done: count > 0)
+                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                step(3, "Übernehmen", done: false)
+                Spacer()
+                Button {
+                    Task { await browser.collectAll() }
+                } label: {
+                    Label(browser.isReading ? "Sammelt …" : "Alle einsammeln", systemImage: "arrow.down.to.line")
+                }
+                .controlSize(.large)
+                .disabled(!browser.hasPage || browser.isLoginPage || browser.isReading)
+                .help("Scrollt selbst durch die Liste, bis alle Aufgaben erkannt sind")
+                Button {
+                    take()
+                } label: {
+                    Text(count == 0 ? "Aufgaben übernehmen" : "\(count) Aufgaben übernehmen")
+                        .frame(minWidth: 180)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(count == 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
+
+            Text(hint)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+
+            HStack(spacing: 8) {
                 Button {
                     browser.webView?.goBack()
                 } label: {
@@ -215,28 +302,16 @@ struct ByDesignBrowserView: View {
                 .help("Neu laden")
                 TextField("Adresse von ByDesign, z. B. https://my123456.sapbydesign.com", text: $address)
                     .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
                     .onSubmit(open)
                 Button("Öffnen", action: open)
+                    .controlSize(.small)
                     .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button {
-                    taskListAddress = browser.currentURL
-                } label: {
-                    Label(taskListAddress == browser.currentURL && !taskListAddress.isEmpty ? "Liste gemerkt" : "Diese Liste merken",
-                          systemImage: taskListAddress == browser.currentURL && !taskListAddress.isEmpty ? "bookmark.fill" : "bookmark")
+                if count > 0 {
+                    Button("Neu anfangen") { browser.reset() }
+                        .controlSize(.small)
+                        .help("Erkannte Aufgaben verwerfen")
                 }
-                .disabled(browser.currentURL.isEmpty || browser.currentURL.hasPrefix("about:"))
-                .help("Diese Seite öffnet Tagwerk beim automatischen Abruf")
-            }
-            .padding(10)
-
-            HStack(spacing: 12) {
-                Image(systemName: "info.circle")
-                    .foregroundStyle(.secondary)
-                Text(browser.status)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                Spacer()
                 Button {
                     Task {
                         if let url = await browser.savePageForDiagnosis() {
@@ -247,30 +322,6 @@ struct ByDesignBrowserView: View {
                     Image(systemName: "doc.text.magnifyingglass")
                 }
                 .help("Seite sichern (Fehlersuche): speichert, was Tagwerk auf der Seite liest, in Downloads")
-                if !browser.collected.isEmpty {
-                    Text("\(browser.collected.count) gesammelt")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                    Button("Leeren") { browser.reset() }
-                }
-                Button {
-                    Task { await browser.readTasks() }
-                } label: {
-                    Label(browser.isReading ? "Liest …" : "Aufgaben holen", systemImage: "square.and.arrow.down")
-                }
-                .disabled(browser.isReading)
-                .help("Liest die Aufgabennummern und Namen der sichtbaren Liste")
-                Button {
-                    model.sapSyncRows = browser.collected
-                    model.showsSAPSync = true
-                    model.selection = .customers
-                    dismissWindow(id: "bydesign")
-                } label: {
-                    Label("Zum Abgleich", systemImage: "arrow.right")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(browser.collected.isEmpty)
-                .help("Projekten Kunden zuordnen und als PSP-Elemente übernehmen")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -299,6 +350,9 @@ struct ByDesignBrowserView: View {
             if model.sapAutoFetchActive { runAutomatically() }
         }
         .task {
+            await browser.watchPage()
+        }
+        .task {
             // Im Build: Beispielseite lesen, einmal über den Seiteninhalt und einmal per Texterkennung
             guard SnapshotMode.directory != nil else { return }
             try? await Task.sleep(for: .seconds(2.5))
@@ -315,6 +369,42 @@ struct ByDesignBrowserView: View {
                 address = browser.currentURL.isEmpty ? address : browser.currentURL
             }
         }
+    }
+
+    private func step(_ number: Int, _ title: String, done: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: done ? "checkmark.circle.fill" : "\(number).circle")
+                .foregroundStyle(done ? Color.green : Color.secondary)
+            Text(title)
+                .foregroundStyle(done ? Color.primary : Color.secondary)
+        }
+        .font(.callout.weight(.medium))
+    }
+
+    private var hint: String {
+        if !browser.hasPage {
+            return "Trag oben die Adresse von ByDesign ein (wie im Browser) und klick „Öffnen“."
+        }
+        if browser.isLoginPage {
+            return model.hasByDesignPassword
+                ? "Tagwerk meldet dich mit Benutzer und Passwort aus den Einstellungen an …"
+                : "Melde dich an wie im Browser. Mit Benutzer und Passwort unter Einstellungen › Buchung geht das künftig von selbst."
+        }
+        if browser.collected.isEmpty {
+            return "Öffne die Liste mit deinen Aufgaben (die mit der Spalte „Aufgabennummer“). Tagwerk erkennt sie von selbst."
+        }
+        return "ByDesign zeigt nur die sichtbaren Zeilen. „Alle einsammeln“ scrollt selbst durch die Liste (oder scroll von Hand, Tagwerk sammelt mit). Dann „übernehmen“; die Liste wird für den automatischen Abruf gemerkt."
+    }
+
+    /// Erkannte Aufgaben in den Abgleich geben und die Seite für den automatischen Abruf merken.
+    private func take() {
+        if !browser.currentURL.isEmpty, !browser.currentURL.hasPrefix("about:") {
+            taskListAddress = browser.currentURL
+        }
+        model.sapSyncRows = browser.collected
+        model.showsSAPSync = true
+        model.selection = .customers
+        dismissWindow(id: "bydesign")
     }
 
     /// Automatischer Abruf: anmelden, gemerkte Liste lesen, bekannte Projekte übernehmen, Fenster schließen.
@@ -472,6 +562,59 @@ enum ByDesignDemoPage {
       };
       visit(document);
       return JSON.stringify({ rows: rows, text: texts.join('\\n') });
+    })()
+    """
+
+    /// Scrollt den größten scrollbaren Bereich, in dem Aufgabennummern stehen, ein Stück weiter.
+    /// Gibt `true` zurück, wenn sich etwas bewegt hat. Schickt zusätzlich ein Mausrad-Ereignis,
+    /// falls die Tabelle eine eigene Bildlaufleiste hat.
+    static let scrollScript = """
+    (() => {
+      const pattern = /[A-Z]{2,}[A-Z0-9]*[0-9]+-[0-9]+/;
+      const docs = [document];
+      const addFrames = (doc) => {
+        try {
+          doc.querySelectorAll('iframe, frame').forEach((frame) => {
+            try { if (frame.contentDocument) { docs.push(frame.contentDocument); addFrames(frame.contentDocument); } } catch (error) {}
+          });
+        } catch (error) {}
+      };
+      addFrames(document);
+      let best = null;
+      let grid = null;
+      for (const doc of docs) {
+        for (const el of doc.querySelectorAll('*')) {
+          if (el.clientHeight < 80) { continue; }
+          const text = el.innerText || '';
+          if (!grid && el.getAttribute && (el.getAttribute('role') === 'grid' || el.tagName === 'TABLE') && pattern.test(text)) { grid = el; }
+          if (el.scrollHeight <= el.clientHeight + 20) { continue; }
+          const style = doc.defaultView.getComputedStyle(el);
+          if (!/(auto|scroll|overlay)/.test(style.overflowY)) { continue; }
+          if (!pattern.test(text)) { continue; }
+          if (!best || el.clientHeight * el.clientWidth > best.clientHeight * best.clientWidth) { best = el; }
+        }
+      }
+      const target = best || document.scrollingElement;
+      let moved = false;
+      if (target) {
+        const before = target.scrollTop;
+        target.scrollTop = before + Math.max(200, target.clientHeight * 0.8);
+        target.dispatchEvent(new Event('scroll', { bubbles: true }));
+        moved = target.scrollTop > before + 1;
+      }
+      const wheelTarget = grid || best;
+      if (wheelTarget) {
+        wheelTarget.dispatchEvent(new WheelEvent('wheel', { deltaY: 600, bubbles: true, cancelable: true }));
+      }
+      return moved;
+    })()
+    """
+
+    static let scrollToTopScript = """
+    (() => {
+      document.querySelectorAll('*').forEach((el) => { if (el.scrollTop > 0) { el.scrollTop = 0; } });
+      window.scrollTo(0, 0);
+      return true;
     })()
     """
 
