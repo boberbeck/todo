@@ -238,16 +238,19 @@ public enum SAPImport {
         // Bei Gleichstand die längere Buchstabenfolge: verlesen wird eher ein Buchstabe zur Ziffer als umgekehrt.
         guard let dominant = counts.max(by: { ($0.value, $0.key.count) < ($1.value, $1.key.count) })?.key,
               !dominant.isEmpty else { return rows }
+        // Gibt es eine längere Folge, die mit der häufigsten beginnt („CPSO“ neben „CPS“), ist sie die richtige,
+        // auch wenn die meisten Nummern verlesen sind („CPS08643“).
+        let target = counts.keys.filter { $0.hasPrefix(dominant) }.max { $0.count < $1.count } ?? dominant
         let lookalike: [Character: Character] = ["O": "0", "I": "1", "S": "5", "B": "8", "Z": "2", "G": "6"]
         let repaired: [SAPTaskRow] = rows.compactMap { row in
             var code = row.code
             let prefix = letterPrefix(code)
-            if prefix != dominant, dominant.hasPrefix(prefix) {
-                let missing = dominant.dropFirst(prefix.count)
+            if prefix != target, target.hasPrefix(prefix) {
+                let missing = target.dropFirst(prefix.count)
                 let misread = String(missing.map { lookalike[$0] ?? $0 })
                 let rest = code.dropFirst(prefix.count)
                 if rest.hasPrefix(misread) {
-                    code = dominant + rest.dropFirst(misread.count)
+                    code = target + rest.dropFirst(misread.count)
                 }
             }
             guard looksLikeTaskID(code) else { return nil }

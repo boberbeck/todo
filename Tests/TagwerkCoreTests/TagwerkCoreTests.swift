@@ -788,6 +788,14 @@ final class SAPImportTests: XCTestCase {
         let repaired = SAPImport.repairOCRCodes(rows)
         XCTAssertEqual(repaired.map(\.code), ["CPSO8643-1", "CPSO8643-2", "CPSO8643-4"])
         XCTAssertEqual(repaired[1].project, "CPSO8643")
+
+        // Die meisten verlesen, nur eine richtig: trotzdem „CPSO“
+        let mostlyMisread = [
+            SAPTaskRow(code: "CPS08643-1", title: "A", activity: "Consulting"),
+            SAPTaskRow(code: "CPS08643-2", title: "B"),
+            SAPTaskRow(code: "CPSO8710-2", title: "C"),
+        ]
+        XCTAssertEqual(SAPImport.repairOCRCodes(mostlyMisread).map(\.code), ["CPSO8643-1", "CPSO8643-2", "CPSO8710-2"])
     }
 
     func testCSVQuotes() {
