@@ -122,6 +122,22 @@ struct TaskContextMenu: View {
             Divider()
             Button("Keine") { model.setWorkType(nil, for: task.id) }
         }
+        Menu("SAP-Aufgabe") {
+            ForEach(model.activeCustomers) { customer in
+                let psps = model.psps(for: customer.id)
+                if !psps.isEmpty {
+                    Menu(customer.name) {
+                        ForEach(psps) { psp in
+                            Button(psp.label) { model.setSAPTask(psp, for: task.id) }
+                        }
+                    }
+                }
+            }
+            if task.pspElement != nil {
+                Divider()
+                Button("Keine SAP-Aufgabe") { model.setPSPElement("", for: task.id) }
+            }
+        }
         if task.source == .ticket {
             Menu("Work Log Type: \(model.worklogType(for: task))") {
                 ForEach(Preferences.knownWorklogTypes, id: \.self) { type in
@@ -223,64 +239,144 @@ struct PSPMenu: View {
     @Environment(AppModel.self) private var model
     let task: TaskItem
 
-    @State private var showsCustomEntry = false
-    @State private var customCode = ""
+    @State private var showsPicker = false
 
     var body: some View {
-        let options = model.psps(for: task.customerID)
-        Menu {
-            ForEach(options) { psp in
-                Button(psp.label) { model.setPSPElement(psp.code, for: task.id) }
-            }
-            if task.customerID == nil {
-                // Ohne Kunde (z. B. ein erfasster Termin): PSP-Elemente aller Kunden, setzt den Kunden mit
-                ForEach(model.activeCustomers) { customer in
-                    let psps = model.psps(for: customer.id)
-                    if !psps.isEmpty {
-                        Menu(customer.name) {
-                            ForEach(psps) { psp in
-                                Button(psp.label) {
-                                    model.setCustomer(customer.id, for: task.id)
-                                    model.setPSPElement(psp.code, for: task.id)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if !options.isEmpty || task.customerID == nil {
-                Divider()
-            }
-            Button("Anderes PSP-Element …") {
-                customCode = task.pspElement ?? ""
-                showsCustomEntry = true
-            }
-            if task.pspElement != nil {
-                Button("Kein PSP-Element") { model.setPSPElement("", for: task.id) }
-            }
+        Button {
+            showsPicker = true
         } label: {
-            Text(task.pspElement.map { "PSP \($0)" } ?? "PSP wählen")
+            Text(label)
+                .lineLimit(1)
         }
-        .menuStyle(.button)
         .buttonStyle(.bordered)
         .controlSize(.small)
         .fixedSize()
-        .popover(isPresented: $showsCustomEntry) {
-            HStack(spacing: 8) {
-                TextField("PSP-Element", text: $customCode)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 180)
-                    .onSubmit(saveCustom)
-                Button("Übernehmen", action: saveCustom)
+        .popover(isPresented: $showsPicker, arrowEdge: .bottom) {
+            SAPTaskPicker(selectedCode: task.pspElement) { psp, customCode in
+                if let psp {
+                    model.setSAPTask(psp, for: task.id)
+                } else {
+                    model.setPSPElement(customCode ?? "", for: task.id)
+                }
+                showsPicker = false
             }
-            .padding(12)
         }
-        .help("PSP-Element in SAP ByDesign, gilt für alle Zeiten dieser Aufgabe")
+        .help("SAP-Aufgabe (PSP-Element), gilt für alle Zeiten dieser Aufgabe")
     }
 
-    private func saveCustom() {
-        model.setPSPElement(customCode, for: task.id)
-        showsCustomEntry = false
+    private var label: String {
+        guard let code = task.pspElement else { return "SAP-Aufgabe wählen" }
+        if let psp = model.pspElements.first(where: { $0.code == code }) {
+            return psp.label
+        }
+        return code
+    }
+}
+
+/// Suche über alle SAP-Aufgaben (PSP-Elemente) aller Kunden, nach Nummer, Name, Tätigkeit oder Kunde.
+/// Wählt man eine, übernimmt die Aufgabe auch deren Kunden; für Internes reicht so „Team Sitzung“.
+struct SAPTaskPicker: View {
+    @Environment(AppModel.self) private var model
+    let selectedCode: String?
+    /// (gewähltes PSP-Element, sonst eine von Hand eingetippte Nummer; beides nil = keine SAP-Aufgabe)
+    let onSelect: (PSPElement?, String?) -> Void
+
+    @State private var query = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let found = results
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Suchen: Nummer, Name, Tätigkeit oder Kunde", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit {
+                    if let first = found.first {
+                        onSelect(first, nil)
+                    } else if SAPImport.looksLikeTaskID(query.trimmingCharacters(in: .whitespaces)) {
+                        onSelect(nil, query.trimmingCharacters(in: .whitespaces))
+                    }
+                }
+            if model.pspElements.isEmpty {
+                Text("Noch keine SAP-Aufgaben. Hol sie unter Kunden › SAP-Abgleich.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 6)
+            }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(found) { psp in
+                        Button {
+                            onSelect(psp, nil)
+                        } label: {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(psp.title.isEmpty ? psp.code : psp.title)
+                                        .lineLimit(1)
+                                    Text(detail(for: psp))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                if psp.code == selectedCode {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Theme.accent)
+                                }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    let typed = query.trimmingCharacters(in: .whitespaces)
+                    if found.isEmpty, SAPImport.looksLikeTaskID(typed) {
+                        Button("„\(typed)“ übernehmen") { onSelect(nil, typed) }
+                            .padding(8)
+                    }
+                }
+            }
+            .frame(height: 280)
+            if selectedCode != nil {
+                Divider()
+                Button("Keine SAP-Aufgabe") { onSelect(nil, nil) }
+                    .buttonStyle(.borderless)
+            }
+        }
+        .padding(12)
+        .frame(width: 440)
+        .onAppear { focused = true }
+    }
+
+    private func detail(for psp: PSPElement) -> String {
+        var parts = [psp.code]
+        if let activity = psp.activity, !activity.isEmpty, activity != psp.title { parts.append(activity) }
+        if let customer = model.customer(psp.customerID) { parts.append(customer.name) }
+        return parts.joined(separator: " · ")
+    }
+
+    private var results: [PSPElement] {
+        let words = query.lowercased()
+            .folding(options: .diacriticInsensitive, locale: nil)
+            .split(separator: " ")
+            .map(String.init)
+        return model.pspElements
+            .filter(\.isActive)
+            .filter { psp in
+                guard !words.isEmpty else { return true }
+                let haystack = [psp.code, psp.title, psp.activity ?? "", model.customer(psp.customerID)?.name ?? ""]
+                    .joined(separator: " ")
+                    .lowercased()
+                    .folding(options: .diacriticInsensitive, locale: nil)
+                return words.allSatisfy { haystack.contains($0) }
+            }
+            .sorted { lhs, rhs in
+                let left = lhs.lastUsedAt ?? .distantPast
+                let right = rhs.lastUsedAt ?? .distantPast
+                if left != right { return left > right }
+                return lhs.code.localizedStandardCompare(rhs.code) == .orderedAscending
+            }
     }
 }
 

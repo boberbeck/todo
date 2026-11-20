@@ -349,6 +349,12 @@ final class AppModel {
         persist(task)
     }
 
+    /// SAP-Aufgabe setzen; der Kunde kommt von der Aufgabe mit (für Internes z. B. „Intern“).
+    func setSAPTask(_ psp: PSPElement, for id: UUID) {
+        setCustomer(psp.customerID, for: id)
+        setPSPElement(psp.code, for: id)
+    }
+
     func setCustomer(_ customerID: UUID?, for id: UUID) {
         guard var task = self.task(id), task.customerID != customerID else { return }
         task.customerID = customerID

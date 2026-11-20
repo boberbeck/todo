@@ -205,7 +205,7 @@ struct FocusTaskPane: View {
     private var detailSummary: String {
         var parts: [String] = []
         parts.append(task.workType?.label ?? "Arbeitsart wählen")
-        parts.append(task.pspElement ?? "PSP-Element wählen")
+        parts.append(task.pspElement.flatMap { code in model.pspElements.first { $0.code == code }?.label } ?? task.pspElement ?? "SAP-Aufgabe wählen")
         parts.append(task.workDescription.isEmpty ? "Bearbeitung notieren" : "Bearbeitung")
         return parts.joined(separator: " · ")
     }

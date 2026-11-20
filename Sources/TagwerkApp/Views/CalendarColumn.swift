@@ -355,9 +355,14 @@ struct LogEventSheet: View {
     @State private var customerID: UUID?
     @State private var pspElement: String?
     @State private var workType: WorkType?
+    @State private var showsTaskPicker = false
+
+    private var pspLabel: String {
+        guard let pspElement else { return "Suchen, z. B. „Team Sitzung“" }
+        return model.pspElements.first { $0.code == pspElement }?.label ?? pspElement
+    }
 
     var body: some View {
-        let psps = model.psps(for: customerID)
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Termin als Zeit erfassen")
@@ -368,22 +373,31 @@ struct LogEventSheet: View {
             }
             Form {
                 TextField("Titel", text: $title)
-                Picker("Kunde", selection: $customerID) {
+                LabeledContent("SAP-Aufgabe") {
+                    Button {
+                        showsTaskPicker = true
+                    } label: {
+                        Text(pspLabel)
+                            .lineLimit(1)
+                    }
+                    .popover(isPresented: $showsTaskPicker, arrowEdge: .bottom) {
+                        SAPTaskPicker(selectedCode: pspElement) { psp, customCode in
+                            if let psp {
+                                pspElement = psp.code
+                                customerID = psp.customerID
+                            } else {
+                                pspElement = customCode
+                            }
+                            showsTaskPicker = false
+                        }
+                    }
+                }
+                Picker("Kunde (kommt von der SAP-Aufgabe)", selection: $customerID) {
                     Text("Ohne Kunde").tag(UUID?.none)
                     ForEach(model.activeCustomers) { customer in
                         Text(customer.name).tag(UUID?.some(customer.id))
                     }
                 }
-                Picker("PSP-Element", selection: $pspElement) {
-                    Text(customerID == nil ? "Erst Kunde wählen" : "Kein PSP-Element").tag(String?.none)
-                    ForEach(psps) { psp in
-                        Text(psp.label).tag(String?.some(psp.code))
-                    }
-                    if let pspElement, !psps.contains(where: { $0.code == pspElement }) {
-                        Text(pspElement).tag(String?.some(pspElement))
-                    }
-                }
-                .disabled(customerID == nil)
                 Picker("Arbeitsart", selection: $workType) {
                     Text("Keine").tag(WorkType?.none)
                     ForEach(WorkType.allCases) { type in
@@ -418,7 +432,11 @@ struct LogEventSheet: View {
             }
         }
         .onChange(of: customerID) { old, new in
-            if old != nil, old != new { pspElement = nil }
+            // Anderer Kunde: eine SAP-Aufgabe eines anderen Kunden passt nicht mehr
+            if old != nil, old != new, let code = pspElement,
+               model.pspElements.first(where: { $0.code == code })?.customerID != new {
+                pspElement = nil
+            }
         }
     }
 }
