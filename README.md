@@ -48,7 +48,7 @@ GitHub baut die App bei jedem Push und legt sie unter **Releases › „Tagwerk 
 1. `Tagwerk.zip` herunterladen und entpacken.
 2. `Tagwerk.app` in den Ordner Programme ziehen (eine ältere Fassung ersetzen).
 3. Beim ersten Öffnen blockt macOS die App, weil sie nicht von Apple beglaubigt ist: Systemeinstellungen › Datenschutz & Sicherheit › „Dennoch öffnen“. Alternativ im Terminal: `xattr -dr com.apple.quarantine /Applications/Tagwerk.app`
-4. Fragt macOS nach dem Schlüsselbund, „Immer erlauben“ wählen. Die Freigabe bleibt auch nach Updates erhalten.
+4. Fragt macOS nach dem Schlüsselbund, „Immer erlauben“ wählen. Damit das und die Kalender-Freigabe auch nach Updates bleiben, einmal die feste Signatur einrichten (siehe „Signieren“).
 
 Daten und Einstellungen bleiben beim Ersetzen der App erhalten; sie liegen nicht in der App.
 
@@ -96,13 +96,17 @@ Gelesen werden `.xlsx`, Excel-XML (`.xls`), CSV und HTML-Tabellen. In SAP änder
 
 Werkzeuge: `tagesuebersicht`, `aufgaben`, `aufgabe_anlegen`, `aufgabe_aendern`, `timer_starten`, `timer_stoppen`, `zeitauswertung`, `tagesabschluss`, `kunden`, `wochenziele`, `wochenziel_anlegen`. Der Server arbeitet direkt auf der Datenbank; die geöffnete App lädt Änderungen innerhalb einer Sekunde nach. Nach SAP oder ManageEngine bucht Claude nicht. Mit der Umgebungsvariable `TAGWERK_DB` lässt sich eine andere Datenbank angeben, z. B. zum Ausprobieren.
 
-## Signieren
+## Signieren (einmal einrichten, damit Freigaben bleiben)
 
-macOS merkt sich Freigaben für den Schlüsselbund (ManageEngine-Schlüssel), die Kalender und die Musik-App anhand der Signatur. Ohne eigenes Zertifikat signiert `scripts/make-app.sh` (und GitHub) „ad hoc“ und legt dabei fest, dass nur die Kennung `local.tagwerk.app` zählt. So bleiben die Freigaben auch nach Updates erhalten.
+macOS merkt sich die Freigaben für Kalender, Schlüsselbund (ManageEngine-Schlüssel) und Musik anhand der Signatur der App. Ohne festes Zertifikat ist jede neue Fassung für macOS eine andere App, und die Freigaben gehen verloren. Einmal auf dem eigenen Mac im Repository ausführen:
 
-Wer selbst baut und lieber ein eigenes Zertifikat nutzt: Schlüsselbundverwaltung › Zertifikatsassistent › Zertifikat erstellen …, Name `Tagwerk Lokal`, Typ „Codesignatur“. `scripts/make-app.sh` nimmt es dann automatisch.
+```
+scripts/signatur-einrichten.sh
+```
 
-Den API-Schlüssel liest Tagwerk erst, wenn es wirklich mit ManageEngine spricht, und nur einmal pro Start.
+Das Skript erzeugt ein selbst signiertes Zertifikat „Tagwerk Lokal“, legt es in deinen Schlüsselbund (dann signiert auch `scripts/make-app.sh` damit) und hinterlegt es bei GitHub als Secret `TAGWERK_SIGNING_P12` mit Passwort `TAGWERK_SIGNING_PASSWORD`. Mit der GitHub-CLI (`gh`) geht das automatisch, sonst führt das Skript durch die zwei Einträge auf der GitHub-Seite. Ab dem nächsten Build sind die Downloads damit signiert; danach einmal Kalender und Schlüsselbund freigeben („Immer erlauben“), dann bleibt es so.
+
+Ohne Zertifikat signiert der Build ad hoc. Den API-Schlüssel liest Tagwerk erst, wenn es wirklich mit ManageEngine spricht, und nur einmal pro Start.
 
 ## Daten
 

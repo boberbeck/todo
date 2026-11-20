@@ -28,6 +28,28 @@ jobs:
       - name: Testen
         run: swift test
 
+      # Feste Signatur aus den Secrets (scripts/signatur-einrichten.sh). Ohne Secrets wird ad hoc signiert.
+      - name: Signatur vorbereiten
+        env:
+          SIGNING_P12: ${{ secrets.TAGWERK_SIGNING_P12 }}
+          SIGNING_PASSWORD: ${{ secrets.TAGWERK_SIGNING_PASSWORD }}
+        run: |
+          if [ -z "${SIGNING_P12}" ]; then
+            echo "Kein Zertifikat hinterlegt, es wird ad hoc signiert."
+            exit 0
+          fi
+          KEYCHAIN="${RUNNER_TEMP}/tagwerk-signatur.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN}"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}"
+          printf '%s' "${SIGNING_P12}" | base64 --decode > "${RUNNER_TEMP}/tagwerk.p12"
+          security import "${RUNNER_TEMP}/tagwerk.p12" -k "${KEYCHAIN}" -P "${SIGNING_PASSWORD}" -T /usr/bin/codesign
+          rm -f "${RUNNER_TEMP}/tagwerk.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}" >/dev/null
+          security list-keychains -d user -s "${KEYCHAIN}" $(security list-keychains -d user | tr -d '"')
+          security find-identity -p codesigning "${KEYCHAIN}"
+
       - name: App-Bundle bauen
         run: scripts/make-app.sh release
 
