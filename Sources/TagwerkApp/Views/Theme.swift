@@ -100,6 +100,7 @@ struct PageHeader<Trailing: View>: View {
                     .font(Theme.pageTitle)
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
+                    .fixedSize()
                 if let subtitle {
                     Text(subtitle)
                         .foregroundStyle(Theme.secondary)

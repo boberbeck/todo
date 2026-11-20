@@ -21,42 +21,50 @@ struct WeekCalendarView: View {
         let goal = Double(max(model.weeklyGoalMinutes, 1) * 60)
 
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: 18) {
-                Text("Kalender")
-                    .font(Theme.pageTitle)
-                WeekSwitcher(weekStart: Binding(get: { monday }, set: { weekStart = $0 }), currentWeek: model.currentWeekStart)
-                Button {
-                    draft = TimeEntryDraft(start: defaultStart(in: days), minutes: 60)
-                } label: {
-                    Label("Zeit nachtragen", systemImage: "plus")
-                }
-                .buttonStyle(GhostButtonStyle())
-                .help("Arbeit nachträglich erfassen (oder Doppelklick in den Kalender)")
-                Spacer(minLength: 16)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(TimeMath.format(tracked))
-                        .font(Theme.bigNumber)
-                    Text("/ \(TimeMath.format(minutes: model.weeklyGoalMinutes)) h")
-                        .foregroundStyle(Theme.secondary)
-                }
-                ProgressLine(value: tracked / goal)
-                    .frame(width: 160)
-                HStack(spacing: 6) {
-                    Button {
-                        zoom = max(Preferences.hourHeightRange.lowerBound, zoom - 16)
-                    } label: {
-                        Image(systemName: "minus.magnifyingglass")
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .center, spacing: 18) {
+                    Text("Kalender")
+                        .font(Theme.pageTitle)
+                        .lineLimit(1)
+                        .fixedSize()
+                    Spacer(minLength: 16)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(TimeMath.format(tracked))
+                            .font(Theme.bigNumber)
+                        Text("/ \(TimeMath.format(minutes: model.weeklyGoalMinutes)) h diese Woche")
+                            .foregroundStyle(Theme.secondary)
                     }
-                    .help("Stunden niedriger")
-                    Button {
-                        zoom = min(Preferences.hourHeightRange.upperBound, zoom + 16)
-                    } label: {
-                        Image(systemName: "plus.magnifyingglass")
-                    }
-                    .help("Stunden höher")
+                    .fixedSize()
+                    ProgressLine(value: tracked / goal)
+                        .frame(minWidth: 60, maxWidth: 160)
                 }
-                .buttonStyle(.borderless)
-                .foregroundStyle(Theme.secondary)
+                HStack(alignment: .center, spacing: 14) {
+                    WeekSwitcher(weekStart: Binding(get: { monday }, set: { weekStart = $0 }), currentWeek: model.currentWeekStart)
+                    Button {
+                        draft = TimeEntryDraft(start: defaultStart(in: days), minutes: 60)
+                    } label: {
+                        Label("Zeit nachtragen", systemImage: "plus")
+                    }
+                    .buttonStyle(GhostButtonStyle())
+                    .help("Arbeit nachträglich erfassen (oder Doppelklick in den Kalender)")
+                    Spacer(minLength: 16)
+                    HStack(spacing: 6) {
+                        Button {
+                            zoom = max(Preferences.hourHeightRange.lowerBound, zoom - 16)
+                        } label: {
+                            Image(systemName: "minus.magnifyingglass")
+                        }
+                        .help("Stunden niedriger")
+                        Button {
+                            zoom = min(Preferences.hourHeightRange.upperBound, zoom + 16)
+                        } label: {
+                            Image(systemName: "plus.magnifyingglass")
+                        }
+                        .help("Stunden höher")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Theme.secondary)
+                }
             }
             .padding(.horizontal, 40)
             .padding(.top, 32)
