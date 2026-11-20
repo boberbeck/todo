@@ -36,6 +36,8 @@ final class AppModel {
     private(set) var inboxMessage: String?
     private(set) var lastTicketSync: Date?
     private(set) var ticketSyncMessage: String?
+    /// Genaues Ergebnis des letzten Abrufs, für die Einstellungen (Fehlersuche).
+    private(set) var ticketSyncDetail: String?
     private(set) var isSyncingTickets = false
     private(set) var isSendingBookings = false
 
@@ -1024,9 +1026,13 @@ final class AppModel {
         do {
             let tickets = try await manageEngine.fetchTickets()
             var added = 0
+            var known = 0
             for ticket in tickets where ticket.isOpen {
-                let known = tasks.contains { $0.source == .ticket && ($0.externalKey == ticket.key || $0.externalID == ticket.number) }
-                guard !known else { continue }
+                let isKnown = tasks.contains { $0.source == .ticket && ($0.externalKey == ticket.key || $0.externalID == ticket.number) }
+                guard !isKnown else {
+                    known += 1
+                    continue
+                }
                 let task = TaskItem(
                     title: ticket.subject,
                     customerID: customerID(forAccount: ticket.accountName),
@@ -1040,8 +1046,15 @@ final class AppModel {
             }
             lastTicketSync = Date()
             ticketSyncMessage = added == 0 ? "Keine neuen Tickets." : "\(added) neue(s) Ticket(s) im Eingang."
+            let open = tickets.filter(\.isOpen).count
+            let statuses = Set(tickets.filter { !$0.isOpen }.map(\.statusName)).sorted().joined(separator: ", ")
+            ticketSyncDetail = """
+            \(Date().formatted(date: .omitted, time: .standard)): ManageEngine lieferte \(tickets.count) Tickets für Techniker-ID \(manageEngine.config.technicianID). \
+            Offen: \(open), davon schon in Tagwerk: \(known), neu: \(added).\(statuses.isEmpty ? "" : " Nicht übernommen (gilt als geschlossen): \(statuses).")
+            """
         } catch {
             ticketSyncMessage = String(describing: error)
+            ticketSyncDetail = "\(Date().formatted(date: .omitted, time: .standard)): \(String(describing: error))"
         }
     }
 

@@ -179,6 +179,7 @@ struct StartTaskColumn: View {
                             .font(.caption)
                             .foregroundStyle(Theme.tertiary)
                             .lineLimit(1)
+                            .help(model.ticketSyncDetail ?? message)
                     }
                     if model.canUseManageEngine {
                         Button {

@@ -502,6 +502,21 @@ struct ManageEngineSettings: View {
                     }
                     Spacer()
                 }
+                LabeledContent {
+                    Button(model.isSyncingTickets ? "Lädt …" : "Jetzt abrufen") {
+                        Task { await model.importTickets() }
+                    }
+                    .disabled(!model.canUseManageEngine || model.isSyncingTickets)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Tickets abrufen")
+                        Text(model.ticketSyncDetail ?? "Noch kein Abruf seit dem Start.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 SettingsField(title: "Techniker suchen", detail: "Name, Mail-Adresse oder Benutzername") {
                     HStack(spacing: 8) {
                         SettingsTextField(prompt: "z. B. Lulay oder blulay", text: $searchText, width: 190)
