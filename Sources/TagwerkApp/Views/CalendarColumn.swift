@@ -6,17 +6,43 @@ import TagwerkCore
 struct CalendarColumn: View {
     @Environment(AppModel.self) private var model
 
-    private let hourHeight: CGFloat = 48
+    @AppStorage(Preferences.calendarHourHeightKey) private var zoom = Preferences.defaultHourHeight
     private let labelWidth: CGFloat = 40
+
+    /// Höhe einer Stunde; über die Lupen im Kopf einstellbar.
+    private var hourHeight: CGFloat {
+        CGFloat(min(Preferences.hourHeightRange.upperBound, max(Preferences.hourHeightRange.lowerBound, zoom)))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Kalender")
-                    .font(.title3.weight(.semibold))
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Kalender")
+                        .font(.title3.weight(.semibold))
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 4)
+                HStack(spacing: 6) {
+                    Button {
+                        zoom = max(Preferences.hourHeightRange.lowerBound, zoom - 16)
+                    } label: {
+                        Image(systemName: "minus.magnifyingglass")
+                    }
+                    .disabled(zoom <= Preferences.hourHeightRange.lowerBound)
+                    .help("Stunden niedriger")
+                    Button {
+                        zoom = min(Preferences.hourHeightRange.upperBound, zoom + 16)
+                    } label: {
+                        Image(systemName: "plus.magnifyingglass")
+                    }
+                    .disabled(zoom >= Preferences.hourHeightRange.upperBound)
+                    .help("Stunden höher")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 14)
             .padding(.top, 16)

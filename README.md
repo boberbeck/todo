@@ -11,7 +11,7 @@ Der vollständige Plan steht im Dokument „Plan: Eigene Todo-App für den Mac�
 | Bereich | Was geht |
 | --- | --- |
 | Heute | Aufgaben des Tages mit erfasster und geplanter Zeit. Erledigtes bleibt abgehakt stehen. Reihenfolge per Drag-and-drop. Warnung, wenn mehr geplant ist als Zeit da ist. |
-| Kalender | Zeitleiste neben dem Tagesplan mit den Terminen aus dem Apple Kalender (private nur als „belegt“), den Zeitblöcken der Aufgaben und der erfassten Zeit. Aufgaben aus dem Eingang lassen sich hineinziehen, Blöcke mit der Maus verschieben. Ein Termin wird per Rechtsklick zur erfassten Zeit. |
+| Kalender | Zeitleiste neben dem Tagesplan mit den Terminen aus dem Apple Kalender (private nur als „belegt“), den Zeitblöcken der Aufgaben und der erfassten Zeit. Aufgaben aus dem Eingang lassen sich hineinziehen, Blöcke mit der Maus verschieben. Ein Termin wird per Rechtsklick zur erfassten Zeit. Die Spalte lässt sich an der Trennlinie breiter ziehen (Doppelklick setzt zurück), die Stundenhöhe stellst du mit den Lupen ein. |
 | Tag planen | Geführte Planung beim ersten Öffnen am Tag: Übriges von gestern, Eingang, schätzen, in freie Lücken legen. |
 | Tag abschließen | Zeiten je Aufgabe gerundet prüfen und anpassen. Worklogs gehen an ManageEngine. SAP-Zeilen überträgst du mit Kopier-Knöpfen oder als Excel-Liste und hakst sie ab; nichts wird doppelt gebucht. |
 | ManageEngine | Eigene offene Tickets landen im Eingang (Konto → Kunde). Zugang in den Einstellungen, der API-Schlüssel liegt im Schlüsselbund. |

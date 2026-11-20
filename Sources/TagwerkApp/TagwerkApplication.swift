@@ -100,6 +100,14 @@ enum Preferences {
     static let meTechnicianKey = "manageEngineTechnicianID"
     static let meAutoFetchKey = "manageEngineAutoFetch"
     static let idleMinutesKey = "idleMinutes"
+    static let calendarWidthKey = "calendarColumnWidth"
+    static let calendarHourHeightKey = "calendarHourHeight"
+
+    static let defaultCalendarWidth: Double = 260
+    static let minCalendarWidth: Double = 200
+    static let maxCalendarWidth: Double = 900
+    static let defaultHourHeight: Double = 48
+    static let hourHeightRange: ClosedRange<Double> = 32...160
 
     static func serviceKey(for workType: WorkType) -> String { "serviceProduct.\(workType.rawValue)" }
 

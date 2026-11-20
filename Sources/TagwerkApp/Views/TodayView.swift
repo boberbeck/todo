@@ -7,27 +7,35 @@ import UniformTypeIdentifiers
 struct TodayView: View {
     @Environment(AppModel.self) private var model
     @AppStorage(Preferences.showInboxKey) private var showInbox = true
+    @AppStorage(Preferences.calendarWidthKey) private var calendarWidth = Preferences.defaultCalendarWidth
     @State private var showsInboxPopover = false
 
-    /// Ab dieser Breite passt der Eingang als eigene Spalte neben Liste und Kalender.
-    private let inboxColumnMinWidth: CGFloat = 1000
+    private let taskColumnMinWidth: CGFloat = 320
+    private let inboxWidth: CGFloat = 250
 
     var body: some View {
         GeometryReader { geometry in
-            let wide = geometry.size.width >= inboxColumnMinWidth
+            // Der Eingang bekommt eine eigene Spalte, wenn neben Liste und Kalender genug Platz bleibt.
+            let wide = geometry.size.width >= taskColumnMinWidth + CGFloat(calendarWidth) + inboxWidth + 200
+            let inboxShown = showInbox && wide
+            let maxCalendar = max(Preferences.minCalendarWidth, Double(geometry.size.width - taskColumnMinWidth - 20 - (inboxShown ? inboxWidth : 0)))
             HStack(spacing: 0) {
                 taskColumn
-                    .frame(minWidth: 320, maxWidth: .infinity)
+                    .frame(minWidth: taskColumnMinWidth, maxWidth: .infinity)
 
-                Divider()
+                ResizeHandle(
+                    width: $calendarWidth,
+                    range: Preferences.minCalendarWidth...max(Preferences.minCalendarWidth, min(Preferences.maxCalendarWidth, maxCalendar)),
+                    defaultValue: Preferences.defaultCalendarWidth
+                )
 
                 CalendarColumn()
-                    .frame(width: 230)
+                    .frame(width: CGFloat(min(calendarWidth, maxCalendar)))
 
-                if showInbox && wide {
+                if inboxShown {
                     Divider()
                     InboxPanel()
-                        .frame(width: 250)
+                        .frame(width: inboxWidth)
                 }
             }
             .toolbar {

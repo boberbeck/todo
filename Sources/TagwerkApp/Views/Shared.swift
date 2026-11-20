@@ -258,3 +258,48 @@ struct PSPMenu: View {
         showsCustomEntry = false
     }
 }
+
+/// Senkrechte Trennlinie, die man mit der Maus ziehen kann. Sie verändert die Breite der Spalte rechts von ihr.
+/// Doppelklick setzt die Breite zurück.
+struct ResizeHandle: View {
+    @Binding var width: Double
+    let range: ClosedRange<Double>
+    let defaultValue: Double
+    @State private var startWidth: Double?
+    @State private var hovering = false
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor))
+            .frame(width: 1)
+            .overlay {
+                Rectangle()
+                    .fill(Color.accentColor.opacity(startWidth != nil ? 0.5 : 0))
+                    .frame(width: 3)
+            }
+            .overlay {
+                Color.clear
+                    .frame(width: 10)
+                    .contentShape(Rectangle())
+                    .onHover { inside in
+                        guard inside != hovering else { return }
+                        hovering = inside
+                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                            .onChanged { value in
+                                let start = startWidth ?? min(width, range.upperBound)
+                                startWidth = start
+                                width = min(range.upperBound, max(range.lowerBound, start - Double(value.translation.width)))
+                            }
+                            .onEnded { _ in startWidth = nil }
+                    )
+                    .onTapGesture(count: 2) { width = defaultValue }
+            }
+            .help("Ziehen ändert die Breite, Doppelklick setzt sie zurück")
+            .onDisappear {
+                if hovering { NSCursor.pop() }
+            }
+    }
+}
