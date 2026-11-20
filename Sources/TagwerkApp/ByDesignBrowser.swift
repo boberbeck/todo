@@ -67,14 +67,14 @@ final class ByDesignBrowserModel {
         for _ in 0..<80 {
             let before = collected.count
             await readFromPage()
-            let moved = (try? await webView.evaluateJavaScript(ByDesignDemoPage.scrollScript) as? Bool) ?? false
+            let moved = (await webView.tagwerkEvaluate(ByDesignDemoPage.scrollScript) as? Bool) ?? false
             try? await Task.sleep(for: .milliseconds(800))
             await readFromPage()
             quietSteps = collected.count > before ? 0 : quietSteps + 1
             if !moved && quietSteps >= 1 { break }
             if quietSteps >= 3 { break }
         }
-        _ = try? await webView.evaluateJavaScript(ByDesignDemoPage.scrollToTopScript)
+        _ = await webView.tagwerkEvaluate(ByDesignDemoPage.scrollToTopScript)
         status = "\(collected.count) Aufgaben eingesammelt."
         return collected.count
     }
@@ -82,7 +82,7 @@ final class ByDesignBrowserModel {
     /// Liest die Seite ohne Texterkennung und sammelt die Treffer.
     private func readFromPage() async {
         guard let webView,
-              let json = try? await webView.evaluateJavaScript(ByDesignDemoPage.extractionScript) as? String,
+              let json = await webView.tagwerkEvaluate(ByDesignDemoPage.extractionScript) as? String,
               let data = json.data(using: .utf8),
               let page = try? JSONDecoder().decode(PageContent.self, from: data) else { return }
         var found = SAPImport.rows(fromCells: page.rows)
@@ -143,7 +143,7 @@ final class ByDesignBrowserModel {
     }
 
     private func pageHasPasswordField() async -> Bool {
-        let result = try? await webView?.evaluateJavaScript("document.querySelector('input[type=\"password\"]') !== null") as? Bool
+        let result = await webView?.tagwerkEvaluate("document.querySelector('input[type=\"password\"]') !== null") as? Bool
         return result ?? false
     }
 
@@ -161,7 +161,7 @@ final class ByDesignBrowserModel {
 
         var found: [SAPTaskRow] = []
         var source = "Seite"
-        if let json = try? await webView.evaluateJavaScript(ByDesignDemoPage.extractionScript) as? String,
+        if let json = await webView.tagwerkEvaluate(ByDesignDemoPage.extractionScript) as? String,
            let data = json.data(using: .utf8),
            let page = try? JSONDecoder().decode(PageContent.self, from: data) {
             found = SAPImport.rows(fromCells: page.rows)
@@ -204,7 +204,7 @@ final class ByDesignBrowserModel {
     /// Hilft, das Erkennen auf die echte ByDesign-Tabelle abzustimmen.
     func savePageForDiagnosis() async -> URL? {
         guard let webView,
-              let json = try? await webView.evaluateJavaScript(ByDesignDemoPage.extractionScript) as? String else { return nil }
+              let json = await webView.tagwerkEvaluate(ByDesignDemoPage.extractionScript) as? String else { return nil }
         let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
         let url = folder.appendingPathComponent("Tagwerk-ByDesign-Seite.json")
         do {
@@ -241,6 +241,7 @@ final class ByDesignBrowserModel {
 struct ByDesignBrowserView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.openWindow) private var openWindow
     @AppStorage(Preferences.bydesignURLKey) private var savedAddress = ""
     @AppStorage(Preferences.bydesignTaskListURLKey) private var taskListAddress = ""
     @State private var browser = ByDesignBrowserModel()
@@ -429,6 +430,11 @@ struct ByDesignBrowserView: View {
             model.sapAutoFetchActive = false
             isAutomaticRun = false
             dismissWindow(id: "bydesign")
+            if model.showsSAPSync {
+                // Neue Projekte zuordnen: Hauptfenster mit dem Abgleich nach vorn
+                openWindow(id: "main")
+                NSApp.activate()
+            }
         }
     }
 
@@ -661,4 +667,16 @@ enum ByDesignDemoPage {
       <div class="row" role="row"><div class="cell" role="gridcell">Projektaufgabenbestätigung</div><div class="cell" role="gridcell">CPSO8710-2</div><div class="cell" role="gridcell">Rollout Arbeitsplätze</div><div class="cell" role="gridcell">CPSO8710</div></div>
     </div></main></body></html>
     """
+}
+
+extension WKWebView {
+    /// Wie `evaluateJavaScript`, aber ohne den Absturz der async-Variante von WebKit,
+    /// wenn die Seite keinen Wert liefert (z. B. mitten in einer Weiterleitung).
+    func tagwerkEvaluate(_ script: String) async -> Any? {
+        await withCheckedContinuation { continuation in
+            evaluateJavaScript(script) { result, _ in
+                continuation.resume(returning: result)
+            }
+        }
+    }
 }

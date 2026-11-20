@@ -882,7 +882,10 @@ final class AppModel {
         var text = "\(stamp): \(rows.count) Aufgaben gelesen. \(summary)"
         if unassigned > 0 {
             text += " \(unassigned) Aufgaben in neuen Projekten warten im SAP-Abgleich auf einen Kunden."
+            // Gleich zeigen, statt still zu schließen: Projekten Kunden zuordnen
             sapSyncRows = rows
+            selection = .customers
+            showsSAPSync = true
         }
         sapAutoStatus = text
         inboxMessage = unassigned > 0 ? "SAP: \(unassigned) neue Aufgaben zuordnen (Kunden › SAP-Abgleich)" : inboxMessage
