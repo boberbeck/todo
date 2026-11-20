@@ -270,3 +270,55 @@ final class MCPLongGoalTests: XCTestCase {
         XCTAssertThrowsError(try tools.call(name: "aufgabe_aendern", arguments: ["id": String(task.id.uuidString.prefix(8)), "ziel": "Gibt es nicht"]))
     }
 }
+
+/// MCP über HTTP für Claude im Browser und auf dem Handy.
+final class MCPHTTPTests: XCTestCase {
+    private let token = "geheim-0123456789abcdef"
+
+    private func handler() -> (MCPHTTPHandler, InMemoryStore) {
+        let store = InMemoryStore()
+        let tools = TagwerkTools(store: store, calendar: Calendar(identifier: .gregorian), now: { Date(timeIntervalSince1970: 1_800_000_000) })
+        return (MCPHTTPHandler(server: MCPServer(tools: tools), token: token), store)
+    }
+
+    func testParsesRequestOnlyWhenComplete() {
+        let body = #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
+        let raw = "POST /mcp/abc?x=1 HTTP/1.1\r\nHost: tagwerk\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\n\r\n\(body)"
+        let data = Data(raw.utf8)
+        XCTAssertNil(HTTPRequest.parse(data.dropLast(5)), "Inhalt noch nicht vollständig")
+        let request = HTTPRequest.parse(data)
+        XCTAssertEqual(request?.method, "POST")
+        XCTAssertEqual(request?.path, "/mcp/abc")
+        XCTAssertEqual(request?.headers["content-type"], "application/json")
+        XCTAssertEqual(request.map { String(decoding: $0.body, as: UTF8.self) }, body)
+    }
+
+    func testAnswersOnlyWithToken() throws {
+        let (handler, store) = handler()
+        let initialize = #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#
+        XCTAssertEqual(handler.respond(to: HTTPRequest(method: "POST", path: "/mcp/falsch", body: Data(initialize.utf8))).status, 404)
+        XCTAssertEqual(handler.respond(to: HTTPRequest(method: "POST", path: "/", body: Data(initialize.utf8))).status, 404)
+
+        let path = MCPHTTPHandler.path(token: token)
+        let response = handler.respond(to: HTTPRequest(method: "POST", path: path + "/", body: Data(initialize.utf8)))
+        XCTAssertEqual(response.status, 200)
+        XCTAssertNotNil(response.headers["Mcp-Session-Id"])
+        XCTAssertTrue(String(decoding: response.body, as: UTF8.self).contains("2025-06-18"))
+
+        let notification = handler.respond(to: HTTPRequest(method: "POST", path: path, body: Data(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#.utf8)))
+        XCTAssertEqual(notification.status, 202)
+        XCTAssertEqual(handler.respond(to: HTTPRequest(method: "GET", path: path)).status, 405)
+        XCTAssertEqual(handler.respond(to: HTTPRequest(method: "POST", path: path, body: Data("kein json".utf8))).status, 400)
+
+        let call = #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aufgabe_anlegen","arguments":{"titel":"Vom Handy"}}}"#
+        XCTAssertEqual(handler.respond(to: HTTPRequest(method: "POST", path: path, body: Data(call.utf8))).status, 200)
+        XCTAssertEqual(try store.load().tasks.first?.title, "Vom Handy")
+    }
+
+    func testResponseFormat() {
+        let text = String(decoding: HTTPResponse(status: 202).serialized(), as: UTF8.self)
+        XCTAssertTrue(text.hasPrefix("HTTP/1.1 202 Accepted\r\n"))
+        XCTAssertTrue(text.contains("Content-Length: 0\r\n"))
+        XCTAssertTrue(text.hasSuffix("\r\n\r\n"))
+    }
+}

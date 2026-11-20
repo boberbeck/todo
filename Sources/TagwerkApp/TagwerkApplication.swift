@@ -119,6 +119,11 @@ enum Preferences {
     static let bydesignUserKey = "bydesignUser"
     static let bydesignTaskListURLKey = "bydesignTaskListURL"
     static let bydesignAutoFetchKey = "bydesignAutoFetch"
+    /// Fernzugriff für Claude im Browser und auf dem Handy
+    static let remoteEnabledKey = "remoteMCPEnabled"
+    static let remotePortKey = "remoteMCPPort"
+    static let remotePublicURLKey = "remoteMCPPublicURL"
+    static let remoteTunnelCommandKey = "remoteMCPTunnelCommand"
     static let bydesignLastAutoFetchKey = "bydesignLastAutoFetch"
     static let bydesignPasswordAccount = "bydesign"
     /// Standard-Work-Log-Type für Tickets, bei denen keiner gewählt ist.

@@ -54,6 +54,8 @@ final class AppModel {
     @ObservationIgnored var focusReturn: SidebarItem?
     /// Musik im Fokus (Apple Music).
     let music = FocusMusic()
+    /// Fernzugriff für Claude im Browser und auf dem Handy
+    let remote = RemoteAccess()
     /// Aufgabe, die im Fokus-Modus gezeigt wird. Ohne Auswahl: die laufende oder die nächste offene.
     var focusedTaskID: UUID?
     /// Wird hochgezählt, wenn per ⌘N eine neue Aufgabe angelegt werden soll.
@@ -114,6 +116,7 @@ final class AppModel {
         if SnapshotMode.directory == nil {
             showPlanningIfDue()
             backupIfDue()
+            remote.startIfEnabled()
         }
     }
 

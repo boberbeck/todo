@@ -75,6 +75,25 @@ jobs:
           grep -q 'Test aus CI' mcp-output.txt
           test "$(wc -l < mcp-output.txt)" -eq 4
 
+      # Derselbe Server über HTTP, wie ihn Claude im Browser oder auf dem Handy über einen Tunnel anspricht.
+      - name: MCP über HTTP prüfen
+        run: |
+          export TAGWERK_DB="$RUNNER_TEMP/mcp-http.sqlite" TAGWERK_HTTP_TOKEN="ci-geheim-0123456789abcdef"
+          build/Tagwerk.app/Contents/MacOS/tagwerk-mcp --http 8799 2> http-log.txt &
+          PID=$!
+          for i in $(seq 1 50); do curl -s -o /dev/null http://127.0.0.1:8799/ && break; sleep 0.2; done
+          URL="http://127.0.0.1:8799/mcp/$TAGWERK_HTTP_TOKEN"
+          curl -s -i -X POST "$URL" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' | tee http-init.txt
+          grep -qi '^mcp-session-id:' http-init.txt
+          grep -q '"protocolVersion":"2025-06-18"' http-init.txt
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$URL" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}')" = 202
+          curl -s -X POST "$URL" -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | grep -q 'unteraufgabe_von'
+          curl -s -X POST "$URL" -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"aufgabe_anlegen","arguments":{"titel":"Vom Handy"}}}' | grep -q 'Vom Handy'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8799/mcp/falsch -d '{}')" = 404
+          kill $PID
+          cat http-log.txt
+
       # Startet die App mit Beispieldaten. Sie zeigt jeden Bildschirm hell und dunkel und meldet sich
       # jeweils über die Datei .ready; dieses Skript fotografiert dann das Fenster.
       - name: Screenshots aufnehmen

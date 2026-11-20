@@ -31,8 +31,27 @@ do {
     let short = info["CFBundleShortVersionString"] as? String ?? "0.1"
     let build = info["CFBundleVersion"] as? String
     let version = build.map { "\(short) (\($0))" } ?? short
+    let server = MCPServer(tools: tools, serverVersion: version)
+    let arguments = CommandLine.arguments
+    if let flag = arguments.firstIndex(of: "--http") {
+        // Über HTTP für Claude im Browser und auf dem Handy (über einen Tunnel). Nur 127.0.0.1.
+        let port = arguments.indices.contains(flag + 1) ? UInt16(arguments[flag + 1]) ?? 8765 : 8765
+        guard let token = environment["TAGWERK_HTTP_TOKEN"], token.count >= 16 else {
+            log("TAGWERK_HTTP_TOKEN fehlt oder ist zu kurz (mindestens 16 Zeichen).")
+            exit(2)
+        }
+        let listener = MCPHTTPListener(handler: MCPHTTPHandler(server: server, token: token), port: port)
+        do {
+            try listener.bind()
+        } catch {
+            log("\(error)")
+            exit(3)
+        }
+        log("bereit über HTTP auf http://127.0.0.1:\(port)\(MCPHTTPHandler.path(token: "…")), Stand \(version), Daten: \(databaseURL.path)")
+        listener.run()
+    }
     log("bereit, Stand \(version), Daten: \(databaseURL.path)")
-    MCPServer(tools: tools, serverVersion: version).run()
+    server.run()
 } catch {
     log("Datenbank lässt sich nicht öffnen: \(error)")
     exit(1)

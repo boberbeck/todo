@@ -742,6 +742,8 @@ struct ClaudeSettings: View {
                 SettingsFootnote("Einmal ausführen, dann steht Tagwerk in jedem Projekt zur Verfügung.")
             }
 
+            RemoteAccessSection()
+
             Section {
                 if let url = ClaudeIntegration.serverURL {
                     LabeledContent("Programm") {
@@ -761,7 +763,7 @@ struct ClaudeSettings: View {
                 SettingsFootnote("Liegt Tagwerk woanders, z. B. nach dem Verschieben in „Programme“, trag es hier neu ein.")
             }
         }
-        .settingsPage(height: 680)
+        .settingsPage(height: 760)
         .onAppear { installed = ClaudeIntegration.isInstalledInDesktop }
     }
 
@@ -1034,5 +1036,156 @@ enum AppVersion {
         let build = info["CFBundleVersion"] as? String ?? "?"
         let date = info["TagwerkBuildDate"] as? String
         return "\(short) (\(build))" + (date.map { " · gebaut \($0)" } ?? "")
+    }
+}
+
+/// Claude im Browser und auf dem Handy: Tagwerk über einen Tunnel als eigenen Connector in claude.ai.
+struct RemoteAccessSection: View {
+    @Environment(AppModel.self) private var model
+    @AppStorage(Preferences.remoteEnabledKey) private var enabled = false
+    @AppStorage(Preferences.remotePortKey) private var port = 8765
+    @AppStorage(Preferences.remotePublicURLKey) private var publicURL = ""
+    @AppStorage(Preferences.remoteTunnelCommandKey) private var tunnelCommand = ""
+    @State private var copied = false
+    @State private var showsSecret = false
+
+    private static let tunnelSuggestions: [(name: String, command: String, note: String)] = [
+        ("Tailscale Funnel", "tailscale funnel {port}", "feste Adresse, kostenlos; Tailscale installieren und anmelden, Funnel einmal erlauben"),
+        ("ngrok", "ngrok http --url=DEIN-NAME.ngrok-free.app {port} --log stdout", "feste Adresse mit kostenlosem Konto"),
+        ("Cloudflare", "cloudflared tunnel --url http://127.0.0.1:{port}", "ohne Konto, aber neue Adresse bei jedem Start"),
+    ]
+
+    var body: some View {
+        let remote = model.remote
+        Section {
+            Toggle(isOn: $enabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Erreichbar, solange Tagwerk läuft")
+                    Text(statusText(remote))
+                        .font(.caption)
+                        .foregroundStyle(statusColor(remote))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            LabeledContent("Port") {
+                TextField("Port", value: $port, format: .number.grouping(.never))
+                    .frame(width: 80)
+                    .multilineTextAlignment(.trailing)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Tunnel mitstarten")
+                    Spacer()
+                    Menu("Vorlage") {
+                        ForEach(Self.tunnelSuggestions, id: \.name) { suggestion in
+                            Button("\(suggestion.name): \(suggestion.note)") { tunnelCommand = suggestion.command }
+                        }
+                    }
+                    .fixedSize()
+                }
+                TextField("z. B. tailscale funnel {port}", text: $tunnelCommand)
+                    .font(.callout.monospaced())
+                Text("Läuft im Terminal-Umfeld (zsh); {port} wird ersetzt. Leer lassen, wenn du den Tunnel selbst startest.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if case .failed(let message) = remote.tunnelState {
+                    Text("Tunnel: \(message)")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+            }
+            LabeledContent("Öffentliche Adresse") {
+                TextField(remote.detectedPublicURL ?? "https://mein-mac.tailxxxx.ts.net", text: $publicURL)
+                    .multilineTextAlignment(.trailing)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Adresse für claude.ai")
+                        Text("Einstellungen › Connectors › Eigenen Connector hinzufügen")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(showsSecret ? "Verbergen" : "Zeigen") { showsSecret.toggle() }
+                    Button(copied ? "Kopiert" : "Kopieren") {
+                        guard let url = remote.connectorURL else { return }
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(url, forType: .string)
+                        copied = true
+                    }
+                    .disabled(remote.connectorURL == nil)
+                }
+                Text(displayedURL(remote))
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.1)))
+            }
+            HStack {
+                Button("Prüfen") { Task { await remote.check() } }
+                    .disabled(!enabled)
+                Button("Neuer Schlüssel") { remote.renewToken(); copied = false }
+                    .help("Die bisherige Adresse funktioniert danach nicht mehr; in claude.ai neu eintragen.")
+                Spacer()
+            }
+            if let message = remote.checkMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } header: {
+            Text("Claude im Browser und auf dem Handy")
+        } footer: {
+            SettingsFootnote("""
+            So geht's: 1. Einen Tunnel einrichten (am einfachsten Tailscale Funnel), damit claude.ai deinen Mac erreicht. \
+            2. Die Adresse oben in claude.ai unter Einstellungen › Connectors als eigenen Connector eintragen; danach steht Tagwerk \
+            auch in der Claude-App auf dem Handy bereit. Der Mac muss an sein und Tagwerk laufen. \
+            Wer die Adresse kennt, kann deine Aufgaben und Zeiten lesen und ändern: behandle sie wie ein Passwort. \
+            Gebucht wird weiterhin nur hier in Tagwerk.
+            """)
+        }
+        .onChange(of: enabled) {
+            enabled ? remote.start() : remote.stop()
+        }
+        .onChange(of: port) {
+            if enabled { remote.restart() }
+        }
+    }
+
+    private func displayedURL(_ remote: RemoteAccess) -> String {
+        guard let url = remote.connectorURL else {
+            return "Erst eine öffentliche https-Adresse eintragen (oder den Tunnel starten, dann erkennt Tagwerk sie)."
+        }
+        if showsSecret { return url }
+        let token = remote.token
+        return url.replacingOccurrences(of: token, with: String(token.prefix(4)) + "…")
+    }
+
+    private func statusText(_ remote: RemoteAccess) -> String {
+        switch remote.serverState {
+        case .off: return "Aus. Claude Desktop auf diesem Mac geht auch ohne."
+        case .running:
+            let tunnel: String
+            switch remote.tunnelState {
+            case .running: tunnel = "Tunnel läuft"
+            case .failed: tunnel = "Tunnel gestoppt"
+            case .off: tunnel = "ohne eigenen Tunnel"
+            }
+            return "Läuft auf 127.0.0.1:\(port) · \(tunnel)"
+        case .failed(let message): return "Fehler: \(message)"
+        }
+    }
+
+    private func statusColor(_ remote: RemoteAccess) -> Color {
+        switch remote.serverState {
+        case .running: return .green
+        case .failed: return .red
+        case .off: return .secondary
+        }
     }
 }

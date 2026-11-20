@@ -102,7 +102,9 @@ Termine aus dem Kalender werden per Rechtsklick oder Doppelklick › „Als Zeit
 
 - **Claude Code:** `claude mcp add --scope user tagwerk -- /Applications/Tagwerk.app/Contents/MacOS/tagwerk-mcp`
 
-Werkzeuge: `tagesuebersicht`, `aufgaben`, `aufgabe_anlegen`, `aufgabe_aendern`, `timer_starten`, `timer_stoppen`, `zeitauswertung`, `tagesabschluss`, `kunden`, `wochenziele`, `wochenziel_anlegen`. Der Server arbeitet direkt auf der Datenbank; die geöffnete App lädt Änderungen innerhalb einer Sekunde nach. Nach SAP oder ManageEngine bucht Claude nicht. Mit der Umgebungsvariable `TAGWERK_DB` lässt sich eine andere Datenbank angeben, z. B. zum Ausprobieren.
+- **Claude im Browser und auf dem Handy (z. B. ein privates Konto):** Einstellungen › Claude › „Claude im Browser und auf dem Handy“. Solange Tagwerk läuft, startet es `tagwerk-mcp --http` nur auf diesem Mac (127.0.0.1) und auf Wunsch einen Tunnel, über den claude.ai den Mac erreicht. Am einfachsten ist [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) mit fester Adresse (`tailscale funnel {port}`); ngrok mit fester Adresse oder Cloudflare (neue Adresse bei jedem Start) gehen auch. Die angezeigte Adresse (`https://…/mcp/<schlüssel>`) in claude.ai unter Einstellungen › Connectors als eigenen Connector eintragen; dann steht Tagwerk auch in der Claude-App auf dem Handy bereit. Der lange Schlüssel im Pfad schützt den Zugang (liegt im Schlüsselbund, „Neuer Schlüssel“ sperrt die alte Adresse). Der Mac muss an sein.
+
+Werkzeuge: `tagesuebersicht`, `aufgaben`, `aufgabe_anlegen`, `aufgabe_aendern`, `timer_starten`, `timer_stoppen`, `zeitauswertung`, `tagesabschluss`, `kunden`, `wochenziele`, `wochenziel_anlegen`, `ziele`, `ziel_anlegen`. Der Server arbeitet direkt auf der Datenbank; die geöffnete App lädt Änderungen innerhalb einer Sekunde nach. Nach SAP oder ManageEngine bucht Claude nicht. Mit der Umgebungsvariable `TAGWERK_DB` lässt sich eine andere Datenbank angeben, z. B. zum Ausprobieren.
 
 ## Signieren (einmal einrichten, damit Freigaben bleiben)
 
