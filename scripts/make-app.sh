@@ -1,5 +1,6 @@
 #!/bin/bash
-# Baut build/Tagwerk.app (ad-hoc signiert, für den eigenen Mac).
+# Baut build/Tagwerk.app (für den eigenen Mac). GitHub baut die App bei jedem Push ebenfalls,
+# fertig zum Herunterladen unter „Releases“ (siehe README).
 # Aufruf: scripts/make-app.sh          → Release-Build
 #         scripts/make-app.sh debug    → Debug-Build
 set -euo pipefail
@@ -38,11 +39,16 @@ if security find-identity -p codesigning 2>/dev/null | grep -q "\"${IDENTITY}\""
   echo "Signiere mit „${IDENTITY}“"
 else
   SIGN="-"
-  echo "Hinweis: Kein Zertifikat „${IDENTITY}“ gefunden, signiere ad hoc."
-  echo "         macOS fragt dann nach jedem Neubau einmal nach dem Schlüsselbund (README › Signieren)."
+  echo "Signiere ad hoc (ohne Zertifikat „${IDENTITY}“)."
 fi
 codesign --force --sign "${SIGN}" --identifier local.tagwerk.mcp "$APP/Contents/MacOS/tagwerk-mcp"
-codesign --force --sign "${SIGN}" "$APP"
+if [ "${SIGN}" = "-" ]; then
+  # Ad hoc ändert sich die Signatur bei jedem Neubau. Damit macOS die Freigaben für Schlüsselbund,
+  # Kalender und Musik trotzdem behält, verlangt die App nur ihre Kennung, nicht die genaue Fassung.
+  codesign --force --sign - --requirements '=designated => identifier "local.tagwerk.app"' "$APP"
+else
+  codesign --force --sign "${SIGN}" "$APP"
+fi
 
 echo "Fertig: $APP"
 echo "Starten mit: open $APP"

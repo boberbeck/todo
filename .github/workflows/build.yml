@@ -29,7 +29,7 @@ jobs:
         run: swift test
 
       - name: App-Bundle bauen
-        run: scripts/make-app.sh debug
+        run: scripts/make-app.sh release
 
       # Startet den MCP-Server mit einer leeren Datenbank und spricht ihn an wie Claude.
       - name: MCP-Server prüfen
@@ -75,6 +75,31 @@ jobs:
           name: screenshots
           path: screenshots
           if-no-files-found: warn
+
+      # Fertige App zum Herunterladen: als ZIP am Lauf und als Release „aktuell“.
+      - name: App packen
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent build/Tagwerk.app build/Tagwerk.zip
+          ls -la build/Tagwerk.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tagwerk-App
+          path: build/Tagwerk.zip
+
+      - name: Release „aktuell“ aktualisieren
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="Automatisch gebaut aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}) am $(date -u '+%d.%m.%Y %H:%M') UTC.
+
+          Installieren: Tagwerk.zip laden, entpacken, Tagwerk.app in den Ordner Programme ziehen.
+          Beim ersten Öffnen blockt macOS die App, weil sie nicht von Apple beglaubigt ist:
+          Systemeinstellungen › Datenschutz & Sicherheit › „Dennoch öffnen“.
+          Oder im Terminal: xattr -dr com.apple.quarantine /Applications/Tagwerk.app"
+          gh release delete aktuell --yes --cleanup-tag || true
+          gh release create aktuell build/Tagwerk.zip --prerelease --target "$GITHUB_SHA" --title "Tagwerk – aktueller Stand" --notes "$NOTES"
 
       # Nur bei Bedarf: Commit-Nachricht mit [screenshots] oder manueller Start.
       - name: Screenshots ins Repository legen
