@@ -139,7 +139,9 @@ public enum SAPImport {
     public static func repairOCRCodes(_ rows: [SAPTaskRow]) -> [SAPTaskRow] {
         func letterPrefix(_ code: String) -> String { String(code.prefix { $0.isLetter }) }
         let counts = Dictionary(rows.map { (letterPrefix($0.code), 1) }, uniquingKeysWith: +)
-        guard let dominant = counts.max(by: { $0.value < $1.value })?.key, !dominant.isEmpty else { return rows }
+        // Bei Gleichstand die längere Buchstabenfolge: verlesen wird eher ein Buchstabe zur Ziffer als umgekehrt.
+        guard let dominant = counts.max(by: { ($0.value, $0.key.count) < ($1.value, $1.key.count) })?.key,
+              !dominant.isEmpty else { return rows }
         let lookalike: [Character: Character] = ["O": "0", "I": "1", "S": "5", "B": "8", "Z": "2", "G": "6"]
         var seen = Set<String>()
         return rows.compactMap { row in
