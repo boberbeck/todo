@@ -112,6 +112,11 @@ enum Preferences {
     static let idleMinutesKey = "idleMinutes"
     static let calendarWidthKey = "calendarColumnWidth"
     static let bydesignURLKey = "bydesignURL"
+    static let bydesignUserKey = "bydesignUser"
+    static let bydesignTaskListURLKey = "bydesignTaskListURL"
+    static let bydesignAutoFetchKey = "bydesignAutoFetch"
+    static let bydesignLastAutoFetchKey = "bydesignLastAutoFetch"
+    static let bydesignPasswordAccount = "bydesign"
     static func worklogTypeKey(for workType: WorkType?) -> String { "worklogType.\(workType?.rawValue ?? "ohne")" }
     /// Worklog-Typen in ServiceDesk Plus (Pflichtfeld beim Worklog).
     static let knownWorklogTypes = [

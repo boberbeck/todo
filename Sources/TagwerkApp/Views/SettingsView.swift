@@ -314,6 +314,16 @@ struct BookingSettings: View {
     @AppStorage(Preferences.roundingStepKey) private var roundingStep = 15
     @AppStorage(Preferences.roundingModeKey) private var roundingMode = RoundingMode.nearest.rawValue
     @AppStorage(Preferences.bydesignURLKey) private var bydesignURL = ""
+    @AppStorage(Preferences.bydesignUserKey) private var bydesignUser = ""
+    @AppStorage(Preferences.bydesignAutoFetchKey) private var bydesignAutoFetch = false
+    @AppStorage(Preferences.bydesignTaskListURLKey) private var bydesignTaskList = ""
+    @State private var bydesignPassword = ""
+
+    private func saveByDesignPassword() {
+        guard !bydesignPassword.isEmpty else { return }
+        model.setByDesignPassword(bydesignPassword)
+        bydesignPassword = ""
+    }
 
     var body: some View {
         Form {
@@ -347,6 +357,37 @@ struct BookingSettings: View {
                 SettingsField(title: "Adresse von ByDesign", detail: "wie im Browser, z. B. https://my123456.sapbydesign.com") {
                     SettingsTextField(prompt: "https://my…sapbydesign.com", text: $bydesignURL, width: 280)
                 }
+                SettingsField(title: "Benutzer") {
+                    SettingsTextField(prompt: "Benutzername in ByDesign", text: $bydesignUser, width: 200)
+                }
+                SettingsField(title: "Passwort", detail: model.hasByDesignPassword ? "im Schlüsselbund" : "liegt nur im Schlüsselbund dieses Macs") {
+                    HStack(spacing: 8) {
+                        SecureField("", text: $bydesignPassword, prompt: Text(model.hasByDesignPassword ? "•••••••• (gespeichert)" : "Passwort"))
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 180)
+                            .onSubmit(saveByDesignPassword)
+                        Button("Sichern", action: saveByDesignPassword)
+                            .disabled(bydesignPassword.isEmpty)
+                        if model.hasByDesignPassword {
+                            Button("Entfernen") { model.setByDesignPassword("") }
+                        }
+                    }
+                }
+                Toggle("Aufgaben einmal am Tag automatisch holen", isOn: $bydesignAutoFetch)
+                LabeledContent {
+                    Button("Jetzt holen") { model.startSAPAutoFetch() }
+                        .disabled(bydesignTaskList.isEmpty || bydesignUser.isEmpty || !model.hasByDesignPassword)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Automatischer Abruf")
+                        Text(model.sapAutoStatus ?? (bydesignTaskList.isEmpty ? "Noch keine Liste gemerkt: im ByDesign-Fenster „Diese Liste merken“." : "Liste gemerkt."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 LabeledContent {
                     Button("Abgleichen …") {
                         model.showsSAPSync = true
@@ -367,7 +408,7 @@ struct BookingSettings: View {
                 SettingsFootnote("„Abgleichen“ holt deine Aufgaben direkt aus ByDesign (Anmeldung im Tagwerk-Fenster), aus einem Excel-Export oder einem Bildschirmfoto. In SAP ändert sich dabei nichts.")
             }
         }
-        .settingsPage(height: 640)
+        .settingsPage(height: 700)
         .onChange(of: roundingStep) { model.settingsChanged() }
         .onChange(of: roundingMode) { model.settingsChanged() }
     }

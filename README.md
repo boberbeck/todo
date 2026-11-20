@@ -72,6 +72,7 @@ Für den Kalenderzugriff am besten `scripts/make-app.sh` nutzen und `build/Tagwe
 Ohne API-Zugriff auf SAP holt Tagwerk die Projektaufgaben (z. B. `CPSO8643-12`) auf einem von drei Wegen; alle unter Kunden › SAP-Abgleich:
 
 1. **Direkt aus ByDesign:** „ByDesign öffnen“ öffnet ByDesign in einem Tagwerk-Fenster. Anmelden wie im Browser, die Liste deiner Aufgaben öffnen, „Aufgaben holen“. Tagwerk liest die Tabelle von der Seite, bei langen Listen weiterblättern und erneut holen. Die Anmeldung bleibt wie in Safari als Cookie auf dem Mac; ein Passwort speichert Tagwerk nicht. Die Adresse steht in Einstellungen › Buchung.
+   Mit Benutzer und Passwort in Einstellungen › Buchung meldet Tagwerk sich selbst an (das Passwort liegt im Schlüsselbund). Ist die Liste einmal mit „Diese Liste merken“ gemerkt, holt Tagwerk sie auf Wunsch einmal am Tag beim Start automatisch und übernimmt neue Aufgaben in schon bekannten Projekten; neue Projekte warten im SAP-Abgleich auf einen Kunden.
 2. **Bildschirmfoto:** Liste fotografieren (⇧⌘4) und ins Abgleich-Fenster ziehen oder einfügen; Tagwerk liest die Nummern per Texterkennung.
 3. **Excel-Export oder kopierte Tabelle**, falls ByDesign einen Export anbietet (`.xlsx`, Excel-XML, CSV, HTML).
 

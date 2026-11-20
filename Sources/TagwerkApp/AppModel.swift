@@ -33,6 +33,11 @@ final class AppModel {
     /// Zeigt den Abgleich mit SAP ByDesign. `sapSyncRows` füllt ihn vorab (Vorschau, Bildschirmfotos).
     var showsSAPSync = false
     var sapSyncRows: [SAPTaskRow]?
+    /// Bittet die Oberfläche, das ByDesign-Fenster für den automatischen Abruf zu öffnen.
+    var sapAutoFetchRequest = 0
+    /// Läuft gerade ein automatischer Abruf im ByDesign-Fenster?
+    var sapAutoFetchActive = false
+    private(set) var sapAutoStatus: String?
     private(set) var inboxMessage: String?
     private(set) var lastTicketSync: Date?
     private(set) var ticketSyncMessage: String?
@@ -814,6 +819,79 @@ final class AppModel {
 
     // MARK: Abgleich mit SAP
 
+    var hasByDesignPassword: Bool {
+        _ = settingsVersion
+        return Keychain.exists(account: Preferences.bydesignPasswordAccount)
+    }
+
+    func setByDesignPassword(_ password: String) {
+        Keychain.set(password, account: Preferences.bydesignPasswordAccount)
+        settingsChanged()
+    }
+
+    /// Benutzer und Passwort für die Anmeldung im ByDesign-Fenster, falls hinterlegt.
+    func byDesignCredentials() -> (user: String, password: String)? {
+        let user = UserDefaults.standard.string(forKey: Preferences.bydesignUserKey)?.trimmingCharacters(in: .whitespaces) ?? ""
+        guard !user.isEmpty, let password = Keychain.get(account: Preferences.bydesignPasswordAccount), !password.isEmpty else { return nil }
+        return (user, password)
+    }
+
+    var canAutoFetchSAP: Bool {
+        let defaults = UserDefaults.standard
+        return defaults.bool(forKey: Preferences.bydesignAutoFetchKey)
+            && !(defaults.string(forKey: Preferences.bydesignTaskListURLKey) ?? "").isEmpty
+            && !(defaults.string(forKey: Preferences.bydesignUserKey) ?? "").isEmpty
+            && Keychain.exists(account: Preferences.bydesignPasswordAccount)
+    }
+
+    /// Einmal am Tag beim Start: Aufgaben aus ByDesign holen.
+    func autoFetchSAPIfDue() {
+        guard SnapshotMode.directory == nil, canAutoFetchSAP else { return }
+        let last = UserDefaults.standard.string(forKey: Preferences.bydesignLastAutoFetchKey).flatMap(LocalDate.init(string:))
+        guard last != today else { return }
+        UserDefaults.standard.set(today.string, forKey: Preferences.bydesignLastAutoFetchKey)
+        startSAPAutoFetch()
+    }
+
+    /// Öffnet das ByDesign-Fenster, meldet sich an und holt die gemerkte Aufgabenliste.
+    func startSAPAutoFetch() {
+        sapAutoFetchActive = true
+        sapAutoStatus = "Holt gerade die Aufgaben aus ByDesign …"
+        sapAutoFetchRequest += 1
+    }
+
+    /// Ergebnis des automatischen Abrufs übernehmen: Aufgaben bekannter Projekte direkt,
+    /// neue Projekte warten im SAP-Abgleich auf eine Zuordnung.
+    func applySAPAutomatically(_ rows: [SAPTaskRow]) {
+        let stamp = Date().formatted(date: .abbreviated, time: .shortened)
+        guard !rows.isEmpty else {
+            sapAutoStatus = "\(stamp): Keine Aufgaben gefunden. Ist die gemerkte Liste noch richtig?"
+            return
+        }
+        let plan = sapImportPlan(rows)
+        var choices: [String: SAPCustomerChoice] = [:]
+        var unassigned = 0
+        for group in plan.groups {
+            if let id = group.suggestedCustomerID {
+                choices[group.project] = .existing(id)
+            } else {
+                unassigned += group.items.count
+            }
+        }
+        let summary = applySAPImport(plan, choices: choices, deactivateMissing: false)
+        var text = "\(stamp): \(rows.count) Aufgaben gelesen. \(summary)"
+        if unassigned > 0 {
+            text += " \(unassigned) Aufgaben in neuen Projekten warten im SAP-Abgleich auf einen Kunden."
+            sapSyncRows = rows
+        }
+        sapAutoStatus = text
+        inboxMessage = unassigned > 0 ? "SAP: \(unassigned) neue Aufgaben zuordnen (Kunden › SAP-Abgleich)" : inboxMessage
+    }
+
+    func reportSAPAutoFetch(_ message: String) {
+        sapAutoStatus = "\(Date().formatted(date: .abbreviated, time: .shortened)): \(message)"
+    }
+
     func sapImportPlan(_ rows: [SAPTaskRow]) -> SAPImport.Plan {
         SAPImport.plan(rows: rows, existing: pspElements, customers: customers)
     }
@@ -1379,6 +1457,7 @@ final class AppModel {
         autoSyncTicketsIfDue()
         reloadIfChangedElsewhere()
         tickCount += 1
+        if tickCount == 5 { autoFetchSAPIfDue() }
         if tickCount % 5 == 0 {
             checkIdle()
         }

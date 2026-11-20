@@ -17,6 +17,12 @@ final class ByDesignBrowserModel {
     private(set) var currentURL: String = ""
     private(set) var canGoBack = false
     @ObservationIgnored weak var webView: WKWebView?
+    /// Liefert Benutzer und Passwort aus dem Schlüsselbund, falls hinterlegt.
+    @ObservationIgnored var credentials: () -> (user: String, password: String)? = { nil }
+    /// Nur auf diesem Rechner (Host der gespeicherten ByDesign-Adresse) wird das Passwort eingesetzt.
+    @ObservationIgnored var allowedHost: String?
+    @ObservationIgnored private var lastLoginAttempt: Date?
+    @ObservationIgnored private(set) var didSubmitLogin = false
 
     func load(_ address: String) {
         var text = address.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -35,6 +41,62 @@ final class ByDesignBrowserModel {
         canGoBack = webView?.canGoBack ?? false
     }
 
+    /// Seite fertig geladen: bei einer Anmeldeseite Benutzer und Passwort einsetzen.
+    func pageLoaded() {
+        updateNavigation()
+        Task { await tryAutoLogin() }
+    }
+
+    private func tryAutoLogin() async {
+        guard let webView, let host = webView.url?.host?.lowercased(), isTrusted(host),
+              let login = credentials() else { return }
+        if let lastLoginAttempt, Date().timeIntervalSince(lastLoginAttempt) < 30 { return }
+        let result = try? await webView.callAsyncJavaScript(
+            ByDesignDemoPage.loginScript,
+            arguments: ["user": login.user, "password": login.password],
+            in: nil,
+            contentWorld: .defaultClient
+        ) as? String
+        if let result, result != "kein-formular" {
+            lastLoginAttempt = Date()
+            didSubmitLogin = true
+            status = "Angemeldet mit gespeichertem Benutzer …"
+        }
+    }
+
+    /// Die ByDesign-Adresse selbst oder die Anmeldeseiten von SAP.
+    private func isTrusted(_ host: String) -> Bool {
+        if let allowedHost, host == allowedHost.lowercased() { return true }
+        return host.hasSuffix(".sapbydesign.com") || host.hasSuffix(".businessbydesign.cloud.sap")
+            || host.hasSuffix(".accounts.ondemand.com") || host.hasSuffix(".accounts.cloud.sap")
+    }
+
+    /// Automatischer Abruf: gemerkte Liste öffnen, warten, bis Aufgabennummern zu sehen sind.
+    func fetchAutomatically(from address: String) async -> [SAPTaskRow] {
+        collected = []
+        load(address)
+        var reloadedAfterLogin = false
+        for _ in 0..<40 {
+            try? await Task.sleep(for: .seconds(3))
+            if didSubmitLogin, !reloadedAfterLogin, let host = webView?.url?.host, isTrusted(host.lowercased()),
+               !(await pageHasPasswordField()) {
+                // Nach der Anmeldung landet ByDesign oft auf der Startseite: Liste noch einmal öffnen
+                reloadedAfterLogin = true
+                load(address)
+                continue
+            }
+            if await readTasks(allowsTextRecognition: false) > 0 {
+                return collected
+            }
+        }
+        return collected
+    }
+
+    private func pageHasPasswordField() async -> Bool {
+        let result = try? await webView?.evaluateJavaScript("document.querySelector('input[type=\"password\"]') !== null") as? Bool
+        return result ?? false
+    }
+
     func reset() {
         collected = []
         status = "Liste geleert."
@@ -42,7 +104,7 @@ final class ByDesignBrowserModel {
 
     /// Liest die sichtbare Tabelle: erst aus dem Seiteninhalt, sonst per Texterkennung aus einem Bild der Seite.
     @discardableResult
-    func readTasks() async -> Int {
+    func readTasks(allowsTextRecognition: Bool = true) async -> Int {
         guard let webView, !isReading else { return 0 }
         isReading = true
         defer { isReading = false }
@@ -57,7 +119,7 @@ final class ByDesignBrowserModel {
                 found = SAPImport.rows(fromText: page.text)
             }
         }
-        if found.isEmpty, let image = await snapshot(of: webView) {
+        if found.isEmpty, allowsTextRecognition, let image = await snapshot(of: webView) {
             source = "Texterkennung"
             found = (try? await ScreenTextReader.taskRows(from: image)) ?? []
         }
@@ -113,8 +175,10 @@ struct ByDesignBrowserView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismissWindow) private var dismissWindow
     @AppStorage(Preferences.bydesignURLKey) private var savedAddress = ""
+    @AppStorage(Preferences.bydesignTaskListURLKey) private var taskListAddress = ""
     @State private var browser = ByDesignBrowserModel()
     @State private var address = ""
+    @State private var isAutomaticRun = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -137,6 +201,14 @@ struct ByDesignBrowserView: View {
                     .onSubmit(open)
                 Button("Öffnen", action: open)
                     .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button {
+                    taskListAddress = browser.currentURL
+                } label: {
+                    Label(taskListAddress == browser.currentURL && !taskListAddress.isEmpty ? "Liste gemerkt" : "Diese Liste merken",
+                          systemImage: taskListAddress == browser.currentURL && !taskListAddress.isEmpty ? "bookmark.fill" : "bookmark")
+                }
+                .disabled(browser.currentURL.isEmpty || browser.currentURL.hasPrefix("about:"))
+                .help("Diese Seite öffnet Tagwerk beim automatischen Abruf")
             }
             .padding(10)
 
@@ -184,11 +256,20 @@ struct ByDesignBrowserView: View {
         .frame(minWidth: 900, minHeight: 620)
         .onAppear {
             address = savedAddress
+            browser.credentials = { model.byDesignCredentials() }
+            browser.allowedHost = URL(string: savedAddress)?.host
             if SnapshotMode.usesDemoData {
                 browser.loadDemoPage()
+            } else if model.sapAutoFetchActive {
+                runAutomatically()
+            } else if !taskListAddress.isEmpty {
+                browser.load(taskListAddress)
             } else if !savedAddress.isEmpty {
                 browser.load(savedAddress)
             }
+        }
+        .onChange(of: model.sapAutoFetchActive) {
+            if model.sapAutoFetchActive { runAutomatically() }
         }
         .task {
             // Im Build: Beispielseite lesen, einmal über den Seiteninhalt und einmal per Texterkennung
@@ -206,6 +287,31 @@ struct ByDesignBrowserView: View {
             if address.isEmpty || !browser.currentURL.hasPrefix("about:") {
                 address = browser.currentURL.isEmpty ? address : browser.currentURL
             }
+        }
+    }
+
+    /// Automatischer Abruf: anmelden, gemerkte Liste lesen, bekannte Projekte übernehmen, Fenster schließen.
+    private func runAutomatically() {
+        guard !isAutomaticRun else { return }
+        let target = taskListAddress.isEmpty ? savedAddress : taskListAddress
+        guard !target.isEmpty else {
+            model.reportSAPAutoFetch("Keine Aufgabenliste gemerkt. Öffne sie einmal im ByDesign-Fenster und klicke „Diese Liste merken“.")
+            model.sapAutoFetchActive = false
+            return
+        }
+        isAutomaticRun = true
+        Task {
+            let rows = await browser.fetchAutomatically(from: target)
+            if rows.isEmpty {
+                model.reportSAPAutoFetch("Keine Aufgaben gefunden. Anmeldung fehlgeschlagen oder die Liste hat sich geändert; einmal von Hand im ByDesign-Fenster prüfen.")
+                model.sapAutoFetchActive = false
+                isAutomaticRun = false
+                return
+            }
+            model.applySAPAutomatically(rows)
+            model.sapAutoFetchActive = false
+            isAutomaticRun = false
+            dismissWindow(id: "bydesign")
         }
     }
 
@@ -250,7 +356,7 @@ struct ByDesignWebView: NSViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            browser.updateNavigation()
+            browser.pageLoaded()
         }
 
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
@@ -340,6 +446,29 @@ enum ByDesignDemoPage {
       visit(document);
       return JSON.stringify({ rows: rows, text: texts.join('\\n') });
     })()
+    """
+
+    /// Setzt Benutzer und Passwort in die Anmeldeseite und schickt sie ab. Argumente: user, password.
+    static let loginScript = """
+    const passwordField = document.querySelector('input[type="password"]');
+    if (!passwordField) { return 'kein-formular'; }
+    const scope = passwordField.form || document;
+    const visible = (el) => el && el.offsetParent !== null && !el.disabled;
+    const userField = scope.querySelector('#logonuidfield, input[name="sap-user"], input[name="j_username"], input[autocomplete="username"], input[type="email"]')
+      || Array.from(scope.querySelectorAll('input')).find((el) => ['text', 'email', ''].includes((el.type || '').toLowerCase()) && visible(el));
+    const setValue = (el, value) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    if (userField && !userField.value) { setValue(userField, user); }
+    setValue(passwordField, password);
+    const button = scope.querySelector('#LOGON_BUTTON, #LOGIN_LINK, #logOnFormSubmit, button[type="submit"], input[type="submit"]')
+      || Array.from(scope.querySelectorAll('button, a[role="button"]')).find(visible);
+    if (button) { button.click(); return 'abgeschickt'; }
+    if (passwordField.form) { passwordField.form.submit(); return 'abgeschickt'; }
+    return 'ausgefuellt';
     """
 
     static let html = """
