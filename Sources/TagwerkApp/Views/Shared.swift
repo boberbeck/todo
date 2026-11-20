@@ -172,6 +172,26 @@ struct TaskContextMenu: View {
             }
         }
         if !task.isSubtask {
+            Menu(model.longGoal(task.longGoalID).map { "Ziel: \($0.title)" } ?? "Ziel") {
+                ForEach(model.activeLongGoals) { goal in
+                    Button {
+                        model.setLongGoal(goal.id, for: task.id)
+                    } label: {
+                        if goal.id == task.longGoalID {
+                            Label(goal.title, systemImage: "checkmark")
+                        } else {
+                            Text(goal.title)
+                        }
+                    }
+                }
+                if model.activeLongGoals.isEmpty {
+                    Button("Neues Ziel anlegen …") { model.selection = .goals }
+                }
+                if task.longGoalID != nil {
+                    Divider()
+                    Button("Kein Ziel") { model.setLongGoal(nil, for: task.id) }
+                }
+            }
             Menu("Wochenziel") {
                 ForEach(model.goals(forWeekStarting: model.currentWeekStart)) { goal in
                     Button(goal.title) { model.setGoal(goal.id, for: task.id) }

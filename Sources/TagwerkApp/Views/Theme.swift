@@ -414,6 +414,7 @@ struct CardMeta: View {
     private var metaParts: [String] {
         var parts: [String] = []
         if let number = task.linkedTicketNumber { parts.append("#\(number)") }
+        if let goal = model.longGoal(task.longGoalID) { parts.append("◎ \(goal.title)") }
         if task.source == .mail { parts.append("Mail") }
         if !compact, let start = task.scheduledStart, !task.isDone { parts.append(start.formatted(date: .omitted, time: .shortened)) }
         if let estimate = task.estimateMinutes, compact || task.isDone { parts.append("\(TimeMath.format(minutes: estimate)) h") }

@@ -110,6 +110,18 @@ struct FocusTaskPane: View {
                         .font(.callout)
                         .foregroundStyle(Theme.tertiary)
                 }
+                if let goal = model.longGoal(model.resolved(task).longGoalID) {
+                    let progress = model.progress(of: goal)
+                    Button {
+                        model.selection = .goals
+                    } label: {
+                        Label("\(goal.title) · \(GoalText.amount(progress))", systemImage: "flag.checkered")
+                            .font(.callout)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.tertiary)
+                    .help("Zahlt auf dieses Ziel ein")
+                }
             }
 
             VStack(spacing: 4) {

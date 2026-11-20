@@ -63,6 +63,7 @@ enum SnapshotMode {
             ("kalender", .calendar),
             ("fokus", .focus),
             ("kunden", .customers),
+            ("ziele", .goals),
             ("rueckblick", .review),
             ("tagesplanung", .planning),
             ("tagesabschluss", .close),

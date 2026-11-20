@@ -81,6 +81,8 @@ struct RootView: View {
             CustomersView()
         case .customer(let id):
             CustomerDetailView(customerID: id)
+        case .goals:
+            GoalsView()
         case .review:
             ReviewView()
         case .planning:
@@ -108,7 +110,8 @@ struct TopBar: View {
         Tab(title: "Kalender", item: .calendar, shortcut: "3"),
         Tab(title: "Fokus", item: .focus, shortcut: "4"),
         Tab(title: "Kunden", item: .customers, shortcut: "5"),
-        Tab(title: "Rückblick", item: .review, shortcut: "6"),
+        Tab(title: "Ziele", item: .goals, shortcut: "6"),
+        Tab(title: "Rückblick", item: .review, shortcut: "7"),
     ]
 
     var body: some View {

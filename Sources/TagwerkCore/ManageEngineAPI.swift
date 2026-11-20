@@ -201,6 +201,24 @@ public enum ManageEngineAPI {
         return try get(path: "/api/v3/requests", input: input, config: config, token: token, requireTechnician: false)
     }
 
+    /// Sucht Tickets aller Techniker nach einem Text im Betreff, neueste zuerst.
+    public static func requests(withSubjectContaining text: String, config: ManageEngineConfig, token: String, rowCount: Int = 25) throws -> URLRequest {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { throw ManageEngineError.unexpectedResponse }
+        let input: [String: Any] = [
+            "list_info": [
+                "row_count": rowCount,
+                "start_index": 1,
+                "sort_field": "created_time",
+                "sort_order": "desc",
+                "search_criteria": [
+                    ["field": "subject", "condition": "contains", "value": clean],
+                ],
+            ] as [String: Any],
+        ]
+        return try get(path: "/api/v3/requests", input: input, config: config, token: token, requireTechnician: false)
+    }
+
     // MARK: Antworten lesen
 
     public static func parseTickets(_ data: Data, config: ManageEngineConfig) throws -> [ManageEngineTicket] {

@@ -15,7 +15,8 @@ Aufbau: dunkel und ruhig, oben die Leiste mit Start, Plan, Kalender, Fokus, Kund
 | Start | Großes Datum, Stunden heute und diese Woche. Links die Aufgaben von heute (neue oben oder unten einfügen, per Ziehen sortieren), darunter die Erledigt-Liste und der Eingang. Rechts der Tageskalender, an der Kante breiter ziehbar; die Lupen machen die Stunden höher. |
 | Unteraufgaben | Beim Darüberfahren über eine Aufgabe das Listen-Symbol neben ▶, Rechtsklick › „Unteraufgabe hinzufügen“ oder im Fokus „Unteraufgaben“; geht in Start, Eingang, Woche und bei den Kunden. Claude legt sie über MCP mit `unteraufgabe_von` an. Jede Unteraufgabe hat ihren eigenen Timer und kann ein eigenes Ticket haben; Kunde, SAP-Aufgabe und Ticket erbt sie sonst von der Aufgabe darüber. Im Tagesabschluss steht sie als eigene Zeile („Aufgabe: Unteraufgabe“). |
 | Zeit nachtragen | Vergessen, den Timer zu starten? Auf Start „Nachtragen“, ⌥⌘T, Rechtsklick auf eine Aufgabe › „Zeit nachtragen …“ oder im Fokus „Vergessen zu starten?“. Dort startet der Timer auch rückwirkend („läuft schon seit 15 Minuten“ oder „seit dem letzten Eintrag“), ohne sich mit erfassten Zeiten zu überschneiden. |
-| Ticket zuordnen | Jede eigene Aufgabe oder Unteraufgabe lässt sich einem Ticket zuordnen (Rechtsklick › „Ticket zuordnen“ oder der Ticket-Knopf im Fokus). Gesucht wird nach Nummer oder Betreff; eine unbekannte Nummer fragt Tagwerk bei ManageEngine nach. Die Zeit geht dann zusätzlich als Worklog an das Ticket. |
+| Ticket zuordnen | Jede eigene Aufgabe oder Unteraufgabe lässt sich einem Ticket zuordnen (Rechtsklick › „Ticket zuordnen“ oder der Ticket-Knopf im Fokus). Gesucht wird nach Nummer oder Betreff, auf Wunsch direkt in ManageEngine über alle Techniker (auch Tickets von Kollegen). Die Zeit geht dann zusätzlich als Worklog an das Ticket. |
+| Ziele | Lange Ziele über Wochen, z. B. „AZ-305 bestehen“: Zieldatum, Stundenziel, Fortschrittsbalken und das nötige Tempo („≈ 4 h pro Woche nötig“). Aufgaben ordnest du per Rechtsklick › Ziel zu, ziehst sie auf ein Ziel oder legst sie direkt im Ziel an; ihre Zeit (auch die der Unteraufgaben) zählt mit. Die aktiven Ziele stehen auch auf Start und im Rückblick. ⌘6 öffnet die Ziele, der Rückblick ist jetzt ⌘7. |
 | Plan | Woche planen: links der Eingang, daneben eine Spalte je Tag mit geplanter und freier Zeit. Aufgaben zieht man zwischen den Tagen hin und her. |
 | Kalender | Die Woche mit Terminen, Zeitblöcken und erfasster Zeit in Kundenfarben, Stunden je Tag und gegen das Wochenziel. Doppelklick oder „Zeit nachtragen“ erfasst Arbeit nachträglich. |
 | Tag planen | Geführte Planung beim ersten Öffnen am Tag: Übriges von gestern, Eingang, schätzen, in freie Lücken legen. |
@@ -140,7 +141,8 @@ Alle Daten liegen lokal in `~/Library/Application Support/Tagwerk/tagwerk.sqlite
 | ⌘N | Neue Aufgabe (auf Start) |
 | ⌘T | Timer der Fokus-Aufgabe starten oder stoppen |
 | ⌘↩ | Fokus-Aufgabe erledigt |
-| ⌘1 bis ⌘6 | Start, Plan, Kalender, Fokus, Kunden, Rückblick |
+| ⌘1 bis ⌘7 | Start, Plan, Kalender, Fokus, Kunden, Ziele, Rückblick |
+| ⌥⌘T | Zeit nachtragen |
 | ⌘0 | Tag planen |
 | ⌘9 | Tag abschließen |
 | Esc | Fokus verlassen |

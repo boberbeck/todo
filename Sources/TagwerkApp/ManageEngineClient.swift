@@ -99,6 +99,14 @@ final class ManageEngineClient {
         return try ManageEngineAPI.parseTickets(data, config: config)
     }
 
+    /// Tickets aller Techniker mit diesem Text im Betreff; offene zuerst.
+    func searchTickets(subject: String) async throws -> [ManageEngineTicket] {
+        let config = self.config
+        let data = try await send(ManageEngineAPI.requests(withSubjectContaining: subject, config: config, token: try requireToken()))
+        let tickets = try ManageEngineAPI.parseTickets(data, config: config)
+        return tickets.filter(\.isOpen) + tickets.filter { !$0.isOpen }
+    }
+
     /// Sucht ein Ticket über die Nummer, die Menschen sehen: erst direkt (lokale Installation), dann per Suche (Cloud).
     func ticket(number: String) async throws -> ManageEngineTicket? {
         let config = self.config

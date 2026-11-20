@@ -169,6 +169,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
     public var ticketKey: String?
     /// Tätigkeit aus SAP (Activity), passend zum PSP-Element, z. B. „Interne Besprechung“.
     public var sapActivity: String?
+    /// Langes Ziel, auf das die Aufgabe einzahlt (z. B. „AZ-305 bestehen“).
+    public var longGoalID: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -195,7 +197,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         parentID: UUID? = nil,
         ticketNumber: String? = nil,
         ticketKey: String? = nil,
-        sapActivity: String? = nil
+        sapActivity: String? = nil,
+        longGoalID: UUID? = nil
     ) {
         self.id = id
         self.title = title
@@ -222,6 +225,7 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         self.ticketNumber = ticketNumber
         self.ticketKey = ticketKey
         self.sapActivity = sapActivity
+        self.longGoalID = longGoalID
     }
 
     public var isDone: Bool { status == .done }
@@ -257,6 +261,7 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
             copy.ticketKey = parent.linkedTicketKey
         }
         if copy.worklogType == nil { copy.worklogType = parent.worklogType }
+        if copy.longGoalID == nil { copy.longGoalID = parent.longGoalID }
         return copy
     }
 

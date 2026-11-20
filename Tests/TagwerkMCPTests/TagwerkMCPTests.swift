@@ -243,3 +243,30 @@ final class MCPSubtaskTests: XCTestCase {
         XCTAssertNil(try store.load().tasks.first { $0.id == subtask.id }?.ticketNumber)
     }
 }
+
+final class MCPLongGoalTests: XCTestCase {
+    func testCreateGoalAndAssignTask() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 10))!
+        let store = InMemoryStore()
+        let tools = TagwerkTools(store: store, calendar: calendar, now: { now })
+
+        _ = try tools.call(name: "ziel_anlegen", arguments: ["titel": "AZ-305 bestehen", "bis": "2027-01-15", "stunden": 40])
+        let goal = try XCTUnwrap(try store.load().longGoals.first)
+        XCTAssertEqual(goal.dueDate, LocalDate(year: 2027, month: 1, day: 15))
+        XCTAssertEqual(goal.targetMinutes, 2400)
+
+        _ = try tools.call(name: "aufgabe_anlegen", arguments: ["titel": "Modul 1 lernen 1h30", "ziel": "az-305"])
+        let task = try XCTUnwrap(try store.load().tasks.first)
+        XCTAssertEqual(task.longGoalID, goal.id)
+
+        let list = try tools.call(name: "ziele", arguments: [:])
+        XCTAssertTrue(list.contains("Modul 1 lernen"), list)
+        XCTAssertTrue(list.contains("noetig_pro_woche_min"), list)
+
+        _ = try tools.call(name: "aufgabe_aendern", arguments: ["id": String(task.id.uuidString.prefix(8)), "ziel": ""])
+        XCTAssertNil(try store.load().tasks.first?.longGoalID)
+        XCTAssertThrowsError(try tools.call(name: "aufgabe_aendern", arguments: ["id": String(task.id.uuidString.prefix(8)), "ziel": "Gibt es nicht"]))
+    }
+}

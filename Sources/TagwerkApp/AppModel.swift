@@ -12,6 +12,7 @@ enum SidebarItem: Hashable {
     case calendar
     case focus
     case customers
+    case goals
     case review
     case planning
     case close
@@ -28,6 +29,8 @@ final class AppModel {
     private(set) var pspElements: [PSPElement] = []
     private(set) var bookings: [Booking] = []
     private(set) var goals: [WeeklyGoal] = []
+    /// Lange Ziele über Wochen (z. B. „AZ-305 bestehen“)
+    private(set) var longGoals: [LongGoal] = []
     /// Erkannte Pause während eines laufenden Timers, wartet auf eine Entscheidung.
     var idlePrompt: IdlePrompt?
     /// Zeigt den Abgleich mit SAP ByDesign. `sapSyncRows` füllt ihn vorab (Vorschau, Bildschirmfotos).
@@ -515,6 +518,24 @@ final class AppModel {
         } catch {
             setTicket(number: number, key: nil, for: id)
             return "Ticket #\(number) zugeordnet, aber ManageEngine antwortet nicht: \(error)"
+        }
+    }
+
+    /// Sucht in ManageEngine nach Tickets, auch von anderen Technikern: Nummer oder Text im Betreff.
+    func searchManageEngineTickets(_ query: String) async throws -> [ManageEngineTicket] {
+        guard manageEngine.isReady else { throw ManageEngineError.notConfigured }
+        let clean = query.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        if !clean.isEmpty, clean.allSatisfy(\.isNumber) {
+            return try await manageEngine.ticket(number: clean).map { [$0] } ?? []
+        }
+        return try await manageEngine.searchTickets(subject: clean)
+    }
+
+    /// Ordnet ein Ticket aus der Suche in ManageEngine zu (muss nicht das eigene sein).
+    func linkTicket(_ ticket: ManageEngineTicket, to id: UUID) {
+        setTicket(number: ticket.number, key: ticket.key, for: id)
+        if let task = self.task(id), task.customerID == nil, let customerID = customerID(forAccount: ticket.accountName) {
+            setCustomer(customerID, for: id)
         }
     }
 
@@ -1476,6 +1497,97 @@ final class AppModel {
         save(goal)
     }
 
+    // MARK: Lange Ziele
+
+    /// Aktive Ziele nach Zieldatum, danach erledigte.
+    var sortedLongGoals: [LongGoal] { Goals.sorted(longGoals) }
+
+    var activeLongGoals: [LongGoal] { sortedLongGoals.filter { !$0.isDone } }
+
+    func longGoal(_ id: UUID?) -> LongGoal? {
+        guard let id else { return nil }
+        return longGoals.first { $0.id == id }
+    }
+
+    func progress(of goal: LongGoal) -> GoalProgress {
+        Goals.progress(of: goal, tasks: tasks, entries: entries, today: today, now: runningEntry == nil ? Date() : now)
+    }
+
+    /// Aufgaben des Ziels (ohne Unteraufgaben): offene zuerst.
+    func goalTasks(_ goal: LongGoal) -> [TaskItem] {
+        Goals.tasks(of: goal, in: tasks)
+            .filter { $0.parentID == nil }
+            .sorted { lhs, rhs in
+                if lhs.isDone != rhs.isDone { return !lhs.isDone }
+                if lhs.isDone { return (lhs.completedAt ?? .distantPast) > (rhs.completedAt ?? .distantPast) }
+                return lhs.createdAt < rhs.createdAt
+            }
+    }
+
+    @discardableResult
+    func addLongGoal(title rawTitle: String, dueDate: LocalDate?, targetMinutes: Int?, customerID: UUID?) -> LongGoal? {
+        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        let goal = LongGoal(title: title, customerID: customerID, dueDate: dueDate, targetMinutes: targetMinutes.flatMap { $0 > 0 ? $0 : nil })
+        save(goal)
+        return goal
+    }
+
+    func update(_ goal: LongGoal) {
+        save(goal)
+    }
+
+    func toggleLongGoal(_ id: UUID) {
+        guard var goal = longGoal(id) else { return }
+        goal.isDone.toggle()
+        goal.completedAt = goal.isDone ? Date() : nil
+        save(goal)
+    }
+
+    func deleteLongGoal(_ id: UUID) {
+        do {
+            try store.deleteLongGoal(id: id)
+            longGoals.removeAll { $0.id == id }
+            for index in tasks.indices where tasks[index].longGoalID == id {
+                tasks[index].longGoalID = nil
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Aufgabe einem langen Ziel zuordnen (`nil` = keinem). Ohne Kunden übernimmt sie den des Ziels.
+    func setLongGoal(_ goalID: UUID?, for taskID: UUID) {
+        guard var task = self.task(taskID), task.longGoalID != goalID else { return }
+        task.longGoalID = goalID
+        if task.customerID == nil, let customerID = longGoal(goalID)?.customerID {
+            task.customerID = customerID
+        }
+        persist(task)
+    }
+
+    /// Neue Aufgabe für ein Ziel, im Eingang (oder für heute).
+    @discardableResult
+    func addTask(title: String, toGoal goalID: UUID, plannedDate: LocalDate? = nil) -> TaskItem? {
+        guard var task = addTask(title: title, customerID: longGoal(goalID)?.customerID, plannedDate: plannedDate) else { return nil }
+        task.longGoalID = goalID
+        persist(task)
+        return task
+    }
+
+    private func save(_ goal: LongGoal) {
+        do {
+            try store.save(goal)
+            if let index = longGoals.firstIndex(where: { $0.id == goal.id }) {
+                longGoals[index] = goal
+            } else {
+                longGoals.append(goal)
+            }
+        } catch {
+            report(error)
+        }
+    }
+
     func deleteGoal(_ id: UUID) {
         do {
             try store.deleteGoal(id: id)
@@ -1638,6 +1750,7 @@ final class AppModel {
             pspElements = snapshot.pspElements
             bookings = snapshot.bookings
             goals = snapshot.goals
+            longGoals = snapshot.longGoals
         } catch {
             report(error)
         }

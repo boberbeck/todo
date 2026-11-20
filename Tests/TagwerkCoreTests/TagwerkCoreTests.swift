@@ -1269,3 +1269,109 @@ final class BackdatedTimerTests: XCTestCase {
         XCTAssertNil(TimerLogic.start(taskID: task, entries: [running], since: minutes(-2), now: base).restarted, "später ändert nichts")
     }
 }
+
+/// Lange Ziele wie „AZ-305 bestehen“.
+final class LongGoalTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        calendar.firstWeekday = 2
+        return calendar
+    }
+
+    /// Donnerstag, 19.11.2026
+    private let today = LocalDate(year: 2026, month: 11, day: 19)
+
+    private func at(_ day: LocalDate, _ hour: Int) -> Date {
+        FreeTime.date(on: day, minutes: hour * 60, calendar: calendar)
+    }
+
+    func testProgressCountsTasksAndSubtasks() {
+        let created = at(today.adding(days: -28, calendar: calendar), 9)
+        let goal = LongGoal(title: "AZ-305 bestehen", dueDate: today.adding(days: 28, calendar: calendar), targetMinutes: 40 * 60, createdAt: created)
+        let module = TaskItem(title: "Modul 1", status: .done, longGoalID: goal.id)
+        let step = TaskItem(title: "Kapitel 3", parentID: module.id)
+        let practice = TaskItem(title: "Übungstest", longGoalID: goal.id)
+        let other = TaskItem(title: "Kundenprojekt")
+        let entries = [
+            TimeEntry(taskID: module.id, start: at(today.adding(days: -10, calendar: calendar), 18), end: at(today.adding(days: -10, calendar: calendar), 20)),
+            TimeEntry(taskID: step.id, start: at(today, 18), end: at(today, 19)),
+            TimeEntry(taskID: other.id, start: at(today, 9), end: at(today, 17)),
+        ]
+        let progress = Goals.progress(of: goal, tasks: [module, step, practice, other], entries: entries, today: today, now: at(today, 21), calendar: calendar)
+        XCTAssertEqual(progress.trackedMinutes, 180, "Unteraufgaben zählen mit, fremde Aufgaben nicht")
+        XCTAssertEqual(progress.trackedThisWeek, 3600)
+        XCTAssertEqual(progress.doneTasks, 1)
+        XCTAssertEqual(progress.openTasks, 1, "Unteraufgaben sind Schritte, keine eigenen Aufgaben")
+        XCTAssertEqual(progress.daysLeft, 28)
+        XCTAssertEqual(progress.fraction ?? 0, 3.0 / 40, accuracy: 0.001)
+        XCTAssertEqual(progress.minutesPerWeekNeeded, Int((37.0 * 60 / (29.0 / 7)).rounded(.up)))
+        XCTAssertTrue(progress.isBehind, "halbe Zeit vorbei, kaum Stunden")
+    }
+
+    func testWithoutHoursProgressIsTasks() {
+        let goal = LongGoal(title: "Umzug Rechenzentrum")
+        let tasks = [
+            TaskItem(title: "A", status: .done, longGoalID: goal.id),
+            TaskItem(title: "B", status: .done, longGoalID: goal.id),
+            TaskItem(title: "C", longGoalID: goal.id),
+            TaskItem(title: "D", longGoalID: goal.id),
+        ]
+        let progress = Goals.progress(of: goal, tasks: tasks, entries: [], today: today, now: at(today, 12), calendar: calendar)
+        XCTAssertEqual(progress.fraction, 0.5)
+        XCTAssertNil(progress.daysLeft)
+        XCTAssertNil(progress.minutesPerWeekNeeded)
+        XCTAssertFalse(progress.isBehind)
+    }
+
+    func testSortingAndInheritance() {
+        let later = LongGoal(title: "Später", dueDate: today.adding(days: 60, calendar: calendar))
+        let sooner = LongGoal(title: "Bald", dueDate: today.adding(days: 10, calendar: calendar))
+        let open = LongGoal(title: "Offen")
+        let done = LongGoal(title: "Fertig", isDone: true)
+        XCTAssertEqual(Goals.sorted([done, open, later, sooner]).map(\.title), ["Bald", "Später", "Offen", "Fertig"])
+
+        let parent = TaskItem(title: "Lernen", longGoalID: sooner.id)
+        let child = TaskItem(title: "Kapitel", parentID: parent.id)
+        XCTAssertEqual(child.resolved(parent: parent).longGoalID, sooner.id)
+    }
+
+    func testSQLiteKeepsLongGoals() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tagwerk-ziel-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = try SQLiteStore(url: folder.appendingPathComponent("tagwerk.sqlite"))
+        let goal = LongGoal(title: "AZ-305 bestehen", dueDate: today, targetMinutes: 2400, notes: "Pearson VUE",
+                            createdAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let task = TaskItem(title: "Modul 1", createdAt: Date(timeIntervalSince1970: 1_700_000_000), longGoalID: goal.id)
+        try store.save(goal)
+        try store.save(task)
+        XCTAssertEqual(try store.load().longGoals, [goal])
+        XCTAssertEqual(try store.load().tasks.first?.longGoalID, goal.id)
+        XCTAssertEqual(try store.changes(since: Date(timeIntervalSince1970: 0)).modified["long_goal"], [goal.id])
+
+        try store.deleteLongGoal(id: goal.id)
+        XCTAssertTrue(try store.load().longGoals.isEmpty)
+        XCTAssertNil(try store.load().tasks.first?.longGoalID, "Aufgaben verlieren nur die Verknüpfung")
+    }
+
+    func testSubjectSearchRequest() throws {
+        let config = ManageEngineConfig(baseURL: "https://helpdesk.example.com", technicianID: "301")
+        let request = try ManageEngineAPI.requests(withSubjectContaining: " VPN Lager ", config: config, token: "T")
+        XCTAssertEqual(request.url?.path, "/api/v3/requests")
+        let components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)
+        let input = components?.queryItems?.first { $0.name == "input_data" }?.value ?? ""
+        let listInfo = (try JSONSerialization.jsonObject(with: Data(input.utf8)) as? [String: Any])?["list_info"] as? [String: Any]
+        let criteria = (listInfo?["search_criteria"] as? [[String: Any]])?.first
+        XCTAssertEqual(criteria?["field"] as? String, "subject")
+        XCTAssertEqual(criteria?["condition"] as? String, "contains")
+        XCTAssertEqual(criteria?["value"] as? String, "VPN Lager")
+        XCTAssertFalse(input.contains("technician"), "sucht über alle Techniker")
+
+        let single = """
+        {"request":{"id":"100777","display_id":{"display_value":"4711","value":"4711"},"subject":"Drucker Lager","status":{"name":"Offen","in_progress":true}},"response_status":{"status_code":2000}}
+        """
+        let parsed = try ManageEngineAPI.parseTickets(Data(single.utf8), config: config)
+        XCTAssertEqual(parsed.first?.key, "100777")
+        XCTAssertEqual(parsed.first?.number, "4711")
+    }
+}

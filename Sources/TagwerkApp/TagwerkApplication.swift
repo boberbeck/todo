@@ -85,8 +85,10 @@ struct TagwerkCommands: Commands {
                 .keyboardShortcut("4", modifiers: .command)
             Button("Kunden") { model.selection = .customers }
                 .keyboardShortcut("5", modifiers: .command)
-            Button("Rückblick") { model.selection = .review }
+            Button("Ziele") { model.selection = .goals }
                 .keyboardShortcut("6", modifiers: .command)
+            Button("Rückblick") { model.selection = .review }
+                .keyboardShortcut("7", modifiers: .command)
             Divider()
             Button("Tag planen") { model.selection = .planning }
                 .keyboardShortcut("0", modifiers: .command)

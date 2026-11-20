@@ -167,6 +167,8 @@ struct StartTaskColumn: View {
                 }
             }
 
+            GoalStrip()
+
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Button {

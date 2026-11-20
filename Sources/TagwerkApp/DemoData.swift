@@ -144,6 +144,22 @@ enum DemoData {
                      estimateMinutes: 60, workType: .projekt, sortIndex: 1, createdAt: now.addingTimeInterval(-4 * hour)),
         ]
 
+        // Langes Ziel: Zertifizierung mit Prüfungstermin und 40 Stunden Lernzeit
+        let azure = LongGoal(title: "AZ-305 bestehen", dueDate: today.adding(days: 52, calendar: calendar), targetMinutes: 40 * 60,
+                             notes: "Prüfung bei Pearson VUE", createdAt: now.addingTimeInterval(-24 * 86400))
+        let learned = TaskItem(title: "Modul Identität & Governance", estimateMinutes: 240, status: .done,
+                               completedAt: now.addingTimeInterval(-3 * 86400), sortIndex: 1,
+                               createdAt: now.addingTimeInterval(-20 * 86400), longGoalID: azure.id)
+        let storage = TaskItem(title: "Modul Datenspeicherung lernen", plannedDate: today, estimateMinutes: 90, sortIndex: 6,
+                               createdAt: now.addingTimeInterval(-2 * 86400), longGoalID: azure.id)
+        let practice = TaskItem(title: "Übungstest Microsoft Learn", estimateMinutes: 60,
+                                createdAt: now.addingTimeInterval(-86400), longGoalID: azure.id)
+        tasks += [learned, storage, practice]
+        for (daysAgo, minutes) in [(18, 90.0), (15, 120), (11, 75), (6, 150), (4, 120), (1, 60)] {
+            let start = today.adding(days: -daysAgo, calendar: calendar).startDate(calendar: calendar).addingTimeInterval(18 * hour)
+            entries.append(TimeEntry(taskID: learned.id, start: start, end: start.addingTimeInterval(minutes * minute)))
+        }
+
         // Frühere Wochen für den Verlauf im Rückblick
         let weekHours: [Double] = [26, 31, 22, 34, 29, 24]
         for (index, hours) in weekHours.enumerated() {
@@ -217,7 +233,7 @@ enum DemoData {
 
         return Snapshot(customers: [mueller, stadtwerke, becker], tasks: tasks, entries: entries,
                         pspElements: psps, bookings: bookings,
-                        goals: [goalOffer, goalStoerungen, goalMigration, goalNext])
+                        goals: [goalOffer, goalStoerungen, goalMigration, goalNext], longGoals: [azure])
     }
 
     /// So sieht die englische Aufgabenliste aus ByDesign aus (für Bildschirmfotos): mehrere Activities je Aufgabe.

@@ -212,17 +212,21 @@ struct TicketPicker: View {
     @State private var query = ""
     @State private var message: String?
     @State private var isLooking = false
+    @State private var remote: [ManageEngineTicket] = []
+    @State private var remoteQuery = ""
+    @State private var isSearchingRemote = false
     @FocusState private var focused: Bool
 
     var body: some View {
         let found = results
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
         let typedNumber = cleanedNumber
         let current = model.task(taskID)
         VStack(alignment: .leading, spacing: 8) {
             Text(current.map { "Ticket für „\($0.title)“" } ?? "Ticket zuordnen")
                 .font(.headline)
                 .lineLimit(1)
-            TextField("Ticketnummer oder Betreff", text: $query)
+            TextField("Ticketnummer oder Betreff, auch von Kollegen", text: $query)
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
                 .onSubmit {
@@ -230,6 +234,8 @@ struct TicketPicker: View {
                         choose(first)
                     } else if let typedNumber {
                         lookUp(typedNumber)
+                    } else if trimmed.count >= 3, model.canUseManageEngine {
+                        searchRemote(trimmed)
                     }
                 }
             ScrollView {
@@ -272,10 +278,57 @@ struct TicketPicker: View {
                         .disabled(isLooking)
                         .padding(8)
                     }
-                    if found.isEmpty, typedNumber == nil {
+                    if typedNumber == nil, trimmed.count >= 3, model.canUseManageEngine, remoteQuery != trimmed {
+                        Button {
+                            searchRemote(trimmed)
+                        } label: {
+                            Label(isSearchingRemote ? "Sucht in ManageEngine …" : "In ManageEngine suchen: „\(trimmed)“ (alle Techniker)", systemImage: "magnifyingglass")
+                        }
+                        .disabled(isSearchingRemote)
+                        .padding(8)
+                    }
+                    if !remote.isEmpty {
+                        Text("AUS MANAGEENGINE")
+                            .font(.caption2.weight(.semibold))
+                            .tracking(1.2)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.top, 6)
+                        ForEach(remote, id: \.key) { ticket in
+                            Button {
+                                model.linkTicket(ticket, to: taskID)
+                                onDone()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Text("#\(ticket.number)")
+                                        .monospacedDigit()
+                                        .foregroundStyle(Theme.accent)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(ticket.subject)
+                                            .lineLimit(1)
+                                        Text([ticket.accountName, ticket.statusName.isEmpty ? nil : ticket.statusName].compactMap { $0 }.joined(separator: " · "))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                    Spacer()
+                                    if !ticket.isOpen {
+                                        Text("geschlossen")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    if found.isEmpty, remote.isEmpty, typedNumber == nil, trimmed.count < 3 {
                         Text(model.ticketTasks.isEmpty
-                             ? "Noch keine Tickets in Tagwerk. Tippe die Ticketnummer ein."
-                             : "Nichts gefunden. Tippe die Ticketnummer ein, dann fragt Tagwerk ManageEngine.")
+                             ? "Noch keine Tickets in Tagwerk. Tippe die Ticketnummer oder Wörter aus dem Betreff ein."
+                             : "Tippe die Ticketnummer oder Wörter aus dem Betreff; Tagwerk sucht dann auch in ManageEngine.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .padding(8)
@@ -337,6 +390,21 @@ struct TicketPicker: View {
     private func choose(_ ticket: TaskItem) {
         model.linkTicket(ticket, to: taskID)
         onDone()
+    }
+
+    private func searchRemote(_ text: String) {
+        isSearchingRemote = true
+        message = nil
+        Task {
+            do {
+                remote = try await model.searchManageEngineTickets(text)
+                remoteQuery = text
+                if remote.isEmpty { message = "In ManageEngine nichts mit „\(text)“ im Betreff gefunden." }
+            } catch {
+                message = "Suche in ManageEngine fehlgeschlagen: \(error)"
+            }
+            isSearchingRemote = false
+        }
     }
 
     private func lookUp(_ number: String) {

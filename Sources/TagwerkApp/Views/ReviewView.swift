@@ -156,6 +156,31 @@ struct ReviewView: View {
                 }
                 .card(padding: 22)
 
+                if !model.activeLongGoals.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionLabel(text: "Lange Ziele", detail: "Stand heute")
+                        ForEach(model.activeLongGoals) { goal in
+                            let progress = model.progress(of: goal)
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(goal.title)
+                                    Spacer()
+                                    Text(GoalText.amount(progress))
+                                        .font(.callout.monospacedDigit())
+                                        .foregroundStyle(Theme.secondary)
+                                }
+                                ProgressLine(value: progress.fraction ?? 0, height: 6)
+                                Text([GoalText.summary(goal, progress: progress, customer: model.customer(goal.customerID)?.name), GoalText.pace(progress)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                                    .font(.caption)
+                                    .foregroundStyle(progress.isBehind ? Theme.accent : Theme.tertiary)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .card(padding: 22)
+                }
+
                 HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionLabel(text: "Wochenziele", detail: "\(goals.filter(\.isDone).count) von \(goals.count) erreicht")

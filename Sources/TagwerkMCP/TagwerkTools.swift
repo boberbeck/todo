@@ -19,6 +19,7 @@ public final class TagwerkTools {
     Aufgaben können Unteraufgaben haben (aufgabe_anlegen mit unteraufgabe_von); diese erben Kunde, PSP-Element, \
     Tätigkeit und Ticket. Eigene Aufgaben lassen sich einem Ticket aus ManageEngine zuordnen (Parameter ticket), \
     zum PSP-Element gehört die Tätigkeit (Activity) aus SAP (Parameter taetigkeit). \
+    Lange Ziele (z. B. „AZ-305 bestehen“, Werkzeug ziele) haben Zieldatum und Stundenziel; Aufgaben zahlen über den Parameter ziel darauf ein. \
     IDs aus den Antworten sind für Änderungen nötig; die ersten 8 Zeichen reichen. \
     Datumsangaben: heute, morgen, gestern, JJJJ-MM-TT oder TT.MM.JJJJ. Gebucht wird nur in der App selbst.
     """
@@ -73,6 +74,7 @@ public final class TagwerkTools {
                     "taetigkeit": text("Tätigkeit (Activity) aus SAP zum PSP-Element"),
                     "ticket": text("Ticketnummer aus ManageEngine; die Zeit geht dann auch als Worklog dorthin"),
                     "unteraufgabe_von": text("ID der übergeordneten Aufgabe; dann ist dies eine Unteraufgabe"),
+                    "ziel": text("Langes Ziel, auf das die Aufgabe einzahlt (Titel oder ID, siehe „ziele“)"),
                 ],
                 required: ["titel"]
             ),
@@ -89,6 +91,7 @@ public final class TagwerkTools {
                     "psp": text("PSP-Element; leer entfernt es"),
                     "taetigkeit": text("Tätigkeit (Activity) aus SAP; leer entfernt sie"),
                     "ticket": text("Ticketnummer zuordnen; leer entfernt die Zuordnung"),
+                    "ziel": text("Langes Ziel (Titel oder ID); leer entfernt die Zuordnung"),
                     "beschreibung": text("Beschreibung der Bearbeitung (Text für Worklog und SAP)"),
                     "kunde": text("Kundenname; leer entfernt den Kunden"),
                     "erledigt": flag("true = erledigt, false = wieder offen"),
@@ -129,6 +132,22 @@ public final class TagwerkTools {
                 properties: ["woche": text("Ein Tag in der gewünschten Woche")]
             ),
             tool(
+                "ziele",
+                "Lange Ziele über Wochen (z. B. „AZ-305 bestehen“) mit Zieldatum, Stundenziel, erfasster Zeit, nötigem Tempo und offenen Aufgaben.",
+                properties: ["alle": flag("true = auch erreichte Ziele")]
+            ),
+            tool(
+                "ziel_anlegen",
+                "Ein langes Ziel anlegen, auf das Aufgaben einzahlen.",
+                properties: [
+                    "titel": text("Was soll erreicht werden, z. B. „AZ-305 bestehen“"),
+                    "bis": text("Zieldatum, z. B. 2027-01-15"),
+                    "stunden": number("Stundenziel, z. B. 40"),
+                    "kunde": text("Kundenname"),
+                ],
+                required: ["titel"]
+            ),
+            tool(
                 "wochenziel_anlegen",
                 "Ein Wochenziel anlegen.",
                 properties: [
@@ -156,6 +175,8 @@ public final class TagwerkTools {
         case "kunden": return try customers()
         case "wochenziele": return try weeklyGoals(arguments)
         case "wochenziel_anlegen": return try addWeeklyGoal(arguments)
+        case "ziele": return try longGoals(arguments)
+        case "ziel_anlegen": return try addLongGoal(arguments)
         default: throw ToolError("Unbekanntes Werkzeug: \(name)")
         }
     }
@@ -251,6 +272,11 @@ public final class TagwerkTools {
         if let number = string(arguments, "ticket") {
             assignTicket(number, to: &task, in: snapshot)
         }
+        if let reference = string(arguments, "ziel") {
+            let goal = try resolveLongGoal(reference, in: snapshot.longGoals)
+            task.longGoalID = goal.id
+            if task.customerID == nil { task.customerID = goal.customerID }
+        }
         try store.save(task)
         let updated = try store.load()
         return json(["angelegt": describe(task, in: updated, day: nil)])
@@ -294,6 +320,9 @@ public final class TagwerkTools {
         }
         if arguments["kunde"] != nil {
             task.customerID = try string(arguments, "kunde").map { try resolveCustomer($0, in: snapshot.customers).id }
+        }
+        if arguments["ziel"] != nil {
+            task.longGoalID = try string(arguments, "ziel").map { try resolveLongGoal($0, in: snapshot.longGoals).id }
         }
         if let done = bool(arguments, "erledigt"), done != task.isDone {
             if done {
@@ -489,6 +518,66 @@ public final class TagwerkTools {
         return json(["angelegt": ["id": goal.id.uuidString, "titel": goal.title, "woche_ab": week.string]])
     }
 
+    private func longGoals(_ arguments: [String: Any]) throws -> String {
+        let snapshot = try store.load()
+        let all = bool(arguments, "alle") == true
+        let goals = Goals.sorted(snapshot.longGoals).filter { all || !$0.isDone }
+        let customersByID = Dictionary(uniqueKeysWithValues: snapshot.customers.map { ($0.id, $0) })
+        return json([
+            "ziele": goals.map { goal -> [String: Any] in
+                let progress = Goals.progress(of: goal, tasks: snapshot.tasks, entries: snapshot.entries, today: today, now: now(), calendar: calendar)
+                var entry: [String: Any] = [
+                    "id": goal.id.uuidString,
+                    "titel": goal.title,
+                    "erreicht": goal.isDone,
+                    "erfasst_min": progress.trackedMinutes,
+                    "diese_woche_min": minutes(progress.trackedThisWeek),
+                    "offene_aufgaben": Goals.tasks(of: goal, in: snapshot.tasks)
+                        .filter { !$0.isDone && $0.parentID == nil }
+                        .map { ["id": $0.id.uuidString, "titel": $0.title] },
+                    "erledigte_aufgaben": progress.doneTasks,
+                    "hinter_dem_plan": progress.isBehind,
+                ]
+                if let due = goal.dueDate { entry["bis"] = due.string }
+                if let days = progress.daysLeft { entry["tage_bis_zieldatum"] = days }
+                if let target = goal.targetMinutes { entry["stundenziel_min"] = target }
+                if let perWeek = progress.minutesPerWeekNeeded { entry["noetig_pro_woche_min"] = perWeek }
+                if let fraction = progress.fraction { entry["fortschritt_prozent"] = Int((fraction * 100).rounded()) }
+                if let customer = goal.customerID.flatMap({ customersByID[$0] }) { entry["kunde"] = customer.name }
+                if !goal.notes.isEmpty { entry["notizen"] = goal.notes }
+                return entry
+            },
+        ])
+    }
+
+    private func addLongGoal(_ arguments: [String: Any]) throws -> String {
+        let snapshot = try store.load()
+        guard let title = string(arguments, "titel") else { throw ToolError("Titel fehlt.") }
+        let due = try parseDay(string(arguments, "bis"))
+        let customer = try string(arguments, "kunde").map { try resolveCustomer($0, in: snapshot.customers) }
+        let target = int(arguments, "stunden").map { $0 * 60 }
+        let goal = LongGoal(title: title, customerID: customer?.id, dueDate: due, targetMinutes: target, createdAt: now())
+        try store.save(goal)
+        var entry: [String: Any] = ["id": goal.id.uuidString, "titel": goal.title]
+        if let due { entry["bis"] = due.string }
+        if let target { entry["stundenziel_min"] = target }
+        return json(["angelegt": entry])
+    }
+
+    func resolveLongGoal(_ reference: String, in goals: [LongGoal]) throws -> LongGoal {
+        let key = reference.trimmingCharacters(in: .whitespaces)
+        if key.count >= 4, let byID = goals.first(where: { $0.id.uuidString.lowercased().hasPrefix(key.lowercased()) }) { return byID }
+        if let exact = goals.first(where: { $0.title.compare(key, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }) {
+            return exact
+        }
+        let matches = goals.filter { !$0.isDone && $0.title.range(of: key, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        if matches.count == 1 { return matches[0] }
+        let names = goals.filter { !$0.isDone }.map(\.title).joined(separator: ", ")
+        throw ToolError(matches.isEmpty
+            ? "Kein Ziel „\(reference)“. Vorhanden: \(names.isEmpty ? "keine" : names)."
+            : "„\(reference)“ passt auf mehrere Ziele: \(matches.map(\.title).joined(separator: ", ")).")
+    }
+
     // MARK: Hilfen
 
     private var today: LocalDate { LocalDate(now(), calendar: calendar) }
@@ -555,6 +644,7 @@ public final class TagwerkTools {
         if let workType = task.workType { entry["arbeitsart"] = workType.label }
         if let psp = effective.pspElement { entry["psp"] = psp }
         if let activity = effective.sapActivity { entry["taetigkeit"] = activity }
+        if let goal = effective.longGoalID.flatMap({ id in snapshot.longGoals.first { $0.id == id } }) { entry["ziel"] = goal.title }
         if !task.workDescription.isEmpty { entry["beschreibung"] = task.workDescription }
         if !task.notes.isEmpty { entry["notizen"] = task.notes }
         if let goal = snapshot.goals.first(where: { $0.id == task.goalID }) { entry["wochenziel"] = goal.title }

@@ -26,7 +26,7 @@ public final class SQLiteStore: Store {
     private var db: OpaquePointer?
 
     /// Aktuelle Version des Datenbankschemas.
-    public static let schemaVersion = 8
+    public static let schemaVersion = 9
 
     public init(url: URL) throws {
         try FileManager.default.createDirectory(
@@ -234,6 +234,31 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+        if version < 9 {
+            // Lange Ziele (z. B. „AZ-305 bestehen“), auf die Aufgaben einzahlen
+            try exec("""
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS long_goal (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                customer_id TEXT,
+                due_date TEXT,
+                target_minutes INTEGER,
+                notes TEXT NOT NULL DEFAULT '',
+                is_done INTEGER NOT NULL DEFAULT 0,
+                completed_at REAL,
+                created_at REAL NOT NULL,
+                modified_at REAL
+            );
+            CREATE TRIGGER IF NOT EXISTS long_goal_inserted AFTER INSERT ON long_goal BEGIN UPDATE long_goal SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS long_goal_updated AFTER UPDATE ON long_goal BEGIN UPDATE long_goal SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS long_goal_deleted AFTER DELETE ON long_goal BEGIN INSERT OR REPLACE INTO deleted_record (entity, id, deleted_at) VALUES ('long_goal', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+            ALTER TABLE task ADD COLUMN long_goal_id TEXT;
+            CREATE INDEX IF NOT EXISTS task_long_goal ON task (long_goal_id);
+            PRAGMA user_version = 9;
+            COMMIT;
+            """)
+        }
     }
 
     /// Für einen späteren Abgleich: was sich seit `date` geändert hat (Tabelle → IDs) und was gelöscht wurde.
@@ -291,7 +316,7 @@ public final class SQLiteStore: Store {
         SELECT id, title, notes, customer_id, source, external_id, external_url, planned_date,
                estimate_minutes, work_type, psp_element, work_description, status, completed_at,
                sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type,
-               parent_id, ticket_number, ticket_key, sap_activity
+               parent_id, ticket_number, ticket_key, sap_activity, long_goal_id
         FROM task;
         """)
         while try tasks.step() {
@@ -321,7 +346,8 @@ public final class SQLiteStore: Store {
                 parentID: tasks.uuid(21),
                 ticketNumber: tasks.text(22),
                 ticketKey: tasks.text(23),
-                sapActivity: tasks.text(24)
+                sapActivity: tasks.text(24),
+                longGoalID: tasks.uuid(25)
             ))
         }
 
@@ -393,6 +419,24 @@ public final class SQLiteStore: Store {
             ))
         }
 
+        let longGoals = try prepare("""
+        SELECT id, title, customer_id, due_date, target_minutes, notes, is_done, completed_at, created_at FROM long_goal;
+        """)
+        while try longGoals.step() {
+            guard let id = longGoals.uuid(0) else { continue }
+            snapshot.longGoals.append(LongGoal(
+                id: id,
+                title: longGoals.text(1) ?? "",
+                customerID: longGoals.uuid(2),
+                dueDate: longGoals.text(3).flatMap { LocalDate(string: $0) },
+                targetMinutes: longGoals.int(4),
+                notes: longGoals.text(5) ?? "",
+                isDone: (longGoals.int(6) ?? 0) != 0,
+                completedAt: longGoals.date(7),
+                createdAt: longGoals.date(8) ?? Date()
+            ))
+        }
+
         return snapshot
     }
 
@@ -422,8 +466,8 @@ public final class SQLiteStore: Store {
         INSERT INTO task (id, title, notes, customer_id, source, external_id, external_url, planned_date,
                           estimate_minutes, work_type, psp_element, work_description, status, completed_at,
                           sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type,
-                          parent_id, ticket_number, ticket_key, sap_activity)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          parent_id, ticket_number, ticket_key, sap_activity, long_goal_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             notes = excluded.notes,
@@ -447,7 +491,8 @@ public final class SQLiteStore: Store {
             parent_id = excluded.parent_id,
             ticket_number = excluded.ticket_number,
             ticket_key = excluded.ticket_key,
-            sap_activity = excluded.sap_activity;
+            sap_activity = excluded.sap_activity,
+            long_goal_id = excluded.long_goal_id;
         """, [
             .text(task.id.uuidString),
             .text(task.title),
@@ -474,6 +519,7 @@ public final class SQLiteStore: Store {
             .optionalText(task.ticketNumber),
             .optionalText(task.ticketKey),
             .optionalText(task.sapActivity),
+            .optionalText(task.longGoalID?.uuidString),
         ])
     }
 
@@ -570,6 +616,43 @@ public final class SQLiteStore: Store {
             .int(goal.isDone ? 1 : 0),
             .double(goal.createdAt.timeIntervalSince1970),
         ])
+    }
+
+    public func save(_ goal: LongGoal) throws {
+        try run("""
+        INSERT INTO long_goal (id, title, customer_id, due_date, target_minutes, notes, is_done, completed_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            title = excluded.title,
+            customer_id = excluded.customer_id,
+            due_date = excluded.due_date,
+            target_minutes = excluded.target_minutes,
+            notes = excluded.notes,
+            is_done = excluded.is_done,
+            completed_at = excluded.completed_at;
+        """, [
+            .text(goal.id.uuidString),
+            .text(goal.title),
+            .optionalText(goal.customerID?.uuidString),
+            .optionalText(goal.dueDate?.string),
+            .optionalInt(goal.targetMinutes),
+            .text(goal.notes),
+            .int(goal.isDone ? 1 : 0),
+            .optionalDouble(goal.completedAt?.timeIntervalSince1970),
+            .double(goal.createdAt.timeIntervalSince1970),
+        ])
+    }
+
+    public func deleteLongGoal(id: UUID) throws {
+        try exec("BEGIN;")
+        do {
+            try run("UPDATE task SET long_goal_id = NULL WHERE long_goal_id = ?;", [.text(id.uuidString)])
+            try run("DELETE FROM long_goal WHERE id = ?;", [.text(id.uuidString)])
+            try exec("COMMIT;")
+        } catch {
+            try? exec("ROLLBACK;")
+            throw error
+        }
     }
 
     public func deleteGoal(id: UUID) throws {
@@ -732,7 +815,7 @@ final class Statement {
 
 /// Änderungen seit einem Zeitpunkt, als Grundlage für einen Abgleich zwischen Geräten.
 public struct StoreChanges: Equatable, Sendable {
-    public static let tables = ["customer", "task", "time_entry", "psp_element", "booking", "weekly_goal"]
+    public static let tables = ["customer", "task", "time_entry", "psp_element", "booking", "weekly_goal", "long_goal"]
 
     public struct Deletion: Equatable, Sendable {
         public var entity: String
