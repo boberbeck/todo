@@ -1011,6 +1011,10 @@ final class AppModel {
             if config.technicianIDIsNumeric {
                 return ManageEngineCheck(ok: true, message: "Verbindung klappt. Die Techniker-ID kam in den letzten Tickets nicht vor; das ist in Ordnung, wenn dir gerade nichts zugewiesen ist.")
             }
+            // In den Tickets nicht dabei: in der Technikerliste nach dem eingetragenen Namen suchen
+            if !entered.isEmpty, let found = try? await manageEngine.searchTechnicians(entered), !found.isEmpty {
+                return ManageEngineCheck(ok: true, message: "Verbindung klappt. Zu „\(entered)“ gefunden, wähle deinen Eintrag:", suggestions: found)
+            }
             return ManageEngineCheck(
                 ok: true,
                 message: technicians.isEmpty
@@ -1018,6 +1022,19 @@ final class AppModel {
                     : "Verbindung klappt. Wer bist du? Wähle deinen Namen, dann ist die Techniker-ID eingetragen:",
                 suggestions: technicians
             )
+        } catch {
+            return ManageEngineCheck(ok: false, message: String(describing: error))
+        }
+    }
+
+    /// Sucht die eigene Techniker-ID nach Name, Mail-Adresse oder Benutzername.
+    func searchTechnicians(_ query: String) async -> ManageEngineCheck {
+        do {
+            let found = try await manageEngine.searchTechnicians(query)
+            if found.isEmpty {
+                return ManageEngineCheck(ok: false, message: "Niemand zu „\(query)“ gefunden. Versuch den Nachnamen oder die Mail-Adresse.")
+            }
+            return ManageEngineCheck(ok: true, message: found.count == 1 ? "Gefunden:" : "\(found.count) Techniker gefunden, wähle deinen Eintrag:", suggestions: found)
         } catch {
             return ManageEngineCheck(ok: false, message: String(describing: error))
         }

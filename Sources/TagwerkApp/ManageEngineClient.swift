@@ -120,6 +120,61 @@ final class ManageEngineClient {
         return try ManageEngineAPI.parseTechnicians(data)
     }
 
+    /// Sucht Techniker nach Name, Mail-Adresse oder Benutzername. Probiert nacheinander:
+    /// Suche in der Technikerliste, die ganze Liste, die Benutzerliste und zuletzt Tickets mit diesem Techniker.
+    func searchTechnicians(_ query: String) async throws -> [ManageEngineTechnician] {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return [] }
+        let config = self.config
+        let token = try requireToken()
+        var lastError: Error?
+
+        func list(_ request: URLRequest) async -> (technicians: [ManageEngineTechnician], hasMore: Bool)? {
+            do {
+                return try ManageEngineAPI.parseTechnicianList(try await send(request))
+            } catch {
+                lastError = error
+                return nil
+            }
+        }
+
+        func matches(_ technicians: [ManageEngineTechnician]) -> [ManageEngineTechnician] {
+            let found = ManageEngineAPI.technicians(matching: text, in: technicians)
+            return Array(Set(found)).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }
+
+        for path in ["/api/v3/technicians", "/api/v3/users"] {
+            // 1. Suche auf dem Server (Name oder Mail enthält den Text)
+            if let result = await list(try ManageEngineAPI.technicianList(config: config, token: token, query: text, path: path)) {
+                let found = matches(result.technicians)
+                if !found.isEmpty { return found }
+                // Der Server hat gefiltert, aber unsere Regeln passen nicht: alle Treffer zeigen
+                if !result.technicians.isEmpty, result.technicians.count <= 25 { return result.technicians }
+            }
+            // 2. Ganze Liste holen und selbst suchen (findet auch „blulay“ → B. Lulay)
+            var start = 1
+            var collected: [ManageEngineTechnician] = []
+            for _ in 0..<10 {
+                guard let page = await list(try ManageEngineAPI.technicianList(config: config, token: token, startIndex: start, path: path)) else { break }
+                collected += page.technicians
+                guard page.hasMore, !page.technicians.isEmpty else { break }
+                start += page.technicians.count
+            }
+            let found = matches(collected)
+            if !found.isEmpty { return found }
+            if !collected.isEmpty { break }
+        }
+
+        // 3. Tickets, deren Techniker so heißt
+        if let data = try? await send(try ManageEngineAPI.requests(withTechnicianNamed: text, config: config, token: token)),
+           let technicians = try? ManageEngineAPI.parseTechnicians(data), !technicians.isEmpty {
+            let found = matches(technicians)
+            return found.isEmpty ? technicians : found
+        }
+        if let lastError { throw lastError }
+        return []
+    }
+
     private func requireToken() throws -> String {
         if let cachedToken { return cachedToken }
         guard hasToken, let token = Keychain.get(account: Self.tokenAccount), !token.isEmpty else {

@@ -76,11 +76,14 @@ public struct ManageEngineTechnician: Hashable, Sendable, Identifiable {
     public var id: String
     public var name: String
     public var email: String?
+    /// Anmeldename, falls ServiceDesk Plus ihn mitliefert (z. B. „blulay“)
+    public var loginName: String?
 
-    public init(id: String, name: String, email: String? = nil) {
+    public init(id: String, name: String, email: String? = nil, loginName: String? = nil) {
         self.id = id
         self.name = name
         self.email = email
+        self.loginName = loginName
     }
 }
 
@@ -198,6 +201,60 @@ public enum ManageEngineAPI {
         }
     }
 
+    /// Technikerliste von ServiceDesk Plus, optional gefiltert nach Name oder Mail-Adresse.
+    /// `path` ist `/api/v3/technicians` oder, bei manchen Ausgaben, `/api/v3/users`.
+    public static func technicianList(
+        config: ManageEngineConfig,
+        token: String,
+        query: String? = nil,
+        startIndex: Int = 1,
+        rowCount: Int = 100,
+        path: String = "/api/v3/technicians"
+    ) throws -> URLRequest {
+        var listInfo: [String: Any] = ["row_count": rowCount, "start_index": startIndex]
+        if let query = query?.trimmingCharacters(in: .whitespaces), !query.isEmpty {
+            listInfo["search_criteria"] = [
+                ["field": "name", "condition": "contains", "value": query],
+                ["field": "email_id", "condition": "contains", "value": query, "logical_operator": "or"],
+            ]
+        }
+        return try get(path: path, input: ["list_info": listInfo], config: config, token: token, requireTechnician: false)
+    }
+
+    /// Tickets, deren Techniker so heißt (auch ältere). Dient als letzter Weg, die eigene ID zu finden.
+    public static func requests(withTechnicianNamed name: String, config: ManageEngineConfig, token: String) throws -> URLRequest {
+        let input: [String: Any] = [
+            "list_info": [
+                "row_count": 50,
+                "start_index": 1,
+                "search_criteria": [
+                    ["field": "technician.name", "condition": "contains", "value": name],
+                ],
+            ] as [String: Any],
+        ]
+        return try get(path: "/api/v3/requests", input: input, config: config, token: token, requireTechnician: false)
+    }
+
+    /// Liest eine Techniker- oder Benutzerliste. Benutzer ohne Technikerrolle fallen weg.
+    public static func parseTechnicianList(_ data: Data) throws -> (technicians: [ManageEngineTechnician], hasMore: Bool) {
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ManageEngineError.unexpectedResponse
+        }
+        if let message = errorMessage(in: root) { throw ManageEngineError.server(message) }
+        let items = root["technicians"] as? [[String: Any]] ?? root["users"] as? [[String: Any]] ?? []
+        let technicians = items.compactMap { item -> ManageEngineTechnician? in
+            if let isTechnician = item["is_technician"] as? Bool, !isTechnician { return nil }
+            guard let id = stringValue(item["id"]) else { return nil }
+            let login = item["login_name"] as? String
+                ?? (item["login"] as? [String: Any])?["name"] as? String
+                ?? item["user_name"] as? String
+            return ManageEngineTechnician(id: id, name: item["name"] as? String ?? id, email: item["email_id"] as? String, loginName: login)
+        }
+        let listInfo = root["list_info"] as? [String: Any]
+        let hasMore = listInfo?["has_more_rows"] as? Bool ?? false
+        return (technicians, hasMore)
+    }
+
     /// Alle Techniker, die in den Tickets der Antwort vorkommen, nach Name sortiert.
     public static func parseTechnicians(_ data: Data) throws -> [ManageEngineTechnician] {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -225,6 +282,10 @@ public enum ManageEngineAPI {
         return technicians.filter { technician in
             let parts = technician.name.split(whereSeparator: { $0 == " " || $0 == "," }).map { fold(String($0)) }.filter { !$0.isEmpty }
             var candidates = [fold(technician.name)]
+            if let login = technician.loginName {
+                candidates.append(fold(login))
+                candidates.append(fold(String(login.split(separator: "\\").last ?? "")))
+            }
             if let email = technician.email {
                 candidates.append(fold(String(email.split(separator: "@").first ?? "")))
                 candidates.append(fold(email))

@@ -401,6 +401,7 @@ struct ManageEngineSettings: View {
     @State private var editingToken = false
     @State private var check: AppModel.ManageEngineCheck?
     @State private var isChecking = false
+    @State private var searchText = ""
 
     var body: some View {
         let config = ManageEngineConfig(baseURL: baseURL, authKind: ManageEngineConfig.AuthKind(rawValue: authKind) ?? .authtoken, technicianID: technician)
@@ -457,6 +458,14 @@ struct ManageEngineSettings: View {
                     }
                     Spacer()
                 }
+                SettingsField(title: "Techniker suchen", detail: "Name, Mail-Adresse oder Benutzername") {
+                    HStack(spacing: 8) {
+                        SettingsTextField(prompt: "z. B. Lulay oder blulay", text: $searchText, width: 190)
+                            .onSubmit(search)
+                        Button("Suchen", action: search)
+                            .disabled(searchText.trimmingCharacters(in: .whitespaces).isEmpty || !config.hasAddress || !model.hasManageEngineToken || isChecking)
+                    }
+                }
                 if let check {
                     Label(check.message, systemImage: check.ok ? "checkmark.circle.fill" : "xmark.octagon.fill")
                         .foregroundStyle(check.ok ? Color.green : Color.red)
@@ -470,7 +479,7 @@ struct ManageEngineSettings: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(suggestion.name)
-                                Text([suggestion.email, "ID \(suggestion.id)"].compactMap { $0 }.joined(separator: " · "))
+                                Text([suggestion.loginName, suggestion.email, "ID \(suggestion.id)"].compactMap { $0 }.joined(separator: " · "))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -479,12 +488,27 @@ struct ManageEngineSettings: View {
                 }
             } header: {
                 Text("Prüfen")
+            } footer: {
+                SettingsFootnote("„Verbindung testen“ sucht dich in den letzten Tickets. Bist du dort nicht dabei, such nach deinem Namen; Tagwerk schaut dann in der Technikerliste von ServiceDesk Plus.")
             }
         }
-        .settingsPage(height: 620)
+        .settingsPage(height: 660)
         .onChange(of: baseURL) { model.settingsChanged() }
         .onChange(of: authKind) { model.settingsChanged() }
         .onChange(of: technician) { model.settingsChanged() }
+        .onAppear {
+            if searchText.isEmpty, !technician.isEmpty, !config.technicianIDIsNumeric { searchText = technician }
+        }
+    }
+
+    private func search() {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return }
+        Task {
+            isChecking = true
+            check = await model.searchTechnicians(query)
+            isChecking = false
+        }
     }
 
     @ViewBuilder

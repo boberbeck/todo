@@ -820,6 +820,38 @@ final class ManageEngineTechnicianTests: XCTestCase {
         XCTAssertNoThrow(try ManageEngineAPI.connectionTest(config: ManageEngineConfig(baseURL: "https://helpdesk.example.com"), token: "T"))
     }
 
+    func testTechnicianListRequest() throws {
+        let config = ManageEngineConfig(baseURL: "https://helpdesk.example.com", technicianID: "blulay")
+        let request = try ManageEngineAPI.technicianList(config: config, token: "T", query: "Lulay")
+        XCTAssertEqual(request.url?.path, "/api/v3/technicians")
+        let components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)
+        let input = components?.queryItems?.first { $0.name == "input_data" }?.value ?? ""
+        let listInfo = (try JSONSerialization.jsonObject(with: Data(input.utf8)) as? [String: Any])?["list_info"] as? [String: Any]
+        let criteria = listInfo?["search_criteria"] as? [[String: Any]]
+        XCTAssertEqual(criteria?.first?["value"] as? String, "Lulay")
+        XCTAssertEqual(criteria?.last?["logical_operator"] as? String, "or")
+
+        let all = try ManageEngineAPI.technicianList(config: config, token: "T", startIndex: 101, path: "/api/v3/users")
+        XCTAssertEqual(all.url?.path, "/api/v3/users")
+        XCTAssertFalse(all.url?.absoluteString.contains("search_criteria") ?? true)
+    }
+
+    func testParseTechnicianListAndLoginName() throws {
+        let json = """
+        {"users":[
+          {"id":"1501","name":"Björn Lulay","email_id":"bjoern@example.com","login_name":"blulay","is_technician":true},
+          {"id":"77","name":"Anfragender","is_technician":false}
+        ],"list_info":{"has_more_rows":true},"response_status":[{"status_code":2000,"status":"success"}]}
+        """
+        let result = try ManageEngineAPI.parseTechnicianList(Data(json.utf8))
+        XCTAssertEqual(result.technicians.map(\.id), ["1501"])
+        XCTAssertTrue(result.hasMore)
+        XCTAssertEqual(result.technicians.first?.loginName, "blulay")
+        // passt über den Anmeldenamen, auch wenn die Mail-Adresse anders aussieht
+        let other = [ManageEngineTechnician(id: "9", name: "Bernd Lutz", email: "b.lutz@example.com", loginName: "DOMAIN\\blulay")]
+        XCTAssertEqual(ManageEngineAPI.technicians(matching: "blulay", in: other).map(\.id), ["9"])
+    }
+
     func testParseTechnicians() throws {
         let json = """
         {"requests":[
