@@ -67,14 +67,18 @@ struct TagwerkCommands: Commands {
             Button("SAP-Aufgaben abgleichen …") { model.showsSAPSync = true }
         }
         CommandMenu("Gehe zu") {
-            Button("Heute") { model.selection = .today }
+            Button("Start") { model.selection = .today }
                 .keyboardShortcut("1", modifiers: .command)
-            Button("Fokus") { model.selection = .focus }
+            Button("Woche planen") { model.selection = .week }
                 .keyboardShortcut("2", modifiers: .command)
-            Button("Kunden") { model.selection = .customers }
+            Button("Kalender") { model.selection = .calendar }
                 .keyboardShortcut("3", modifiers: .command)
-            Button("Rückblick") { model.selection = .review }
+            Button("Fokus") { model.selection = .focus }
                 .keyboardShortcut("4", modifiers: .command)
+            Button("Kunden") { model.selection = .customers }
+                .keyboardShortcut("5", modifiers: .command)
+            Button("Rückblick") { model.selection = .review }
+                .keyboardShortcut("6", modifiers: .command)
             Divider()
             Button("Tag planen") { model.selection = .planning }
                 .keyboardShortcut("0", modifiers: .command)

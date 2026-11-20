@@ -5,7 +5,7 @@ import TagwerkCore
 /// Einstellungen in Tabs, wie bei Mac-Apps üblich.
 struct SettingsView: View {
     enum Tab: String, CaseIterable {
-        case general, calendar, booking, manageEngine, claude, data
+        case general, focus, calendar, booking, manageEngine, claude, data
     }
 
     static let tabKey = "settingsTab"
@@ -16,6 +16,9 @@ struct SettingsView: View {
             GeneralSettings()
                 .tabItem { Label("Allgemein", systemImage: "gearshape") }
                 .tag(Tab.general.rawValue)
+            FocusSettings()
+                .tabItem { Label("Fokus", systemImage: "scope") }
+                .tag(Tab.focus.rawValue)
             CalendarSettings()
                 .tabItem { Label("Kalender", systemImage: "calendar") }
                 .tag(Tab.calendar.rawValue)
@@ -107,7 +110,6 @@ struct GeneralSettings: View {
     @Environment(AppModel.self) private var model
     @AppStorage(Preferences.workdayStartKey) private var workdayStart = Preferences.defaultWorkdayStart
     @AppStorage(Preferences.workdayEndKey) private var workdayEnd = Preferences.defaultWorkdayEnd
-    @AppStorage(Preferences.focusGoalMinutesKey) private var focusGoalMinutes = Preferences.defaultFocusGoalMinutes
     @AppStorage(Preferences.planningOnLaunchKey) private var planningOnLaunch = true
     @AppStorage(Preferences.idleMinutesKey) private var idleMinutes = 10
 
@@ -116,14 +118,6 @@ struct GeneralSettings: View {
             Section {
                 DatePicker("Beginn", selection: timeBinding($workdayStart), displayedComponents: .hourAndMinute)
                 DatePicker("Ende", selection: timeBinding($workdayEnd), displayedComponents: .hourAndMinute)
-                LabeledContent("Tagesziel Fokuszeit") {
-                    HStack(spacing: 6) {
-                        Text("\(TimeMath.format(minutes: focusGoalMinutes)) h")
-                            .monospacedDigit()
-                        Stepper("Tagesziel Fokuszeit", value: $focusGoalMinutes, in: 30...720, step: 15)
-                            .labelsHidden()
-                    }
-                }
             } header: {
                 Text("Arbeitszeit")
             } footer: {
@@ -171,6 +165,75 @@ struct GeneralSettings: View {
             get: { FreeTime.date(on: LocalDate.today(), minutes: minutes.wrappedValue) },
             set: { minutes.wrappedValue = FreeTime.minutesSinceMidnight($0) }
         )
+    }
+}
+
+// MARK: Fokus
+
+struct FocusSettings: View {
+    @Environment(AppModel.self) private var model
+    @AppStorage(Preferences.focusGoalMinutesKey) private var focusGoalMinutes = Preferences.defaultFocusGoalMinutes
+    @AppStorage(FocusMusic.autoPlayKey) private var autoPlay = true
+    @AppStorage(FocusMusic.pauseWithTimerKey) private var pauseWithTimer = true
+    @AppStorage(FocusMusic.shuffleKey) private var shuffle = false
+
+    var body: some View {
+        let music = model.music
+        Form {
+            Section {
+                LabeledContent("Tagesziel Fokuszeit") {
+                    HStack(spacing: 6) {
+                        Text("\(TimeMath.format(minutes: focusGoalMinutes)) h")
+                            .monospacedDigit()
+                        Stepper("Tagesziel Fokuszeit", value: $focusGoalMinutes, in: 30...720, step: 15)
+                            .labelsHidden()
+                    }
+                }
+            } header: {
+                Text("Fokuszeit")
+            } footer: {
+                SettingsFootnote("Das Wochenziel im Kalender und im Rückblick ist das Fünffache.")
+            }
+
+            Section {
+                LabeledContent("Playlist") {
+                    HStack(spacing: 8) {
+                        Picker("Playlist", selection: Binding(
+                            get: { music.selectedPlaylist },
+                            set: { music.selectedPlaylist = $0 }
+                        )) {
+                            Text("Keine Musik").tag(String?.none)
+                            if let selected = music.selectedPlaylist, !music.playlists.contains(selected) {
+                                Text(selected).tag(String?.some(selected))
+                            }
+                            ForEach(music.playlists, id: \.self) { name in
+                                Text(name).tag(String?.some(name))
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 240)
+                        Button(music.isLoadingPlaylists ? "Lädt …" : "Playlists laden") {
+                            music.loadPlaylists()
+                        }
+                        .disabled(music.isLoadingPlaylists)
+                    }
+                }
+                Toggle("Beim Start des Timers im Fokus abspielen", isOn: $autoPlay)
+                Toggle("Beim Stoppen des Timers anhalten", isOn: $pauseWithTimer)
+                Toggle("Zufällige Reihenfolge", isOn: $shuffle)
+                if let problem = music.problem {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } header: {
+                Text("Musik im Fokus")
+            } footer: {
+                SettingsFootnote("Tagwerk steuert die Musik-App von macOS (Apple Music). Beim ersten Mal fragt macOS, ob Tagwerk die Musik-App steuern darf. Die Playlist wählst du auch direkt im Fokus über das Notensymbol.")
+            }
+        }
+        .settingsPage(height: 520)
+        .onChange(of: focusGoalMinutes) { model.settingsChanged() }
     }
 }
 

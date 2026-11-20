@@ -195,7 +195,12 @@ enum DropImporter {
                 _ = provider.loadObject(ofClass: String.self) { text, _ in
                     guard let text else { return }
                     Task { @MainActor in
-                        model.addTextTask(text)
+                        // Eine aus Tagwerk gezogene Aufgabe kommt als ID: zurück in den Eingang legen.
+                        if let id = UUID(uuidString: text.trimmingCharacters(in: .whitespacesAndNewlines)), model.task(id) != nil {
+                            model.move(id, to: nil, before: nil)
+                        } else {
+                            model.addTextTask(text)
+                        }
                     }
                 }
             }

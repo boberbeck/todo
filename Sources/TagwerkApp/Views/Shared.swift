@@ -265,17 +265,20 @@ struct ResizeHandle: View {
     @Binding var width: Double
     let range: ClosedRange<Double>
     let defaultValue: Double
+    /// Sichtbare Linie; ohne Linie bleibt nur der Bereich zum Ziehen.
+    var showsLine = true
     @State private var startWidth: Double?
     @State private var hovering = false
 
     var body: some View {
         Rectangle()
-            .fill(Color(nsColor: .separatorColor))
-            .frame(width: 1)
+            .fill(showsLine ? Color(nsColor: .separatorColor) : Color.clear)
+            .frame(width: showsLine ? 1 : 12)
             .overlay {
-                Rectangle()
-                    .fill(Color.accentColor.opacity(startWidth != nil ? 0.5 : 0))
+                Capsule()
+                    .fill(Theme.accent.opacity(startWidth != nil ? 0.7 : (hovering ? 0.35 : 0)))
                     .frame(width: 3)
+                    .padding(.vertical, showsLine ? 0 : 40)
             }
             .overlay {
                 Color.clear

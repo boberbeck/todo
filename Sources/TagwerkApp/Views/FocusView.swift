@@ -1,201 +1,340 @@
 import SwiftUI
 import TagwerkCore
 
-/// Fokus-Modus: nur eine Aufgabe groß, rechts die Done-Liste von heute.
+/// Fokus: eine Aufgabe, sonst nichts. Ohne Leiste oben; zurück mit dem Pfeil oder Esc.
 struct FocusView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        HStack(spacing: 0) {
+        let running = model.runningEntry != nil
+        VStack(spacing: 0) {
+            HStack {
+                Button {
+                    model.leaveFocus()
+                } label: {
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 16))
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.secondary)
+                .keyboardShortcut(.cancelAction)
+                .help("Zurück (Esc)")
+                Spacer()
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(running ? Theme.accent : Theme.tertiary)
+                        .frame(width: 7, height: 7)
+                    Text("FOKUS")
+                        .font(.system(size: 12, weight: .semibold))
+                        .tracking(2)
+                        .foregroundStyle(Theme.secondary)
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 20)
+
             Group {
                 if let task = model.focusTask {
                     FocusTaskPane(task: task)
                         .id(task.id)
                 } else {
-                    ContentUnavailableView(
-                        "Keine offene Aufgabe",
-                        systemImage: "scope",
-                        description: Text("Plane im Tagesplan eine Aufgabe für heute ein.")
-                    )
+                    VStack(spacing: 14) {
+                        Text("Keine Aufgabe für den Fokus")
+                            .font(.system(size: 26, weight: .regular))
+                        Text("Plane auf Start eine Aufgabe für heute ein, dann geht es hier los.")
+                            .foregroundStyle(Theme.secondary)
+                        Button("Zur Startseite") { model.selection = .today }
+                            .buttonStyle(GhostButtonStyle())
+                            .padding(.top, 6)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
-
-            DoneListPane()
-                .frame(width: 300)
+            VStack(spacing: 14) {
+                FocusMusicBar()
+                FocusTimeBar()
+            }
+            .frame(maxWidth: 640)
+            .padding(.horizontal, 28)
+            .padding(.bottom, 26)
         }
-        .navigationTitle("Fokus")
+        .background(Theme.background)
+        .onAppear { model.music.startWatching() }
+        .onDisappear { model.music.stopWatching() }
     }
 }
 
 struct FocusTaskPane: View {
     @Environment(AppModel.self) private var model
-    @AppStorage(Preferences.focusGoalMinutesKey) private var focusGoalMinutes = Preferences.defaultFocusGoalMinutes
     let task: TaskItem
 
     @State private var descriptionText = ""
+    @State private var showsDetails = false
 
     var body: some View {
         let running = model.isRunning(task.id)
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Jetzt")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(spacing: 22) {
+            VStack(spacing: 10) {
+                if let customer = model.customer(task.customerID) {
+                    HStack(spacing: 6) {
+                        CustomerDot(colorIndex: customer.colorIndex, size: 7)
+                        Text(customer.name.uppercased())
+                            .font(.system(size: 12, weight: .semibold))
+                            .tracking(1.6)
+                    }
+                    .foregroundStyle(Theme.secondary)
+                }
                 Text(task.title)
-                    .font(.system(size: 26, weight: .semibold))
+                    .font(.system(size: 36, weight: .regular))
+                    .multilineTextAlignment(.center)
                     .lineLimit(3)
-                HStack(spacing: 10) {
-                    TaskMetaLine(task: task, showsBooking: false)
-                    WorkTypeMenu(task: task)
-                    PSPMenu(task: task)
+                    .frame(maxWidth: 760)
+                if task.source == .ticket, let number = task.externalID {
+                    Text("Ticket #\(number)")
+                        .font(.callout)
+                        .foregroundStyle(Theme.tertiary)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(spacing: 4) {
                 Text(TimeMath.format(model.tracked(taskID: task.id, now: running ? model.now : Date()), showSeconds: true))
-                    .font(.system(size: 56, weight: .semibold, design: .rounded))
+                    .font(.system(size: 76, weight: .light))
                     .monospacedDigit()
+                    .foregroundStyle(running ? Theme.text : Theme.secondary)
                 if let estimate = task.estimateMinutes {
                     Text("von \(TimeMath.format(minutes: estimate)) h geplant")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.tertiary)
                 }
             }
 
-            HStack(spacing: 12) {
-                Button {
-                    model.toggleTimer(for: task.id)
-                } label: {
-                    Label(running ? "Pause" : "Start", systemImage: running ? "pause.fill" : "play.fill")
-                        .frame(minWidth: 90)
-                }
-                .controlSize(.large)
-
+            HStack(spacing: 18) {
                 Button {
                     model.complete(task.id)
                 } label: {
                     Label("Erledigt", systemImage: "checkmark")
-                        .frame(minWidth: 110)
                 }
-                .controlSize(.large)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GhostButtonStyle())
                 .help("Erledigt (⌘↩), danach kommt die nächste Aufgabe")
-            }
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Bearbeitung")
-                        .font(.headline)
-                    Spacer()
-                    Text("für Worklog und SAP")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                Button {
+                    model.toggleTimer(for: task.id)
+                } label: {
+                    Image(systemName: running ? "pause.fill" : "play.fill")
+                        .font(.system(size: 24))
+                        .frame(width: 68, height: 68)
+                        .background(Circle().fill(Theme.accent))
+                        .foregroundStyle(Color.black.opacity(0.85))
                 }
-                TextEditor(text: $descriptionText)
-                    .font(.body)
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .frame(minHeight: 80, maxHeight: 140)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.primary.opacity(0.15))
-                    )
+                .buttonStyle(.plain)
+                .help(running ? "Pause (⌘T)" : "Start (⌘T)")
+
+                Button {
+                    model.focusNextTask()
+                } label: {
+                    Label("Nächste", systemImage: "forward.end")
+                }
+                .buttonStyle(GhostButtonStyle())
+                .disabled(model.todayTasks.filter { !$0.isDone }.count < 2)
+                .help("Andere Aufgabe von heute in den Fokus holen")
             }
 
-            Spacer(minLength: 0)
+            VStack(spacing: 10) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { showsDetails.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(detailSummary)
+                        Image(systemName: showsDetails ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                    }
+                    .font(.callout)
+                    .foregroundStyle(Theme.tertiary)
+                }
+                .buttonStyle(.plain)
 
-            FocusTimeBar(goalMinutes: focusGoalMinutes)
+                if showsDetails {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            WorkTypeMenu(task: task)
+                            PSPMenu(task: task)
+                            Spacer()
+                            Text("für Worklog und SAP")
+                                .font(.caption)
+                                .foregroundStyle(Theme.tertiary)
+                        }
+                        TextEditor(text: $descriptionText)
+                            .font(.body)
+                            .scrollContentBackground(.hidden)
+                            .padding(8)
+                            .frame(height: 90)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.03)))
+                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.borderStrong))
+                            .overlay(alignment: .topLeading) {
+                                if descriptionText.isEmpty {
+                                    Text("Was hast du gemacht? Wird zum Text für den Worklog.")
+                                        .foregroundStyle(Theme.tertiary)
+                                        .padding(.horizontal, 13)
+                                        .padding(.vertical, 8)
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                    }
+                    .frame(maxWidth: 560)
+                    .card(padding: 14)
+                }
+            }
         }
-        .padding(32)
-        .frame(maxWidth: 640, maxHeight: .infinity, alignment: .topLeading)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 40)
         .onAppear {
             descriptionText = task.workDescription
             model.focusedTaskID = task.id
+            showsDetails = task.source == .ticket && task.workDescription.isEmpty
         }
         .onChange(of: descriptionText) {
             model.setDescription(descriptionText, for: task.id)
         }
+    }
+
+    /// „Wartung · CPSO8643-1 · Bearbeitung“
+    private var detailSummary: String {
+        var parts: [String] = []
+        parts.append(task.workType?.label ?? "Arbeitsart wählen")
+        parts.append(task.pspElement ?? "PSP-Element wählen")
+        parts.append(task.workDescription.isEmpty ? "Bearbeitung notieren" : "Bearbeitung")
+        return parts.joined(separator: " · ")
     }
 }
 
 /// Fokuszeit des Tages gegen das Tagesziel (Input statt Output).
 struct FocusTimeBar: View {
     @Environment(AppModel.self) private var model
-    let goalMinutes: Int
+    @AppStorage(Preferences.focusGoalMinutesKey) private var goalMinutes = Preferences.defaultFocusGoalMinutes
 
     var body: some View {
         let tracked = model.trackedToday(now: model.runningEntry == nil ? Date() : model.now)
         let goal = Double(max(goalMinutes, 1) * 60)
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(spacing: 8) {
+            ProgressLine(value: tracked / goal)
             HStack {
                 Text("Fokuszeit heute")
-                    .font(.headline)
                 Spacer()
-                Text("\(TimeMath.format(tracked)) von \(TimeMath.format(minutes: goalMinutes)) h")
+                Text("\(TimeMath.format(tracked)) von \(TimeMath.format(minutes: goalMinutes)) h · \(model.doneToday.count) erledigt")
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
             }
-            ProgressView(value: min(tracked / goal, 1))
+            .font(.caption)
+            .foregroundStyle(Theme.tertiary)
         }
     }
 }
 
-/// Done-Liste: was heute erledigt ist, mit Zeit und Buchungsziel.
-struct DoneListPane: View {
+/// Musik zum Fokus: Playlist aus der Musik-App, Start, Pause, nächster Titel.
+struct FocusMusicBar: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Heute erledigt")
-                    .font(.title3.weight(.semibold))
-                Text("Done-Liste mit Buchungsziel")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        let music = model.music
+        HStack(spacing: 12) {
+            Image(systemName: "music.note")
+                .font(.system(size: 14))
+                .foregroundStyle(music.state == .playing ? Theme.accent : Theme.tertiary)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(Color.white.opacity(0.05)))
 
-            if model.doneToday.isEmpty {
-                Text("Noch nichts erledigt.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(model.doneToday) { task in
-                            HStack(alignment: .top, spacing: 8) {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.green)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(task.title)
-                                    Text("bucht: \(task.bookingTargets)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text(TimeMath.format(model.tracked(taskID: task.id, now: Date())))
-                                    .monospacedDigit()
-                                    .fontWeight(.semibold)
-                            }
-                            Divider()
-                        }
-                    }
+            VStack(alignment: .leading, spacing: 2) {
+                if let title = music.trackTitle, music.state != .stopped {
+                    Text(title)
+                        .lineLimit(1)
+                    Text([music.trackArtist, music.selectedPlaylist].compactMap { $0 }.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiary)
+                        .lineLimit(1)
+                } else if let playlist = music.selectedPlaylist {
+                    Text(playlist)
+                        .lineLimit(1)
+                    Text("Startet mit dem Timer")
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiary)
+                } else {
+                    Text("Musik zum Fokus")
+                    Text("Wähle eine Playlist aus der Musik-App")
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiary)
+                }
+                if let problem = music.problem {
+                    Text(problem)
+                        .font(.caption)
+                        .foregroundStyle(Theme.accent)
+                        .lineLimit(2)
                 }
             }
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
+
+            Menu {
+                if music.playlists.isEmpty {
+                    Button(music.isLoadingPlaylists ? "Lädt …" : "Playlists laden") { music.loadPlaylists() }
+                        .disabled(music.isLoadingPlaylists)
+                } else {
+                    ForEach(music.playlists, id: \.self) { name in
+                        Button {
+                            music.selectedPlaylist = name
+                        } label: {
+                            if name == music.selectedPlaylist {
+                                Label(name, systemImage: "checkmark")
+                            } else {
+                                Text(name)
+                            }
+                        }
+                    }
+                    Divider()
+                    Button("Liste neu laden") { music.loadPlaylists() }
+                }
+                if music.selectedPlaylist != nil {
+                    Divider()
+                    Button("Keine Musik") { music.selectedPlaylist = nil }
+                }
+            } label: {
+                Image(systemName: "music.note.list")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .foregroundStyle(Theme.secondary)
+            .help("Playlist wählen")
+            .onAppear {
+                if music.playlists.isEmpty, music.isDemo { music.loadPlaylists() }
+            }
 
             Button {
-                model.selection = .close
+                music.togglePlayPause()
             } label: {
-                Label("Tag abschließen", systemImage: "moon")
-                    .frame(maxWidth: .infinity)
+                Image(systemName: music.state == .playing ? "pause.fill" : "play.fill")
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
-            .controlSize(.large)
-            .help("Zeiten prüfen und buchen (⌘9)")
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.text)
+            .disabled(music.selectedPlaylist == nil && music.state == .stopped)
+            .help(music.state == .playing ? "Musik anhalten" : "Musik abspielen")
+
+            Button {
+                music.nextTrack()
+            } label: {
+                Image(systemName: "forward.fill")
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.secondary)
+            .disabled(music.state == .stopped)
+            .help("Nächster Titel")
         }
-        .padding(20)
-        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.border))
     }
 }

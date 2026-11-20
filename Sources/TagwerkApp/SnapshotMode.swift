@@ -51,13 +51,19 @@ enum SnapshotMode {
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
 
+        // Musik im Fokus mit Beispielwerten, ohne die Musik-App anzusprechen
+        model.music.isDemo = true
+        model.music.selectedPlaylist = "Fokus am Morgen"
+
         var screens: [(name: String, item: SidebarItem)] = [
-            ("heute", .today),
-            ("tagesplanung", .planning),
+            ("start", .today),
+            ("plan", .week),
+            ("kalender", .calendar),
             ("fokus", .focus),
-            ("tagesabschluss", .close),
             ("kunden", .customers),
             ("rueckblick", .review),
+            ("tagesplanung", .planning),
+            ("tagesabschluss", .close),
         ]
         let richest = model.activeCustomers.max { lhs, rhs in
             model.psps(for: lhs.id, includeInactive: true).count < model.psps(for: rhs.id, includeInactive: true).count
@@ -66,64 +72,60 @@ enum SnapshotMode {
             screens.insert(("kunde", .customer(customer.id)), at: 5)
         }
 
-        let appearances: [(name: NSAppearance.Name, suffix: String)] = [(.aqua, "hell"), (.darkAqua, "dunkel")]
-        for appearance in appearances {
-            NSApp.appearance = NSAppearance(named: appearance.name)
-            for screen in screens {
-                model.selection = screen.item
-                try? await Task.sleep(for: .seconds(1.5))
-                await capture(window, name: "\(screen.name)-\(appearance.suffix)", in: directory)
-            }
-            if appearance.suffix == "hell" {
-                // ganzer Bildschirm mit Menüleisten-Uhr
-                model.selection = .today
-                try? await Task.sleep(for: .seconds(1))
-                await capture(nil, name: "bildschirm", in: directory)
+        for screen in screens {
+            model.selection = screen.item
+            try? await Task.sleep(for: .seconds(1.5))
+            await capture(window, name: screen.name, in: directory)
+        }
 
-                // Schnell erfassen
-                if let panel = model.showQuickCapture() {
-                    try? await Task.sleep(for: .seconds(1))
-                    await capture(panel, name: "schnellerfassen", in: directory)
-                    model.hideQuickCapture()
-                }
+        // ganzer Bildschirm mit Menüleisten-Uhr
+        model.selection = .today
+        try? await Task.sleep(for: .seconds(1))
+        await capture(nil, name: "bildschirm", in: directory)
 
-                // Nachfrage nach einer Pause
-                if let running = model.runningEntry, let taskID = running.taskID {
-                    model.idlePrompt = IdlePrompt(start: Date().addingTimeInterval(-25 * 60), end: Date(), taskID: taskID)
-                    try? await Task.sleep(for: .seconds(1.5))
-                    await capture(window.attachedSheet ?? window, name: "leerlauf", in: directory)
-                    model.idlePrompt = nil
-                    try? await Task.sleep(for: .seconds(0.5))
-                }
+        // Schnell erfassen
+        if let panel = model.showQuickCapture() {
+            try? await Task.sleep(for: .seconds(1))
+            await capture(panel, name: "schnellerfassen", in: directory)
+            model.hideQuickCapture()
+        }
 
-                // Abgleich mit SAP ByDesign
-                model.selection = .customers
-                model.sapSyncRows = DemoData.sapRows
-                model.showsSAPSync = true
-                try? await Task.sleep(for: .seconds(1.5))
-                await capture(window.attachedSheet ?? window, name: "sapabgleich", in: directory)
-                model.showsSAPSync = false
-                try? await Task.sleep(for: .seconds(0.8))
+        // Nachfrage nach einer Pause
+        model.selection = .today
+        if let running = model.runningEntry, let taskID = running.taskID {
+            model.idlePrompt = IdlePrompt(start: Date().addingTimeInterval(-25 * 60), end: Date(), taskID: taskID)
+            try? await Task.sleep(for: .seconds(1.5))
+            await capture(window.attachedSheet ?? window, name: "leerlauf", in: directory)
+            model.idlePrompt = nil
+            try? await Task.sleep(for: .seconds(0.5))
+        }
 
-                // Einstellungen, jeder Tab einzeln
-                openSettings()
-                try? await Task.sleep(for: .seconds(1.5))
-                for tab in SettingsView.Tab.allCases {
-                    UserDefaults.standard.set(tab.rawValue, forKey: SettingsView.tabKey)
-                    try? await Task.sleep(for: .seconds(1.2))
-                    if let settings = NSApp.windows.first(where: { candidate in
-                        candidate.isVisible && candidate !== window && !(candidate is NSPanel) && candidate.frame.width > 300
-                    }) {
-                        settings.makeKeyAndOrderFront(nil)
-                        try? await Task.sleep(for: .seconds(0.3))
-                        await capture(settings, name: "einstellungen-\(tab.rawValue.lowercased())", in: directory)
-                    }
-                }
-                UserDefaults.standard.set(SettingsView.Tab.general.rawValue, forKey: SettingsView.tabKey)
-                NSApp.windows.first { $0.isVisible && $0 !== window && !($0 is NSPanel) && $0.frame.width > 300 }?.close()
-                window.makeKeyAndOrderFront(nil)
+        // Abgleich mit SAP ByDesign
+        model.selection = .customers
+        model.sapSyncRows = DemoData.sapRows
+        model.showsSAPSync = true
+        try? await Task.sleep(for: .seconds(1.5))
+        await capture(window.attachedSheet ?? window, name: "sapabgleich", in: directory)
+        model.showsSAPSync = false
+        try? await Task.sleep(for: .seconds(0.8))
+
+        // Einstellungen, jeder Tab einzeln
+        openSettings()
+        try? await Task.sleep(for: .seconds(1.5))
+        for tab in SettingsView.Tab.allCases {
+            UserDefaults.standard.set(tab.rawValue, forKey: SettingsView.tabKey)
+            try? await Task.sleep(for: .seconds(1.2))
+            if let settings = NSApp.windows.first(where: { candidate in
+                candidate.isVisible && candidate !== window && !(candidate is NSPanel) && candidate.frame.width > 300
+            }) {
+                settings.makeKeyAndOrderFront(nil)
+                try? await Task.sleep(for: .seconds(0.3))
+                await capture(settings, name: "einstellungen-\(tab.rawValue.lowercased())", in: directory)
             }
         }
+        UserDefaults.standard.set(SettingsView.Tab.general.rawValue, forKey: SettingsView.tabKey)
+        NSApp.windows.first { $0.isVisible && $0 !== window && !($0 is NSPanel) && $0.frame.width > 300 }?.close()
+        window.makeKeyAndOrderFront(nil)
         finish(in: directory)
     }
 

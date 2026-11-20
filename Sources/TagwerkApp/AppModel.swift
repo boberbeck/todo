@@ -4,8 +4,12 @@ import Foundation
 import Observation
 import TagwerkCore
 
+/// Seiten der App. Oben in der Leiste: Start, Plan, Kalender, Fokus, Kunden, Rückblick.
+/// „Tag planen“ und „Tag abschließen“ sind Rituale, die man von Start aus öffnet.
 enum SidebarItem: Hashable {
     case today
+    case week
+    case calendar
     case focus
     case customers
     case review
@@ -36,6 +40,10 @@ final class AppModel {
     private(set) var isSendingBookings = false
 
     var selection: SidebarItem? = .today
+    /// Wohin der Pfeil im Fokus zurückführt. Setzt die Hauptansicht beim Wechsel in den Fokus.
+    @ObservationIgnored var focusReturn: SidebarItem?
+    /// Musik im Fokus (Apple Music).
+    let music = FocusMusic()
     /// Aufgabe, die im Fokus-Modus gezeigt wird. Ohne Auswahl: die laufende oder die nächste offene.
     var focusedTaskID: UUID?
     /// Wird hochgezählt, wenn per ⌘N eine neue Aufgabe angelegt werden soll.
@@ -383,6 +391,13 @@ final class AppModel {
     }
 
     private func apply(_ change: TimerLogic.Change) {
+        defer {
+            if change.started != nil {
+                music.timerStarted(inFocus: selection == .focus)
+            } else if !change.stopped.isEmpty || !change.discarded.isEmpty {
+                music.timerStopped()
+            }
+        }
         do {
             for entry in change.discarded {
                 try store.deleteEntry(id: entry.id)
@@ -466,7 +481,19 @@ final class AppModel {
 
     func refreshEvents() {
         calendarAccess = calendarProvider.access
+        eventCache = [:]
         events = calendarProvider.events(on: today, modes: calendarModes)
+    }
+
+    @ObservationIgnored private var eventCache: [LocalDate: [CalendarEvent]] = [:]
+
+    /// Termine eines beliebigen Tages (für Woche und Wochenkalender), zwischengespeichert.
+    func calendarEvents(on day: LocalDate) -> [CalendarEvent] {
+        if day == today { return events }
+        if let cached = eventCache[day] { return cached }
+        let loaded = calendarProvider.events(on: day, modes: calendarModes)
+        eventCache[day] = loaded
+        return loaded
     }
 
     func setCalendarMode(_ mode: CalendarDisplayMode, for calendarID: String) {
@@ -557,6 +584,105 @@ final class AppModel {
         } catch {
             report(error)
         }
+    }
+
+    // MARK: Woche und Kalender
+
+    func dayTasks(_ day: LocalDate) -> [TaskItem] { DayPlan.tasks(for: day, in: tasks) }
+
+    /// Zeiteinträge, die einen Tag berühren.
+    func dayEntries(_ day: LocalDate) -> [TimeEntry] {
+        let interval = day.interval()
+        return entries.filter { TimeMath.overlap(of: $0, with: interval, now: now) > 0 }
+    }
+
+    /// Aufgaben mit Zeitblock an diesem Tag.
+    func scheduledTasks(on day: LocalDate) -> [TaskItem] {
+        tasks.filter { task in task.scheduledStart.map { LocalDate($0) == day } ?? false }
+    }
+
+    /// Freie Zeit eines Arbeitstags in Minuten (Arbeitszeit minus Termine).
+    func freeMinutes(on day: LocalDate) -> Int {
+        FreeTime.freeMinutes(window: workday.interval(on: day), events: calendarEvents(on: day))
+    }
+
+    func trackedInWeek(starting monday: LocalDate) -> TimeInterval {
+        (0..<7).reduce(0) { $0 + tracked(on: monday.adding(days: $1)) }
+    }
+
+    /// Wochenziel für die erfasste Zeit: Tagesziel Fokuszeit mal fünf Arbeitstage.
+    var weeklyGoalMinutes: Int {
+        _ = settingsVersion
+        let daily = UserDefaults.standard.integer(forKey: Preferences.focusGoalMinutesKey)
+        return (daily > 0 ? daily : Preferences.defaultFocusGoalMinutes) * 5
+    }
+
+    /// Legt eine Aufgabe oben oder unten in einem Tag (oder im Eingang) an.
+    @discardableResult
+    func addTask(title: String, customerID: UUID?, plannedDate: LocalDate?, atTop: Bool) -> TaskItem? {
+        guard var task = addTask(title: title, customerID: customerID, plannedDate: plannedDate) else { return nil }
+        if atTop {
+            let siblings = tasks.filter { $0.plannedDate == plannedDate && $0.id != task.id }
+            task.sortIndex = (siblings.map(\.sortIndex).min() ?? 1) - 1
+            persist(task)
+        }
+        return task
+    }
+
+    /// Verschiebt eine Aufgabe in einen Tag (oder den Eingang), vor eine andere Aufgabe oder ans Ende.
+    func move(_ id: UUID, to day: LocalDate?, before targetID: UUID?) {
+        guard targetID != id, var task = self.task(id) else { return }
+        guard let day else {
+            plan(id, for: nil)
+            return
+        }
+        if task.plannedDate != day, task.scheduledStart != nil {
+            task.scheduledStart = nil
+            syncBlock(&task)
+        }
+        task.plannedDate = day
+        var list = DayPlan.tasks(for: day, in: tasks).filter { $0.id != id }
+        let position = targetID.flatMap { target in list.firstIndex { $0.id == target } } ?? list.count
+        list.insert(task, at: position)
+        for (index, var item) in list.enumerated() {
+            let newIndex = Double(index + 1)
+            if item.id == id || item.sortIndex != newIndex {
+                item.sortIndex = newIndex
+                persist(item)
+            }
+        }
+    }
+
+    /// Nachträglich erfasste Zeit, z. B. aus dem Wochenkalender.
+    func addEntry(taskID: UUID, start: Date, end: Date) {
+        guard end > start else { return }
+        let entry = TimeEntry(taskID: taskID, start: start, end: end)
+        do {
+            try store.save(entry)
+            entries.append(entry)
+        } catch {
+            report(error)
+        }
+    }
+
+    func deleteEntry(_ id: UUID) {
+        do {
+            try store.deleteEntry(id: id)
+            entries.removeAll { $0.id == id }
+        } catch {
+            report(error)
+        }
+    }
+
+    func leaveFocus() {
+        let target = focusReturn ?? .today
+        selection = target == .focus ? .today : target
+    }
+
+    /// Nächste offene Aufgabe von heute in den Fokus holen.
+    func focusNextTask() {
+        let next = DayPlan.nextOpenTask(after: focusTask?.id, in: todayTasks)
+        focusedTaskID = next?.id
     }
 
     // MARK: Tagesplanung

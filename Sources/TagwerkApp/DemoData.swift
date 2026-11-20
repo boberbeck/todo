@@ -120,6 +120,34 @@ enum DemoData {
                      workType: .projekt, createdAt: now.addingTimeInterval(-50 * hour)),
         ]
 
+        // Geplantes für die nächsten Tage (Woche planen)
+        tasks += [
+            TaskItem(title: "Angebot Firewall-Erneuerung", customerID: mueller.id, plannedDate: today.adding(days: 1, calendar: calendar),
+                     estimateMinutes: 90, workType: .beratung, sortIndex: 1, createdAt: now.addingTimeInterval(-5 * hour)),
+            TaskItem(title: "Rollout Arbeitsplätze vorbereiten", customerID: stadtwerke.id, plannedDate: today.adding(days: 1, calendar: calendar),
+                     estimateMinutes: 120, workType: .projekt, sortIndex: 2, createdAt: now.addingTimeInterval(-5 * hour)),
+            TaskItem(title: "Monatsbericht Wartung", customerID: becker.id, plannedDate: today.adding(days: 2, calendar: calendar),
+                     estimateMinutes: 45, workType: .wartung, sortIndex: 1, createdAt: now.addingTimeInterval(-4 * hour)),
+            TaskItem(title: "Notfallplan aktualisieren", customerID: mueller.id, plannedDate: today.adding(days: 3, calendar: calendar),
+                     estimateMinutes: 60, workType: .projekt, sortIndex: 1, createdAt: now.addingTimeInterval(-4 * hour)),
+        ]
+
+        // Frühere Wochen für den Verlauf im Rückblick
+        let weekHours: [Double] = [26, 31, 22, 34, 29, 24]
+        for (index, hours) in weekHours.enumerated() {
+            let monday = week.adding(days: -7 * (index + 1), calendar: calendar)
+            let customer = [mueller, stadtwerke, becker][index % 3]
+            let task = TaskItem(title: "Projektarbeit \(customer.name)", customerID: customer.id, plannedDate: monday,
+                                estimateMinutes: Int(hours * 60), workType: .projekt, status: .done,
+                                completedAt: monday.startDate(calendar: calendar).addingTimeInterval(4 * 86400 + 17 * hour),
+                                sortIndex: 1, createdAt: monday.startDate(calendar: calendar))
+            tasks.append(task)
+            for weekday in 0..<5 {
+                let start = monday.adding(days: weekday, calendar: calendar).startDate(calendar: calendar).addingTimeInterval(8 * hour)
+                entries.append(TimeEntry(taskID: task.id, start: start, end: start.addingTimeInterval(hours / 5 * hour)))
+            }
+        }
+
         // Erledigtes der letzten Tage für den Wochenrückblick
         let earlier: [(title: String, customer: Customer, work: WorkType, daysAgo: Int, minutes: Double)] = [
             ("Firewall-Regeln anpassen", mueller, .wartung, 1, 75),

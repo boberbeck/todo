@@ -8,17 +8,19 @@ Der vollständige Plan steht im Dokument „Plan: Eigene Todo-App für den Mac�
 
 ## Stand: Phase 4 plus SAP-Abgleich und Claude-Anbindung
 
+Aufbau: dunkel und ruhig, oben die Leiste mit Start, Plan, Kalender, Fokus, Kunden und Rückblick.
+
 | Bereich | Was geht |
 | --- | --- |
-| Heute | Aufgaben des Tages mit erfasster und geplanter Zeit. Erledigtes bleibt abgehakt stehen. Reihenfolge per Drag-and-drop. Warnung, wenn mehr geplant ist als Zeit da ist. |
-| Kalender | Zeitleiste neben dem Tagesplan mit den Terminen aus dem Apple Kalender (private nur als „belegt“), den Zeitblöcken der Aufgaben und der erfassten Zeit. Aufgaben aus dem Eingang lassen sich hineinziehen, Blöcke mit der Maus verschieben. Ein Termin wird per Rechtsklick zur erfassten Zeit. Die Spalte lässt sich an der Trennlinie breiter ziehen (Doppelklick setzt zurück), die Stundenhöhe stellst du mit den Lupen ein. |
+| Start | Großes Datum, Stunden heute und diese Woche. Links die Aufgaben von heute (neue oben oder unten einfügen, per Ziehen sortieren), darunter die Erledigt-Liste und der Eingang. Rechts der Tageskalender, an der Kante breiter ziehbar; die Lupen machen die Stunden höher. |
+| Plan | Woche planen: links der Eingang, daneben eine Spalte je Tag mit geplanter und freier Zeit. Aufgaben zieht man zwischen den Tagen hin und her. |
+| Kalender | Die Woche mit Terminen, Zeitblöcken und erfasster Zeit in Kundenfarben, Stunden je Tag und gegen das Wochenziel. Doppelklick oder „Zeit nachtragen“ erfasst Arbeit nachträglich. |
 | Tag planen | Geführte Planung beim ersten Öffnen am Tag: Übriges von gestern, Eingang, schätzen, in freie Lücken legen. |
 | Tag abschließen | Zeiten je Aufgabe gerundet prüfen und anpassen. Worklogs gehen an ManageEngine. SAP-Zeilen überträgst du mit Kopier-Knöpfen oder als Excel-Liste und hakst sie ab; nichts wird doppelt gebucht. |
 | ManageEngine | Eigene offene Tickets landen im Eingang (Konto → Kunde). Zugang in den Einstellungen, der API-Schlüssel liegt im Schlüsselbund. |
-| Eingang | Noch nicht eingeplante Todos. Per Pfeil oder Drag-and-drop in den Tag holen. |
-| Fokus | Eine Aufgabe groß mit Timer, Arbeitsart, PSP-Element und dem Feld „Bearbeitung“. Daneben die Done-Liste, unten die Fokuszeit des Tages. |
-| Kunden | Lokale Todos pro Kunde, Farbe, Stunden im laufenden Monat. Diese Todos verlassen die App nie. |
-| Rückblick | Wochenziele je Kunde mit erfasster Zeit, Stunden der Woche je Tag und je Kunde, Ziele für nächste Woche, Export aller Zeiten als CSV. |
+| Fokus | Vollbild mit einer Aufgabe, großem Timer, Erledigt und Nächste. Arbeitsart, PSP-Element und Bearbeitung klappen unten auf. Dazu Musik: eine Playlist aus der Musik-App startet mit dem Timer und hält mit ihm an. |
+| Kunden | Kennzahlen und eine Karte je Kunde mit Stunden dieser Woche und im Monat. Im Kunden: lokale Todos, PSP-Elemente, ManageEngine-Konto. |
+| Rückblick | Stunden gegen das Wochenziel, Tagesdurchschnitt, Anteil Kundenarbeit, Stunden je Tag und je Kunde, Verlauf der letzten Wochen, Wochenziele, Export als CSV. |
 | Leerlauf | Läuft der Timer und kommt länger keine Eingabe, fragt Tagwerk nach der Rückkehr: Zeit behalten, Pause abziehen oder einer anderen Aufgabe geben. |
 | Schnell erfassen | ⌃⌥ Leertaste öffnet von überall ein kleines Fenster für neue Aufgaben. |
 | Mails | Mails aus Outlook (oder .eml-Dateien) in den Eingang ziehen; Betreff und Absender werden übernommen. |
@@ -91,14 +93,19 @@ Alle Daten liegen lokal in `~/Library/Application Support/Tagwerk/tagwerk.sqlite
 
 | Kürzel | Aktion |
 | --- | --- |
-| ⌘N | Neue Aufgabe |
+| ⌘N | Neue Aufgabe (auf Start) |
 | ⌘T | Timer der Fokus-Aufgabe starten oder stoppen |
 | ⌘↩ | Fokus-Aufgabe erledigt |
-| ⌘1 bis ⌘4 | Heute, Fokus, Kunden, Rückblick |
+| ⌘1 bis ⌘6 | Start, Plan, Kalender, Fokus, Kunden, Rückblick |
 | ⌘0 | Tag planen |
 | ⌘9 | Tag abschließen |
+| Esc | Fokus verlassen |
 | ⌃⌥ Leertaste | Schnell erfassen, auch wenn Tagwerk im Hintergrund ist |
 | Doppelklick auf eine Aufgabe | im Fokus öffnen |
+
+## Musik im Fokus
+
+Unter Einstellungen › Fokus (oder im Fokus über das Notensymbol) wählst du eine Playlist aus der Musik-App. Sie startet, sobald du im Fokus den Timer startest, und hält an, wenn du ihn stoppst. Tagwerk steuert dafür die Musik-App per AppleScript; macOS fragt beim ersten Mal, ob Tagwerk das darf (Systemeinstellungen › Datenschutz & Sicherheit › Automation).
 
 ## Aufbau
 

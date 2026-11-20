@@ -1,66 +1,215 @@
 import SwiftUI
 import TagwerkCore
 
-/// Übersicht aller Kunden mit offenen Todos und Stunden im laufenden Monat.
+/// Kunden: Kennzahlen oben, darunter eine Karte je Kunde mit Stunden dieser Woche.
 struct CustomersView: View {
     @Environment(AppModel.self) private var model
+    @State private var showsArchived = false
+    @State private var showsNewCustomer = false
     @State private var newName = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                TextField("Neuer Kunde", text: $newName)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 280)
-                    .onSubmit(add)
-                Button("Anlegen", action: add)
-                    .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            .padding(20)
+        let active = model.activeCustomers
+        let archived = model.customers.filter(\.isArchived)
+        let shown = showsArchived ? archived : active
+        let monthTotal = active.reduce(0) { $0 + model.trackedThisMonth(customerID: $1.id) }
+        let openCount = active.reduce(0) { $0 + model.openTaskCount(for: $1.id) }
+        let pspCount = model.pspElements.filter(\.isActive).count
 
-            if model.activeCustomers.isEmpty {
-                ContentUnavailableView(
-                    "Noch keine Kunden",
-                    systemImage: "person.2",
-                    description: Text("Lege oben deinen ersten Kunden an. Seine Todos bleiben nur hier in der App.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(model.activeCustomers) { customer in
-                    Button {
-                        model.selection = .customer(customer.id)
-                    } label: {
-                        HStack(spacing: 10) {
-                            CustomerDot(colorIndex: customer.colorIndex, size: 10)
-                            Text(customer.name)
-                            Spacer()
-                            Text("\(model.openTaskCount(for: customer.id)) offen")
-                                .foregroundStyle(.secondary)
-                            Text("\(TimeMath.format(model.trackedThisMonth(customerID: customer.id))) h im Monat")
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                                .frame(width: 130, alignment: .trailing)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                PageHeader(title: "Kunden", subtitle: "Wer deine Zeit bekommt. Kunden-Todos bleiben nur in Tagwerk.") {
+                    HStack(spacing: 10) {
+                        Button {
+                            model.showsSAPSync = true
+                        } label: {
+                            Label("SAP-Abgleich", systemImage: "arrow.triangle.2.circlepath")
                         }
-                        .padding(.vertical, 4)
-                        .contentShape(Rectangle())
+                        .buttonStyle(GhostButtonStyle())
+                        .help("Projektaufgaben aus SAP ByDesign als PSP-Elemente übernehmen")
+                        Button {
+                            showsNewCustomer = true
+                        } label: {
+                            Label("Neuer Kunde", systemImage: "plus")
+                        }
+                        .buttonStyle(GhostButtonStyle(prominent: true))
+                        .popover(isPresented: $showsNewCustomer, arrowEdge: .bottom) {
+                            newCustomerForm
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
-                .listStyle(.inset)
+
+                HStack(spacing: 16) {
+                    StatCard(title: "Stunden · dieser Monat", value: "\(TimeMath.format(monthTotal)) h")
+                    StatCard(title: "Offene Aufgaben", value: "\(openCount)")
+                    StatCard(title: "PSP-Elemente", value: "\(pspCount)", detail: "aktiv, aus SAP oder von Hand")
+                }
+
+                HStack {
+                    Picker("Anzeigen", selection: $showsArchived) {
+                        Text("Aktiv · \(active.count)").tag(false)
+                        Text("Archiviert · \(archived.count)").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    Spacer()
+                    Text("Klick auf einen Kunden für Todos, PSP-Elemente und ManageEngine-Konto.")
+                        .font(.callout)
+                        .foregroundStyle(Theme.tertiary)
+                }
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16)], spacing: 16) {
+                    ForEach(shown) { customer in
+                        CustomerCard(customer: customer)
+                    }
+                    if !showsArchived {
+                        Button {
+                            showsNewCustomer = true
+                        } label: {
+                            VStack(spacing: 8) {
+                                Image(systemName: "plus")
+                                    .font(.title2)
+                                Text("Neuer Kunde")
+                            }
+                            .foregroundStyle(Theme.secondary)
+                            .frame(maxWidth: .infinity, minHeight: 190)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .strokeBorder(Theme.borderStrong, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                            )
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
-        }
-        .navigationTitle("Kunden")
-        .toolbar {
-            ToolbarItem {
-                SAPSyncButton()
-            }
+            .padding(.horizontal, 40)
+            .padding(.vertical, 32)
         }
     }
 
-    private func add() {
-        if model.addCustomer(name: newName) != nil {
-            newName = ""
+    private var newCustomerForm: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Neuer Kunde")
+                .font(.headline)
+            TextField("Name", text: $newName)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 260)
+                .onSubmit(add)
+            HStack {
+                Spacer()
+                Button("Anlegen", action: add)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
         }
+        .padding(16)
+    }
+
+    private func add() {
+        if let customer = model.addCustomer(name: newName) {
+            newName = ""
+            showsNewCustomer = false
+            model.selection = .customer(customer.id)
+        }
+    }
+}
+
+/// Kennzahl in einer Karte.
+struct StatCard: View {
+    let title: String
+    let value: String
+    var detail: String?
+    var accent = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel(text: title)
+            Text(value)
+                .font(.system(size: 34, weight: .regular).monospacedDigit())
+                .foregroundStyle(accent ? Theme.accent : Theme.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            if let detail {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(Theme.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card(padding: 22)
+    }
+}
+
+/// Ein Kunde als Karte: Stunden dieser Woche, Monat, offene Todos, PSP-Elemente.
+struct CustomerCard: View {
+    @Environment(AppModel.self) private var model
+    let customer: Customer
+    @State private var hovering = false
+
+    var body: some View {
+        let monday = model.currentWeekStart
+        let week = model.trackedByCustomer(from: monday, through: monday.adding(days: 6))
+            .first { $0.customerID == customer.id }?.seconds ?? 0
+        let color = CustomerPalette.color(customer.colorIndex)
+        Button {
+            model.selection = .customer(customer.id)
+        } label: {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    Text(String(customer.name.prefix(1)).uppercased())
+                        .font(.headline)
+                        .foregroundStyle(color)
+                        .frame(width: 36, height: 36)
+                        .background(RoundedRectangle(cornerRadius: 9).fill(color.opacity(0.16)))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(customer.name)
+                            .font(.title3)
+                            .lineLimit(1)
+                        if let account = customer.manageEngineAccount, !account.isEmpty {
+                            Text(account)
+                                .font(.caption)
+                                .foregroundStyle(Theme.tertiary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(TimeMath.format(week))
+                            .font(.system(size: 34, weight: .regular).monospacedDigit())
+                        SectionLabel(text: "Diese Woche")
+                    }
+                    Spacer()
+                    Text("\(TimeMath.format(model.trackedThisMonth(customerID: customer.id))) h im Monat")
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(Theme.secondary)
+                }
+                Rectangle().fill(Theme.border).frame(height: 1)
+                HStack(spacing: 14) {
+                    Label("\(model.openTaskCount(for: customer.id)) offen", systemImage: "circle")
+                    Label("\(model.psps(for: customer.id).count) PSP", systemImage: "number")
+                    Spacer()
+                    Circle().fill(color).frame(width: 7, height: 7)
+                }
+                .font(.caption)
+                .foregroundStyle(Theme.tertiary)
+            }
+            .padding(22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 14).fill(hovering ? Theme.surfaceRaised : Theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.border))
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(color.opacity(0.7))
+                    .frame(height: 2)
+                    .padding(.horizontal, 22)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 
@@ -93,6 +242,21 @@ struct CustomerDetailContent: View {
         let open = model.customerTasks(customer.id, done: false)
         let done = model.customerTasks(customer.id, done: true)
         VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button {
+                    model.selection = .customers
+                } label: {
+                    Label("Kunden", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Theme.secondary)
+                Spacer()
+                SAPSyncButton()
+                    .buttonStyle(GhostButtonStyle())
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+
             HStack(spacing: 12) {
                 CustomerDot(colorIndex: customer.colorIndex, size: 14)
                 TextField("Name", text: $name)
@@ -177,15 +341,10 @@ struct CustomerDetailContent: View {
                 }
             }
             .listStyle(.inset)
+            .scrollContentBackground(.hidden)
 
             Divider()
             NewTaskBar(plannedDate: nil, fixedCustomerID: customer.id)
-        }
-        .navigationTitle(customer.name)
-        .toolbar {
-            ToolbarItem {
-                SAPSyncButton()
-            }
         }
         .onAppear {
             name = customer.name

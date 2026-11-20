@@ -28,6 +28,8 @@
     <true/>
     <key>NSCalendarsFullAccessUsageDescription</key>
     <string>Tagwerk zeigt deine Termine in der Tagesplanung und legt auf Wunsch Zeitblöcke für Aufgaben an.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Tagwerk spielt im Fokus deine Playlist in der Musik-App ab und hält sie an, wenn du den Timer stoppst.</string>
     <key>NSCalendarsUsageDescription</key>
     <string>Tagwerk zeigt deine Termine in der Tagesplanung und legt auf Wunsch Zeitblöcke für Aufgaben an.</string>
 </dict>

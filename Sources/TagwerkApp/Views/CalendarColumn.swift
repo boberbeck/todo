@@ -19,7 +19,7 @@ struct CalendarColumn: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Kalender")
-                        .font(.title3.weight(.semibold))
+                        .font(.headline)
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -163,7 +163,7 @@ struct CalendarColumn: View {
 
             // Arbeitszeit leicht hinterlegt
             Rectangle()
-                .fill(Color.accentColor.opacity(0.04))
+                .fill(Theme.todayTint)
                 .frame(height: max(0, y(work.end) - y(work.start)))
                 .padding(.leading, labelWidth)
                 .offset(y: y(work.start))
@@ -180,7 +180,7 @@ struct CalendarColumn: View {
             ForEach(model.entriesToday) { entry in
                 let top = max(0, y(entry.start))
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.accentColor.opacity(0.75))
+                    .fill(Theme.accent.opacity(0.75))
                     .frame(width: 4, height: max(3, y(entry.end ?? model.now) - top))
                     .padding(.leading, labelWidth - 3)
                     .offset(y: top)
@@ -201,12 +201,17 @@ struct CalendarColumn: View {
             }
 
             if nowY >= 0 && nowY <= total {
-                Rectangle()
-                    .fill(Color.red)
-                    .frame(height: 1.5)
-                    .padding(.leading, labelWidth - 4)
-                    .offset(y: nowY)
-                    .allowsHitTesting(false)
+                HStack(spacing: 0) {
+                    Circle()
+                        .fill(Theme.accent)
+                        .frame(width: 7, height: 7)
+                    Rectangle()
+                        .fill(Theme.accent)
+                        .frame(height: 1.5)
+                }
+                .padding(.leading, labelWidth - 4)
+                .offset(y: nowY - 3.5)
+                .allowsHitTesting(false)
             }
         }
         .frame(maxWidth: .infinity, minHeight: total, maxHeight: total, alignment: .topLeading)
@@ -303,11 +308,11 @@ struct TaskBlock: View {
         .frame(height: height, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 5)
-                .fill(Color.accentColor.opacity(running ? 0.22 : 0.12))
+                .fill(Theme.accent.opacity(running ? 0.22 : 0.12))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 5)
-                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 1.2, dash: task.isDone ? [] : [4, 3]))
+                .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 1.2, dash: task.isDone ? [] : [4, 3]))
         )
         .opacity(task.isDone ? 0.55 : 1)
         .offset(y: top + dragOffset)
