@@ -57,7 +57,7 @@ public enum LayoutTable {
             let row = byColumn.map(joinedText)
             let hasID = row.contains { SAPImport.firstTaskID(in: $0) != nil }
             // Umbrochener Text gehört noch zur Zeile darüber.
-            if !hasID, previousHasID, let previousMidY, line.midY - previousMidY < 1.3 * line.height, var last = result.popLast() {
+            if !hasID, previousHasID, let lastMidY = previousMidY, line.midY - lastMidY < 1.3 * line.height, var last = result.popLast() {
                 for (index, value) in row.enumerated() where !value.isEmpty {
                     last[index] = last[index].isEmpty ? value : last[index] + " " + value
                 }
