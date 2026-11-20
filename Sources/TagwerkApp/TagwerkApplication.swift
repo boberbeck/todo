@@ -129,7 +129,6 @@ enum Preferences {
         "Ticketbearbeitung",
         "Wartung",
     ]
-    }
     static let calendarHourHeightKey = "calendarHourHeight"
 
     static let defaultCalendarWidth: Double = 260
