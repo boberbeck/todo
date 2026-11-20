@@ -54,6 +54,8 @@ enum SnapshotMode {
         // Musik im Fokus mit Beispielwerten, ohne die Musik-App anzusprechen
         model.music.isDemo = true
         model.music.selectedPlaylist = "Fokus am Morgen"
+        // Unteraufgaben der Beispielaufgaben aufgeklappt zeigen
+        model.expandedTaskIDs = Set(model.todayTasks.filter { !model.subtasks(of: $0.id).isEmpty && $0.title.hasPrefix("Angebot") }.map(\.id))
 
         var screens: [(name: String, item: SidebarItem)] = [
             ("start", .today),

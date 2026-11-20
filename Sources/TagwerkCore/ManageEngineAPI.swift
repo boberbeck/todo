@@ -56,7 +56,7 @@ public struct ManageEngineConfig: Equatable, Codable, Sendable {
         return value
     }
 
-    var isCloud: Bool { trimmedBase.contains("/app/") }
+    public var isCloud: Bool { trimmedBase.contains("/app/") }
 }
 
 public struct ManageEngineTicket: Equatable, Sendable {
@@ -177,6 +177,30 @@ public enum ManageEngineAPI {
         return request
     }
 
+    /// Ein Ticket über die Nummer, die Menschen sehen. Bei der lokalen Installation ist sie meist die Request-ID.
+    public static func request(withID id: String, config: ManageEngineConfig, token: String) throws -> URLRequest {
+        let clean = id.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard !clean.isEmpty, clean.allSatisfy(\.isNumber) else { throw ManageEngineError.unexpectedResponse }
+        var request = try base(path: "/api/v3/requests/\(clean)", query: nil, config: config, token: token, requireTechnician: false)
+        request.httpMethod = "GET"
+        return request
+    }
+
+    /// Sucht ein Ticket über seine angezeigte Nummer (für die Cloud, wo Nummer und Request-ID verschieden sind).
+    public static func requests(withDisplayID number: String, config: ManageEngineConfig, token: String) throws -> URLRequest {
+        let clean = number.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        let input: [String: Any] = [
+            "list_info": [
+                "row_count": 5,
+                "start_index": 1,
+                "search_criteria": [
+                    ["field": "display_id", "condition": "is", "value": clean],
+                ],
+            ] as [String: Any],
+        ]
+        return try get(path: "/api/v3/requests", input: input, config: config, token: token, requireTechnician: false)
+    }
+
     // MARK: Antworten lesen
 
     public static func parseTickets(_ data: Data, config: ManageEngineConfig) throws -> [ManageEngineTicket] {
@@ -184,7 +208,8 @@ public enum ManageEngineAPI {
             throw ManageEngineError.unexpectedResponse
         }
         if let message = errorMessage(in: root) { throw ManageEngineError.server(message) }
-        let requests = root["requests"] as? [[String: Any]] ?? []
+        var requests = root["requests"] as? [[String: Any]] ?? []
+        if requests.isEmpty, let single = root["request"] as? [String: Any] { requests = [single] }
         return requests.compactMap { item in
             guard let key = stringValue(item["id"]) else { return nil }
             let status = item["status"] as? [String: Any]

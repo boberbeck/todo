@@ -42,6 +42,14 @@ struct RootView: View {
         .sheet(isPresented: $model.showsSAPSync, onDismiss: { model.sapSyncRows = nil }) {
             SAPSyncSheet(initialRows: model.sapSyncRows)
         }
+        .sheet(isPresented: Binding(
+            get: { model.ticketPickerTaskID != nil },
+            set: { if !$0 { model.ticketPickerTaskID = nil } }
+        )) {
+            if let id = model.ticketPickerTaskID {
+                TicketPicker(taskID: id) { model.ticketPickerTaskID = nil }
+            }
+        }
         .alert(
             "Fehler",
             isPresented: Binding(

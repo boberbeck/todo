@@ -155,7 +155,7 @@ struct CloseLineRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(line.task.title)
+                    Text(line.displayTitle)
                         .font(.headline)
                     TaskMetaLine(task: line.task, showsBooking: false)
                 }
@@ -179,14 +179,21 @@ struct CloseLineRow: View {
             HStack(spacing: 8) {
                 PSPMenu(task: line.task)
                 WorkTypeMenu(task: line.task)
+                TicketMenu(task: line.task)
                 if line.targets.contains(.manageEngine) {
                     WorklogTypeMenu(task: line.task)
                 }
-                let service = model.serviceProduct(for: line.task.workType)
-                if !service.isEmpty {
-                    Text("Leistung \(service)")
+                if let activity = line.task.sapActivity, !activity.isEmpty {
+                    Text("Tätigkeit \(activity)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } else {
+                    let service = model.serviceProduct(for: line.task.workType)
+                    if !service.isEmpty {
+                        Text("Leistung \(service)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -263,6 +270,9 @@ struct TargetStatusView: View {
                 .controlSize(.small)
         } else {
             copyButton("PSP", value: line.task.pspElement ?? "")
+            if let activity = line.task.sapActivity, !activity.isEmpty {
+                copyButton("Tätigkeit", value: activity)
+            }
             copyButton("Std.", value: SAPTransfer.hours(minutes))
             copyButton("Text", value: line.sapComment)
             Button {

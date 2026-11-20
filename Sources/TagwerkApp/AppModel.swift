@@ -55,6 +55,12 @@ final class AppModel {
     var focusedTaskID: UUID?
     /// Wird hochgezählt, wenn per ⌘N eine neue Aufgabe angelegt werden soll.
     private(set) var newTaskRequest = 0
+    /// Aufgaben, deren Unteraufgaben aufgeklappt sind.
+    var expandedTaskIDs: Set<UUID> = []
+    /// Aufgabe, in der das Feld „Unteraufgabe hinzufügen“ den Fokus bekommen soll.
+    var subtaskEntryTaskID: UUID?
+    /// Aufgabe, für die gerade ein Ticket gesucht wird (öffnet die Ticketsuche).
+    var ticketPickerTaskID: UUID?
     var lastError: String?
 
     /// Aktuelle Uhrzeit, jede Sekunde aktualisiert. Nur lesen, wo ein Timer sichtbar läuft.
@@ -137,7 +143,7 @@ final class AppModel {
     var doneToday: [TaskItem] {
         tasks
             .filter { task in
-                guard task.isDone, let completed = task.completedAt else { return false }
+                guard task.isDone, task.parentID == nil, let completed = task.completedAt else { return false }
                 return LocalDate(completed) == today
             }
             .sorted { ($0.completedAt ?? .distantPast) < ($1.completedAt ?? .distantPast) }
@@ -200,7 +206,7 @@ final class AppModel {
 
     /// Aufgaben eines Kunden: offene neueste zuerst, erledigte zuletzt erledigt zuerst.
     func customerTasks(_ customerID: UUID, done: Bool) -> [TaskItem] {
-        let matching = tasks.filter { $0.customerID == customerID && $0.isDone == done }
+        let matching = tasks.filter { $0.customerID == customerID && $0.isDone == done && $0.parentID == nil }
         if done {
             return matching.sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
         }
@@ -208,7 +214,7 @@ final class AppModel {
     }
 
     func openTaskCount(for customerID: UUID) -> Int {
-        tasks.filter { $0.customerID == customerID && !$0.isDone }.count
+        tasks.filter { $0.customerID == customerID && !$0.isDone && $0.parentID == nil }.count
     }
 
     func trackedThisMonth(customerID: UUID) -> TimeInterval {
@@ -221,14 +227,19 @@ final class AppModel {
 
     func doneCount(on day: LocalDate) -> Int {
         tasks.filter { task in
-            guard task.isDone, let completed = task.completedAt else { return false }
+            guard task.isDone, task.parentID == nil, let completed = task.completedAt else { return false }
             return LocalDate(completed) == day
         }.count
     }
 
-    /// "0:23 / 0:30" – erfasst / geplant.
+    /// Erfasste Zeit einer Aufgabe samt ihrer Unteraufgaben.
+    func trackedIncludingSubtasks(taskID: UUID, now: Date) -> TimeInterval {
+        subtasks(of: taskID).reduce(tracked(taskID: taskID, now: now)) { $0 + tracked(taskID: $1.id, now: now) }
+    }
+
+    /// "0:23 / 0:30" – erfasst (mit Unteraufgaben) / geplant.
     func timeLabel(for task: TaskItem, now: Date) -> String {
-        let tracked = TimeMath.format(self.tracked(taskID: task.id, now: now))
+        let tracked = TimeMath.format(trackedIncludingSubtasks(taskID: task.id, now: now))
         guard let estimate = task.estimateMinutes else { return tracked }
         return "\(tracked) / \(TimeMath.format(minutes: estimate))"
     }
@@ -268,7 +279,8 @@ final class AppModel {
     func complete(_ id: UUID) {
         guard var task = self.task(id), !task.isDone else { return }
         if isRunning(id) { stopTimer() }
-        let next = DayPlan.nextOpenTask(after: id, in: todayTasks)
+        let parent = task.parentID.flatMap { self.task($0) }
+        let next = parent.flatMap { $0.isDone ? nil : $0 } ?? DayPlan.nextOpenTask(after: id, in: todayTasks)
         task.status = .done
         task.completedAt = Date()
         persist(task)
@@ -303,6 +315,9 @@ final class AppModel {
     }
 
     func delete(_ id: UUID) {
+        for subtask in subtasks(of: id) {
+            delete(subtask.id)
+        }
         if var task = self.task(id), task.calendarEventID != nil {
             task.scheduledStart = nil
             syncBlock(&task)
@@ -324,17 +339,38 @@ final class AppModel {
         persist(task)
     }
 
-    func setPSPElement(_ value: String, for id: UUID) {
+    /// PSP-Element setzen, mit der Tätigkeit aus SAP (eine Aufgabe kann mehrere Tätigkeiten haben).
+    func setPSPElement(_ value: String, activity: String? = nil, for id: UUID) {
         let cleaned = value.trimmingCharacters(in: .whitespaces)
         let newValue: String? = cleaned.isEmpty ? nil : cleaned
-        guard var task = self.task(id), task.pspElement != newValue else { return }
+        let newActivity: String? = newValue == nil ? nil : activity.flatMap { $0.isEmpty ? nil : $0 }
+        guard var task = self.task(id), task.pspElement != newValue || task.sapActivity != newActivity else { return }
         task.pspElement = newValue
+        task.sapActivity = newActivity
         persist(task)
         if let code = newValue,
-           var psp = pspElements.first(where: { $0.code == code && $0.customerID == task.customerID }) {
+           var psp = pspElements.first(where: { $0.matches(code: code, activity: newActivity) })
+            ?? pspElements.first(where: { $0.code == code && $0.customerID == task.customerID }) {
             psp.lastUsedAt = Date()
             save(psp)
         }
+    }
+
+    /// Das PSP-Element einer Aufgabe (Nummer und Tätigkeit), bei Unteraufgaben auch geerbt.
+    func psp(for task: TaskItem) -> PSPElement? {
+        let effective = resolved(task)
+        guard let code = effective.pspElement else { return nil }
+        return pspElements.first(where: { $0.matches(code: code, activity: effective.sapActivity) })
+            ?? pspElements.first(where: { $0.code == code && (effective.sapActivity ?? "").isEmpty })
+    }
+
+    /// „CPSO8643-5 · Firewall · Beratung“ oder nur die Nummer, wenn sie nicht bekannt ist.
+    func pspLabel(for task: TaskItem) -> String? {
+        let effective = resolved(task)
+        guard let code = effective.pspElement else { return nil }
+        if let psp = psp(for: task) { return psp.label }
+        if let activity = effective.sapActivity, !activity.isEmpty { return "\(code) · \(activity)" }
+        return code
     }
 
     func setDescription(_ text: String, for id: UUID) {
@@ -349,15 +385,146 @@ final class AppModel {
         persist(task)
     }
 
-    /// SAP-Aufgabe setzen; der Kunde kommt von der Aufgabe mit (für Internes z. B. „Intern“).
+    /// SAP-Aufgabe mit Tätigkeit setzen; der Kunde kommt von der Aufgabe mit (für Internes z. B. „Intern“).
     func setSAPTask(_ psp: PSPElement, for id: UUID) {
         setCustomer(psp.customerID, for: id)
-        setPSPElement(psp.code, for: id)
+        setPSPElement(psp.code, activity: psp.activity, for: id)
     }
 
+    /// Kunde setzen. Unteraufgaben mit dem bisherigen Kunden ziehen mit.
     func setCustomer(_ customerID: UUID?, for id: UUID) {
         guard var task = self.task(id), task.customerID != customerID else { return }
+        let previous = task.customerID
         task.customerID = customerID
+        persist(task)
+        for var subtask in subtasks(of: id) where subtask.customerID == previous {
+            subtask.customerID = customerID
+            persist(subtask)
+        }
+    }
+
+    // MARK: Unteraufgaben
+
+    func subtasks(of id: UUID) -> [TaskItem] { DayPlan.subtasks(of: id, in: tasks) }
+
+    func parent(of task: TaskItem) -> TaskItem? { task.parentID.flatMap { self.task($0) } }
+
+    /// Aufgabe mit allem, was sie von der übergeordneten erbt (Kunde, SAP-Aufgabe, Ticket …).
+    func resolved(_ task: TaskItem) -> TaskItem { task.resolved(parent: parent(of: task)) }
+
+    /// Legt eine Unteraufgabe an. Eine Ebene reicht: Unteraufgaben einer Unteraufgabe hängen an der obersten Aufgabe.
+    @discardableResult
+    func addSubtask(title rawTitle: String, to parentID: UUID) -> TaskItem? {
+        guard let direct = task(parentID) else { return nil }
+        let parent = self.parent(of: direct) ?? direct
+        let parsed = DurationParser.split(title: rawTitle)
+        guard !parsed.title.isEmpty else { return nil }
+        let subtask = TaskItem(
+            title: parsed.title,
+            customerID: parent.customerID,
+            estimateMinutes: parsed.minutes,
+            sortIndex: DayPlan.nextSortIndex(in: subtasks(of: parent.id)),
+            parentID: parent.id
+        )
+        persist(subtask)
+        expandedTaskIDs.insert(parent.id)
+        return subtask
+    }
+
+    /// Klappt die Unteraufgaben auf und setzt den Cursor in „Unteraufgabe hinzufügen“.
+    func beginSubtaskEntry(for id: UUID) {
+        guard let task = self.task(id) else { return }
+        let parentID = task.parentID ?? task.id
+        expandedTaskIDs.insert(parentID)
+        subtaskEntryTaskID = parentID
+    }
+
+    func toggleSubtasks(_ id: UUID) {
+        if expandedTaskIDs.contains(id) {
+            expandedTaskIDs.remove(id)
+        } else {
+            expandedTaskIDs.insert(id)
+        }
+    }
+
+    /// Macht aus einer Unteraufgabe wieder eine eigene Aufgabe (im Eingang).
+    func promoteSubtask(_ id: UUID) {
+        guard var task = self.task(id), task.parentID != nil else { return }
+        let effective = resolved(task)
+        task.parentID = nil
+        task.workType = effective.workType
+        task.pspElement = effective.pspElement
+        task.sapActivity = effective.sapActivity
+        task.ticketNumber = effective.ticketNumber
+        task.ticketKey = effective.ticketKey
+        task.worklogType = effective.worklogType
+        task.sortIndex = DayPlan.nextSortIndex(in: tasks.filter { $0.plannedDate == nil })
+        persist(task)
+    }
+
+    // MARK: Ticket zuordnen
+
+    /// Tickets aus ManageEngine, die in Tagwerk liegen: offene zuerst, dann zuletzt angelegte.
+    var ticketTasks: [TaskItem] {
+        tasks
+            .filter { $0.source == .ticket }
+            .sorted { lhs, rhs in
+                if lhs.isDone != rhs.isDone { return !lhs.isDone }
+                return lhs.createdAt > rhs.createdAt
+            }
+    }
+
+    /// Das Ticket einer Aufgabe: eigenes, zugeordnetes oder von der übergeordneten Aufgabe geerbtes.
+    func ticketNumber(for task: TaskItem) -> String? {
+        resolved(task).linkedTicketNumber
+    }
+
+    /// Ordnet der Aufgabe ein Ticket zu, das schon in Tagwerk liegt. Die Zeit geht dann auch als Worklog an dieses Ticket.
+    func linkTicket(_ ticket: TaskItem, to id: UUID) {
+        guard ticket.id != id else { return }
+        setTicket(number: ticket.linkedTicketNumber, key: ticket.linkedTicketKey, for: id)
+        if let task = self.task(id), task.customerID == nil, let customerID = ticket.customerID {
+            setCustomer(customerID, for: id)
+        }
+    }
+
+    /// Ordnet ein Ticket über seine Nummer zu. Fragt ManageEngine nach der internen ID, wenn es eingerichtet ist.
+    func linkTicket(number rawNumber: String, to id: UUID) async -> String? {
+        let number = rawNumber.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard !number.isEmpty else { return nil }
+        if let known = ticketTasks.first(where: { $0.linkedTicketNumber == number }) {
+            linkTicket(known, to: id)
+            return nil
+        }
+        guard manageEngine.isReady else {
+            setTicket(number: number, key: nil, for: id)
+            return "Ticket #\(number) zugeordnet. Für den Worklog muss ManageEngine eingerichtet sein."
+        }
+        do {
+            if let ticket = try await manageEngine.ticket(number: number) {
+                setTicket(number: ticket.number, key: ticket.key, for: id)
+                if let task = self.task(id), task.customerID == nil, let customerID = customerID(forAccount: ticket.accountName) {
+                    setCustomer(customerID, for: id)
+                }
+                return nil
+            }
+            setTicket(number: number, key: nil, for: id)
+            return "Ticket #\(number) gibt es in ManageEngine nicht oder es ist nicht sichtbar. Zugeordnet ist es trotzdem; ohne Verbindung geht kein Worklog."
+        } catch {
+            setTicket(number: number, key: nil, for: id)
+            return "Ticket #\(number) zugeordnet, aber ManageEngine antwortet nicht: \(error)"
+        }
+    }
+
+    func unlinkTicket(from id: UUID) {
+        setTicket(number: nil, key: nil, for: id)
+    }
+
+    private func setTicket(number: String?, key: String?, for id: UUID) {
+        guard var task = self.task(id), task.source != .ticket else { return }
+        guard task.ticketNumber != number || task.ticketKey != key else { return }
+        task.ticketNumber = number
+        task.ticketKey = key
         persist(task)
     }
 
@@ -582,6 +749,8 @@ final class AppModel {
         var customerID: UUID?
         var pspElement: String?
         var workType: WorkType?
+        /// Tätigkeit aus SAP zum PSP-Element
+        var activity: String?
     }
 
     private static let eventAssignmentsKey = "eventAssignments"
@@ -623,7 +792,8 @@ final class AppModel {
             pspElement: chosen?.pspElement,
             status: .done,
             completedAt: event.end,
-            sortIndex: DayPlan.nextSortIndex(in: todayTasks)
+            sortIndex: DayPlan.nextSortIndex(in: todayTasks),
+            sapActivity: chosen?.pspElement == nil ? nil : chosen?.activity
         )
         persist(task)
         let entry = TimeEntry(taskID: task.id, start: event.start, end: event.end)
@@ -959,6 +1129,7 @@ final class AppModel {
     /// Work Log Type eines Tickets: selbst gewählt oder der Standard.
     func worklogType(for task: TaskItem?) -> String {
         if let chosen = task?.worklogType, !chosen.isEmpty { return chosen }
+        if let task, let inherited = parent(of: task)?.worklogType, !inherited.isEmpty { return inherited }
         return defaultWorklogType
     }
 
@@ -1128,7 +1299,7 @@ final class AppModel {
             var added = 0
             var known = 0
             for ticket in tickets where ticket.isOpen {
-                let isKnown = tasks.contains { $0.source == .ticket && ($0.externalKey == ticket.key || $0.externalID == ticket.number) }
+                let isKnown = tasks.contains { $0.linkedTicketKey == ticket.key || $0.linkedTicketNumber == ticket.number }
                 guard !isKnown else {
                     known += 1
                     continue

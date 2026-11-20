@@ -959,3 +959,264 @@ final class ManageEngineTechnicianTests: XCTestCase {
         XCTAssertEqual(parsed.last?.email, nil)
     }
 }
+
+/// Die englische ByDesign-Liste: mehrere Activities je Aufgabe, feste und scrollbare Spalten.
+final class SAPEnglishListTests: XCTestCase {
+    func testEnglishHeadersAndSeveralActivities() {
+        let cells = [
+            ["Show: My Current Work Packages", "Group By…"],
+            ["Task ID", "Work Package Task", "Activity", "Category", "Project ID"],
+            ["CPSO8643-6", "Firewall Migration", "Consulting", "Project Task", "CPSO8643"],
+            ["CPSO8643-6", "Firewall Migration", "Remote Support", "Project Task", "CPSO8643"],
+            ["CPSO8643-7", "Monitoring", "Consulting", "Project Task", "CPSO8643"],
+            ["CPSO8643-7", "Monitoring", "Consulting", "Project Task", "CPSO8643"],
+        ]
+        let rows = SAPImport.rows(fromCells: cells)
+        XCTAssertEqual(rows.map(\.code), ["CPSO8643-6", "CPSO8643-6", "CPSO8643-7"], "eine Zeile je Aufgabe und Activity")
+        XCTAssertEqual(rows.map(\.title), ["Firewall Migration", "Firewall Migration", "Monitoring"])
+        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Remote Support", "Consulting"])
+        XCTAssertEqual(rows.first?.category, "Project Task")
+    }
+
+    func testGroupByIsNoTitle() {
+        XCTAssertTrue(SAPImport.isNoise("Group By…"))
+        XCTAssertTrue(SAPImport.isNoise("Group By: Category"))
+        XCTAssertTrue(SAPImport.isNoise("Project Task Confirmation"))
+        XCTAssertTrue(SAPImport.isNoise("Work Package Task"))
+        XCTAssertFalse(SAPImport.isNoise("Firewall Migration"))
+        let rows = SAPImport.rows(fromLines: ["CPSO8643-6", "Group By…", "CPSO8643-7", "Monitoring"])
+        XCTAssertEqual(rows.map(\.title), ["", "Monitoring"])
+    }
+
+    func testCodeColumnFoundByContent() {
+        // Die Überschrift passt nicht zum Inhalt: die Nummern stehen unter „Work Package Task“.
+        let cells = [
+            ["Work Package Task", "Description", "Activity"],
+            ["CPSO8643-6", "Firewall Migration", "Consulting"],
+            ["CPSO8643-7", "Monitoring", "Remote Support"],
+        ]
+        let rows = SAPImport.rows(fromCells: cells)
+        XCTAssertEqual(rows.map(\.code), ["CPSO8643-6", "CPSO8643-7"])
+        XCTAssertEqual(rows.map(\.title), ["Firewall Migration", "Monitoring"])
+        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Remote Support"])
+    }
+
+    func testNumberInsideTheNameCell() {
+        let cells = [
+            ["Work Package Task", "Activity"],
+            ["Firewall Migration (CPSO8643-6)", "Consulting"],
+            ["CPSO8643-7 Monitoring", "Training"],
+        ]
+        let rows = SAPImport.rows(fromCells: cells)
+        XCTAssertEqual(rows.map(\.code), ["CPSO8643-6", "CPSO8643-7"])
+        XCTAssertEqual(rows.map(\.title), ["Firewall Migration", "Monitoring"])
+        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Training"])
+    }
+
+    func testMergeKeepsActivitiesAndFillsNames() {
+        let rows = SAPImport.merged([
+            SAPTaskRow(code: "CPSO1-1", title: ""),
+            SAPTaskRow(code: "CPSO1-1", title: "", activity: "Consulting"),
+            SAPTaskRow(code: "CPSO1-1", title: "Wartung", activity: "Training"),
+            SAPTaskRow(code: "CPSO1-1", title: "", activity: "consulting"),
+        ])
+        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Training"], "ohne Activity entfällt, doppelt wird eins")
+        XCTAssertEqual(rows.map(\.title), ["Wartung", "Wartung"], "Name kommt von derselben Aufgabe")
+    }
+
+    func testBestReadingWins() {
+        let withoutActivity = [SAPTaskRow(code: "CPSO1-1", title: "A"), SAPTaskRow(code: "CPSO1-2", title: "B")]
+        let withActivity = [SAPTaskRow(code: "CPSO1-1", title: "A", activity: "X"), SAPTaskRow(code: "CPSO1-2", title: "B", activity: "Y")]
+        let fewer = [SAPTaskRow(code: "CPSO1-1", title: "A", activity: "X")]
+        XCTAssertEqual(SAPImport.best(of: [withoutActivity, withActivity, fewer]), withActivity)
+        XCTAssertEqual(SAPImport.best(of: [[], fewer]), fewer)
+    }
+
+    func testPlanMatchesTaskAndActivity() {
+        let customer = Customer(name: "Müller", colorIndex: 0)
+        let old = PSPElement(customerID: customer.id, code: "CPSO8643-6", title: "Firewall Migration")
+        let other = PSPElement(customerID: customer.id, code: "CPSO8643-9", title: "Altprojekt")
+        let rows = [
+            SAPTaskRow(code: "CPSO8643-6", title: "Firewall Migration", activity: "Consulting"),
+            SAPTaskRow(code: "CPSO8643-6", title: "Firewall Migration", activity: "Remote Support"),
+        ]
+        let plan = SAPImport.plan(rows: rows, existing: [old, other], customers: [customer])
+        let items = plan.groups.first?.items ?? []
+        XCTAssertEqual(items.map(\.id), ["CPSO8643-6|consulting", "CPSO8643-6|remote support"])
+        XCTAssertEqual(items.first?.existing?.id, old.id, "das alte Element ohne Activity bekommt die erste")
+        XCTAssertEqual(items.last?.change, .new)
+        XCTAssertEqual(plan.missing.map(\.code), ["CPSO8643-9"])
+
+        let saved = SAPImport.apply(plan, customerFor: { $0.suggestedCustomerID }, deactivateMissing: false)
+        XCTAssertEqual(saved.count, 2)
+        XCTAssertEqual(saved.map(\.activity), ["Consulting", "Remote Support"])
+        XCTAssertEqual(saved.first?.id, old.id)
+
+        // Später ohne Activity gelesen: keine der beiden gilt als verschwunden
+        let both = [
+            PSPElement(customerID: customer.id, code: "CPSO8643-6", title: "Firewall Migration", activity: "Consulting"),
+            PSPElement(customerID: customer.id, code: "CPSO8643-6", title: "Firewall Migration", activity: "Remote Support"),
+        ]
+        let again = SAPImport.plan(rows: [SAPTaskRow(code: "CPSO8643-6", title: "Firewall Migration")], existing: both, customers: [customer])
+        XCTAssertTrue(again.missing.isEmpty)
+        XCTAssertEqual(both[0].matches(code: "cpso8643-6", activity: "consulting"), true)
+        XCTAssertEqual(both[1].matches(code: "CPSO8643-6", activity: "Consulting"), false)
+    }
+
+    // MARK: Lesen nach Lage auf dem Bildschirm
+
+    private func box(_ text: String, _ x: Double, _ y: Double, width: Double = 90) -> TextBox {
+        TextBox(text: text, x: x, y: y, width: width, height: 16)
+    }
+
+    func testLayoutWithFixedAndScrollingColumns() {
+        // Links eine eigene Tabelle mit der Task ID, rechts der Rest; im Seitenaufbau zwei getrennte Tabellen.
+        var boxes = [
+            box("Group By…", 300, 10),
+            box("Task ID", 20, 60), box("Work Package Task", 160, 60, width: 140), box("Activity", 420, 60), box("Category", 600, 60),
+        ]
+        let data = [
+            ("CPSO8643-6", "Firewall Migration", "Consulting"),
+            ("CPSO8643-6", "Firewall Migration", "Remote Support"),
+            ("CPSO8643-7", "Monitoring", "Consulting"),
+        ]
+        for (index, row) in data.enumerated() {
+            let y = 100 + Double(index) * 36
+            boxes.append(box(row.0, 22, y + 1))
+            boxes.append(box(row.1, 162, y, width: 150))
+            boxes.append(box(row.2, 421, y))
+            boxes.append(box("Project Task", 601, y))
+        }
+        // Reihenfolge wie im Seitenaufbau: erst die ganze linke Tabelle, dann die rechte
+        let shuffled = boxes.filter { $0.x < 100 } + boxes.filter { $0.x >= 100 }
+        let cells = LayoutTable.cells(from: shuffled)
+        XCTAssertEqual(cells.first, ["Task ID", "Work Package Task", "Activity", "Category"])
+        XCTAssertEqual(cells[1], ["CPSO8643-6", "Firewall Migration", "Consulting", "Project Task"])
+
+        let rows = SAPImport.rows(fromLayout: shuffled)
+        XCTAssertEqual(rows.map(\.code), ["CPSO8643-6", "CPSO8643-6", "CPSO8643-7"])
+        XCTAssertEqual(rows.map(\.title), ["Firewall Migration", "Firewall Migration", "Monitoring"])
+        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Remote Support", "Consulting"])
+    }
+
+    func testLayoutJoinsSplitTextAndWrappedNames() {
+        let boxes = [
+            box("Task", 20, 60, width: 32), box("ID", 56, 60, width: 14), box("Work Package Task", 160, 60, width: 140), box("Activity", 420, 60),
+            // „CPSO8643-“ und „8“ in zwei Text-Stücken direkt nebeneinander
+            box("CPSO8643-", 20, 100, width: 70), box("8", 90, 100, width: 8),
+            box("Netzwerk und", 160, 100), box("Consulting", 420, 100),
+            // umgebrochener Name in der nächsten Textzeile
+            box("Firewall", 160, 118),
+            box("CPSO8643-9", 20, 140), box("Backup", 160, 140), box("Training", 420, 140),
+        ]
+        let rows = SAPImport.rows(fromLayout: boxes)
+        XCTAssertEqual(rows.map(\.code), ["CPSO8643-8", "CPSO8643-9"])
+        XCTAssertEqual(rows.map(\.title), ["Netzwerk und Firewall", "Backup"])
+        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Training"])
+    }
+
+    func testLayoutWithoutHeader() {
+        let boxes = [box("CPSO8643-6", 20, 100), box("Firewall Migration", 200, 100, width: 150)]
+        let rows = SAPImport.rows(fromLayout: boxes)
+        XCTAssertEqual(rows.map(\.code), ["CPSO8643-6"])
+        XCTAssertEqual(rows.first?.title, "Firewall Migration")
+    }
+}
+
+/// Unteraufgaben und Tickets an eigenen Aufgaben.
+final class SubtaskAndTicketTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        return calendar
+    }
+
+    private let day = LocalDate(year: 2026, month: 11, day: 19)
+
+    private func at(_ hour: Int, _ minute: Int = 0) -> Date {
+        FreeTime.date(on: day, minutes: hour * 60 + minute, calendar: calendar)
+    }
+
+    func testSubtasksStayOutOfDayListsAndInbox() {
+        let parent = TaskItem(title: "Firewall-Umzug", plannedDate: day)
+        let first = TaskItem(title: "Regeln exportieren", sortIndex: 2, parentID: parent.id)
+        let second = TaskItem(title: "Altgerät abbauen", sortIndex: 1, parentID: parent.id)
+        let tasks = [parent, first, second]
+        XCTAssertEqual(DayPlan.tasks(for: day, in: tasks).map(\.id), [parent.id])
+        XCTAssertTrue(DayPlan.inbox(tasks).isEmpty, "Unteraufgaben ohne Tag gehören nicht in den Eingang")
+        XCTAssertEqual(DayPlan.subtasks(of: parent.id, in: tasks).map(\.title), ["Altgerät abbauen", "Regeln exportieren"])
+    }
+
+    func testSubtaskInheritsBookingDetails() {
+        let ticket = TaskItem(title: "Firewall", source: .ticket, externalID: "1234", externalKey: "998877", worklogType: "Wartung")
+        let parent = TaskItem(title: "Firewall-Umzug", customerID: UUID(), pspElement: "CPSO8643-6", sapActivity: "Consulting")
+        let subtask = TaskItem(title: "Regeln exportieren", parentID: parent.id)
+        let resolved = subtask.resolved(parent: parent)
+        XCTAssertEqual(resolved.customerID, parent.customerID)
+        XCTAssertEqual(resolved.pspElement, "CPSO8643-6")
+        XCTAssertEqual(resolved.sapActivity, "Consulting")
+        XCTAssertFalse(resolved.hasTicket)
+
+        let underTicket = TaskItem(title: "Logs sichten", parentID: ticket.id).resolved(parent: ticket)
+        XCTAssertEqual(underTicket.linkedTicketNumber, "1234")
+        XCTAssertEqual(underTicket.linkedTicketKey, "998877")
+        XCTAssertEqual(underTicket.worklogType, "Wartung")
+        XCTAssertEqual(subtask.resolved(parent: ticket).id, subtask.id, "fremde Aufgabe wird nicht geerbt")
+        XCTAssertNil(subtask.resolved(parent: ticket).linkedTicketNumber)
+    }
+
+    func testDailyCloseForSubtaskWithOwnTicket() {
+        let parent = TaskItem(title: "Firewall-Umzug", pspElement: "CPSO8643-6", sapActivity: "Consulting")
+        var subtask = TaskItem(title: "Regeln exportieren", workDescription: "Regeln gesichert", parentID: parent.id)
+        subtask.ticketNumber = "1240"
+        subtask.ticketKey = "100124"
+        let plain = TaskItem(title: "Team Sitzung", pspElement: "INT1-1", sapActivity: "Internal Meeting")
+        let entries = [
+            TimeEntry(taskID: subtask.id, start: at(9), end: at(9, 30)),
+            TimeEntry(taskID: plain.id, start: at(10), end: at(10, 45)),
+        ]
+        let lines = DailyClose.lines(
+            for: day, tasks: [parent, subtask, plain], entries: entries, bookings: [],
+            rules: BookingRules(), now: at(18), calendar: calendar
+        )
+        XCTAssertEqual(lines.count, 2, "nur Aufgaben mit Zeit")
+        let line = lines[0]
+        XCTAssertEqual(line.task.id, subtask.id)
+        XCTAssertEqual(line.targets, [.sap, .manageEngine], "eigenes Ticket: auch Worklog")
+        XCTAssertTrue(line.issues.isEmpty, "Tätigkeit aus SAP ersetzt die Arbeitsart: \(line.issues)")
+        XCTAssertEqual(line.displayTitle, "Firewall-Umzug: Regeln exportieren")
+        XCTAssertEqual(line.sapComment, "#1240 Regeln gesichert")
+
+        let prepared = DailyClose.prepare(line, now: at(18))
+        XCTAssertEqual(prepared.map(\.target), [.sap, .manageEngine])
+        XCTAssertEqual(prepared.first?.pspElement, "CPSO8643-6")
+        XCTAssertEqual(prepared.first?.activity, "Consulting")
+        XCTAssertEqual(prepared.last?.ticketKey, "100124")
+
+        let meeting = lines[1]
+        XCTAssertEqual(meeting.targets, [.sap])
+        XCTAssertEqual(meeting.sapComment, "Team Sitzung")
+        let csv = SAPTransfer.csv(DailyClose.prepare(meeting, now: at(18))) { _ in "S-100" }
+        XCTAssertTrue(csv.contains("19.11.2026;INT1-1;Internal Meeting;0,75;Team Sitzung"), csv)
+    }
+
+    func testSQLiteKeepsSubtaskTicketAndActivity() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tagwerk-sub-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = try SQLiteStore(url: folder.appendingPathComponent("tagwerk.sqlite"))
+        let parent = TaskItem(title: "Umzug", createdAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let subtask = TaskItem(
+            title: "Kabel", createdAt: Date(timeIntervalSince1970: 1_700_000_100),
+            parentID: parent.id, ticketNumber: "1240", ticketKey: "100124", sapActivity: "Installation"
+        )
+        try store.save(parent)
+        try store.save(subtask)
+        let loaded = try store.load().tasks.first { $0.id == subtask.id }
+        XCTAssertEqual(loaded, subtask)
+
+        let booking = Booking(taskID: subtask.id, day: day, target: .sap, minutes: 30, description: "Kabel",
+                              updatedAt: Date(timeIntervalSince1970: 1_700_000_200), activity: "Installation")
+        try store.save(booking)
+        XCTAssertEqual(try store.load().bookings.first?.activity, "Installation")
+    }
+}

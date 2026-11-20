@@ -102,6 +102,18 @@ enum DemoData {
             createdAt: now.addingTimeInterval(-3 * hour)
         )
         tasks += [serverUpdate, jourFixe, vpn, offer, invoice]
+        // Unteraufgaben: das Angebot in Schritten, einer davon mit eigenem Ticket
+        tasks += [
+            TaskItem(title: "Leistungsumfang klären", customerID: becker.id, status: .done, completedAt: now.addingTimeInterval(-hour),
+                     sortIndex: 1, createdAt: now.addingTimeInterval(-29 * hour), parentID: offer.id),
+            TaskItem(title: "Preise kalkulieren", customerID: becker.id, estimateMinutes: 45,
+                     sortIndex: 2, createdAt: now.addingTimeInterval(-29 * hour), parentID: offer.id),
+            TaskItem(title: "Lizenzen prüfen", customerID: becker.id, sortIndex: 3, createdAt: now.addingTimeInterval(-29 * hour),
+                     parentID: offer.id, ticketNumber: "1243", ticketKey: "100143"),
+            TaskItem(title: "Tunnel-Logs sichern", customerID: mueller.id, status: .done, completedAt: now.addingTimeInterval(-40 * minute),
+                     sortIndex: 1, createdAt: now.addingTimeInterval(-3 * hour), parentID: vpn.id),
+            TaskItem(title: "Provider anrufen", customerID: mueller.id, sortIndex: 2, createdAt: now.addingTimeInterval(-3 * hour), parentID: vpn.id),
+        ]
         entry(serverUpdate, startsAgo: 4 * hour, minutes: 23)
         entries.append(TimeEntry(taskID: jourFixe.id, start: at(9), end: at(9, 30)))
         entry(vpn, startsAgo: 95 * minute, minutes: 10)
@@ -189,7 +201,8 @@ enum DemoData {
             PSPElement(customerID: mueller.id, code: "CPSO8643-2", title: "Störungen", lastUsedAt: now.addingTimeInterval(-hour)),
             PSPElement(customerID: mueller.id, code: "CPSO8643-4", title: "Projekt Netzumbau", isActive: false),
             PSPElement(customerID: stadtwerke.id, code: "CPSO8710-1", title: "Support"),
-            PSPElement(customerID: becker.id, code: "CPSO8802-1", title: "Beratung"),
+            PSPElement(customerID: becker.id, code: "CPSO8802-1", title: "Beratung", activity: "Consulting"),
+            PSPElement(customerID: becker.id, code: "CPSO8802-1", title: "Beratung", activity: "Remote Support"),
         ]
 
         // Das Server-Update ist schon gebucht: Worklog bestätigt, in SAP eingetragen.
@@ -207,15 +220,17 @@ enum DemoData {
                         goals: [goalOffer, goalStoerungen, goalMigration, goalNext])
     }
 
-    /// So sieht ein Excel-Export der Aufgabenliste aus ByDesign aus (für Bildschirmfotos).
+    /// So sieht die englische Aufgabenliste aus ByDesign aus (für Bildschirmfotos): mehrere Activities je Aufgabe.
     static let sapRows: [SAPTaskRow] = SAPImport.rows(fromCells: [
-        ["Kategorie", "Aufgabennummer", "Aufgabenname", "Tätigkeit", "Projekt", "Kunde"],
-        ["Projektaufgabenbestätigung", "CPSO8643-1", "Wartungsvertrag 2026", "Wartung", "CPSO8643", "Müller Logistik GmbH"],
-        ["Projektaufgabenbestätigung", "CPSO8643-2", "Störungen und Notfälle", "Störungsbehebung", "CPSO8643", "Müller Logistik GmbH"],
-        ["Projektaufgabenbestätigung", "CPSO8643-5", "Migration Exchange Online", "Projektarbeit", "CPSO8643", "Müller Logistik GmbH"],
-        ["Projektaufgabenbestätigung", "CPSO8643-6", "Firewall-Erneuerung", "Beratung", "CPSO8643", "Müller Logistik GmbH"],
-        ["Projektaufgabenbestätigung", "CPSO8710-1", "Support", "Wartung", "CPSO8710", "Stadtwerke Nord"],
-        ["Projektaufgabenbestätigung", "CPSO8710-2", "Rollout Arbeitsplätze", "Projektarbeit", "CPSO8710", "Stadtwerke Nord"],
-        ["Projektaufgabenbestätigung", "CPSO8955-1", "Interne Besprechungen", "Interne Tätigkeit", "CPSO8955", "Intern"],
+        ["Category", "Task ID", "Work Package Task", "Activity", "Project ID", "Customer"],
+        ["Project Task", "CPSO8643-1", "Wartungsvertrag 2026", "Maintenance", "CPSO8643", "Müller Logistik GmbH"],
+        ["Project Task", "CPSO8643-1", "Wartungsvertrag 2026", "Remote Support", "CPSO8643", "Müller Logistik GmbH"],
+        ["Project Task", "CPSO8643-2", "Störungen und Notfälle", "Remote Support", "CPSO8643", "Müller Logistik GmbH"],
+        ["Project Task", "CPSO8643-5", "Migration Exchange Online", "Consulting", "CPSO8643", "Müller Logistik GmbH"],
+        ["Project Task", "CPSO8643-6", "Firewall-Erneuerung", "Consulting", "CPSO8643", "Müller Logistik GmbH"],
+        ["Project Task", "CPSO8710-1", "Support", "Remote Support", "CPSO8710", "Stadtwerke Nord"],
+        ["Project Task", "CPSO8710-2", "Rollout Arbeitsplätze", "Installation", "CPSO8710", "Stadtwerke Nord"],
+        ["Project Task", "CPSO8955-1", "Team Sitzung", "Internal Meeting", "CPSO8955", "Intern"],
+        ["Project Task", "CPSO8955-1", "Team Sitzung", "Training", "CPSO8955", "Intern"],
     ])
 }

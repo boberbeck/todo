@@ -13,6 +13,8 @@ Aufbau: dunkel und ruhig, oben die Leiste mit Start, Plan, Kalender, Fokus, Kund
 | Bereich | Was geht |
 | --- | --- |
 | Start | Großes Datum, Stunden heute und diese Woche. Links die Aufgaben von heute (neue oben oder unten einfügen, per Ziehen sortieren), darunter die Erledigt-Liste und der Eingang. Rechts der Tageskalender, an der Kante breiter ziehbar; die Lupen machen die Stunden höher. |
+| Unteraufgaben | Rechtsklick › „Unteraufgabe hinzufügen“ oder im Fokus „Unteraufgaben“. Jede Unteraufgabe hat ihren eigenen Timer und kann ein eigenes Ticket haben; Kunde, SAP-Aufgabe und Ticket erbt sie sonst von der Aufgabe darüber. Im Tagesabschluss steht sie als eigene Zeile („Aufgabe: Unteraufgabe“). |
+| Ticket zuordnen | Jede eigene Aufgabe oder Unteraufgabe lässt sich einem Ticket zuordnen (Rechtsklick › „Ticket zuordnen“ oder der Ticket-Knopf im Fokus). Gesucht wird nach Nummer oder Betreff; eine unbekannte Nummer fragt Tagwerk bei ManageEngine nach. Die Zeit geht dann zusätzlich als Worklog an das Ticket. |
 | Plan | Woche planen: links der Eingang, daneben eine Spalte je Tag mit geplanter und freier Zeit. Aufgaben zieht man zwischen den Tagen hin und her. |
 | Kalender | Die Woche mit Terminen, Zeitblöcken und erfasster Zeit in Kundenfarben, Stunden je Tag und gegen das Wochenziel. Doppelklick oder „Zeit nachtragen“ erfasst Arbeit nachträglich. |
 | Tag planen | Geführte Planung beim ersten Öffnen am Tag: Übriges von gestern, Eingang, schätzen, in freie Lücken legen. |
@@ -25,7 +27,7 @@ Aufbau: dunkel und ruhig, oben die Leiste mit Start, Plan, Kalender, Fokus, Kund
 | Schnell erfassen | ⌃⌥ Leertaste öffnet von überall ein kleines Fenster für neue Aufgaben. |
 | Mails | Mails aus Outlook (oder .eml-Dateien) in den Eingang ziehen; Betreff und Absender werden übernommen. |
 | Sicherung | Täglich eine Kopie der Datenbank, die letzten 14 bleiben. |
-| SAP-Abgleich | Die Aufgabenliste aus ByDesign (Excel-Export oder kopierte Tabelle) wird zu PSP-Elementen bei den Kunden. Neue kommen dazu, geänderte Bezeichnungen werden übernommen, verschwundene auf Wunsch deaktiviert. |
+| SAP-Abgleich | Die Aufgabenliste aus ByDesign (deutsch oder englisch) wird zu PSP-Elementen bei den Kunden, je Aufgabe und Tätigkeit (Activity) ein Eintrag. Neue kommen dazu, geänderte Bezeichnungen werden übernommen, verschwundene auf Wunsch deaktiviert. |
 | Claude | Ein MCP-Server liegt in der App. Claude Desktop und Claude Code können damit Aufgaben, Timer, Zeiten und den Stand des Tagesabschlusses lesen und ändern. Gebucht wird weiter nur in Tagwerk. |
 | Menüleiste | Laufende Zeit, Stoppen, Erledigt, eine andere Aufgabe starten. |
 
@@ -75,6 +77,8 @@ Ohne API-Zugriff auf SAP holt Tagwerk die Projektaufgaben (z. B. `CPSO8643-12`) 
    Mit Benutzer und Passwort in Einstellungen › Buchung meldet Tagwerk sich selbst an (das Passwort liegt im Schlüsselbund). Ist die Liste einmal mit „Diese Liste merken“ gemerkt, holt Tagwerk sie auf Wunsch einmal am Tag beim Start automatisch und übernimmt neue Aufgaben in schon bekannten Projekten; neue Projekte warten im SAP-Abgleich auf einen Kunden.
 2. **Bildschirmfoto:** Liste fotografieren (⇧⌘4) und ins Abgleich-Fenster ziehen oder einfügen; Tagwerk liest die Nummern per Texterkennung.
 3. **Excel-Export oder kopierte Tabelle**, falls ByDesign einen Export anbietet (`.xlsx`, Excel-XML, CSV, HTML).
+
+Tagwerk liest die Seite so, wie man sie sieht: Text auf gleicher Höhe ist eine Zeile, die Spalten kommen aus den Überschriften (deutsch wie „Aufgabennummer“, „Tätigkeit“ oder englisch wie „Task ID“, „Work Package Task“, „Activity“). Hat eine Aufgabe mehrere Activities, wird jede ein eigener Eintrag; die gewählte Tätigkeit landet in der SAP-Buchung (Spalte „Leistung“ der Übertragungsliste, Kopier-Knopf „Tätigkeit“ im Tagesabschluss). Klappt das Lesen nicht, sichert „Seite sichern“ im ByDesign-Fenster, was Tagwerk sieht (Datei in Downloads, vor dem Weitergeben ansehen).
 
 Danach jedem Projekt einmal den Kunden zuordnen. Beim nächsten Abgleich merkt Tagwerk sich das über die schon bekannten Aufgaben. In SAP ändert sich dabei nichts.
 

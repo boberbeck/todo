@@ -81,13 +81,24 @@ final class ByDesignBrowserModel {
 
     /// Liest die Seite ohne Texterkennung und sammelt die Treffer.
     private func readFromPage() async {
+        guard let page = await pageContent() else { return }
+        merge(Self.rows(from: page))
+    }
+
+    private func pageContent() async -> PageContent? {
         guard let webView,
               let json = await webView.tagwerkEvaluate(ByDesignDemoPage.extractionScript) as? String,
-              let data = json.data(using: .utf8),
-              let page = try? JSONDecoder().decode(PageContent.self, from: data) else { return }
-        var found = SAPImport.rows(fromCells: page.rows)
-        if found.isEmpty { found = SAPImport.rows(fromText: page.text) }
-        merge(found)
+              let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(PageContent.self, from: data)
+    }
+
+    /// Drei Lesarten der Seite, die ergiebigste zählt: nach Lage auf dem Bildschirm (wie ein Mensch liest),
+    /// nach Tabellenzeilen im Seitenaufbau und als reiner Text.
+    static func rows(from page: PageContent) -> [SAPTaskRow] {
+        let layout = SAPImport.rows(fromLayout: page.boxes ?? [])
+        let cells = SAPImport.rows(fromCells: page.rows)
+        let best = SAPImport.best(of: [layout, cells])
+        return best.isEmpty ? SAPImport.rows(fromText: page.text) : best
     }
 
     /// Seite fertig geladen: bei einer Anmeldeseite Benutzer und Passwort einsetzen.
@@ -161,13 +172,8 @@ final class ByDesignBrowserModel {
 
         var found: [SAPTaskRow] = []
         var source = "Seite"
-        if let json = await webView.tagwerkEvaluate(ByDesignDemoPage.extractionScript) as? String,
-           let data = json.data(using: .utf8),
-           let page = try? JSONDecoder().decode(PageContent.self, from: data) {
-            found = SAPImport.rows(fromCells: page.rows)
-            if found.isEmpty {
-                found = SAPImport.rows(fromText: page.text)
-            }
+        if let page = await pageContent() {
+            found = Self.rows(from: page)
         }
         if found.isEmpty, allowsTextRecognition, let image = await snapshot(of: webView) {
             source = "Texterkennung"
@@ -178,26 +184,19 @@ final class ByDesignBrowserModel {
         merge(found)
         let added = collected.count - before
         if found.isEmpty {
-            status = "Auf dieser Seite keine Aufgabennummern gefunden. Ist die Liste mit „Aufgabennummer“ offen?"
+            status = "Auf dieser Seite keine Aufgabennummern gefunden. Ist die Liste mit den Aufgaben (Task ID) offen?"
         } else {
-            status = "\(found.count) Aufgaben gelesen (\(source)), \(added) davon neu. Lange Liste? Weiterblättern und erneut holen."
+            let activities = found.filter { !($0.activity ?? "").isEmpty }.count
+            let detail = activities > 0 ? ", \(activities) mit Tätigkeit" : ", ohne Tätigkeit (Spalte „Activity“ nicht gefunden)"
+            status = "\(found.count) Einträge gelesen (\(source)\(detail)), \(max(0, added)) davon neu. Lange Liste? „Alle einsammeln“ scrollt durch."
         }
         return found.count
     }
 
-    /// Bekannte Nummern werden ergänzt (z. B. ein Name, der beim ersten Lesen fehlte).
+    /// Eine Zeile je Aufgabe und Tätigkeit. Bekannte werden ergänzt (z. B. ein Name, der beim ersten Lesen fehlte).
     private func merge(_ rows: [SAPTaskRow]) {
-        for row in rows {
-            if let index = collected.firstIndex(where: { $0.code == row.code }) {
-                var existing = collected[index]
-                if existing.title.isEmpty || existing.title.count < row.title.count, !row.title.isEmpty { existing.title = row.title }
-                if existing.customerName == nil { existing.customerName = row.customerName }
-                if existing.projectName == nil { existing.projectName = row.projectName }
-                collected[index] = existing
-            } else {
-                collected.append(row)
-            }
-        }
+        guard !rows.isEmpty else { return }
+        collected = SAPImport.merged(collected + rows)
     }
 
     /// Speichert, was Tagwerk auf der Seite liest (Tabellenzeilen und Text), in „Downloads“.
@@ -231,9 +230,11 @@ final class ByDesignBrowserModel {
         }
     }
 
-    private struct PageContent: Decodable {
+    struct PageContent: Decodable {
         let rows: [[String]]
         let text: String
+        /// Text-Schnipsel mit ihrer Lage auf dem Bildschirm
+        let boxes: [TextBox]?
     }
 }
 
@@ -358,9 +359,15 @@ struct ByDesignBrowserView: View {
             guard SnapshotMode.directory != nil else { return }
             try? await Task.sleep(for: .seconds(2.5))
             let count = await browser.readTasks()
-            SnapshotMode.log("ByDesign-Beispiel aus dem Seiteninhalt: \(count) Aufgaben \(browser.collected.map(\.code))")
+            SnapshotMode.log("ByDesign-Beispiel aus dem Seiteninhalt: \(count) Einträge")
+            for row in browser.collected {
+                SnapshotMode.log("  \(row.code) | \(row.title) | \(row.activity ?? "-") | \(row.project)")
+            }
             if let image = await browser.pageImage(), let rows = try? await ScreenTextReader.taskRows(from: image) {
-                SnapshotMode.log("ByDesign-Beispiel per Texterkennung: \(rows.map(\.code)) \(rows.map(\.title))")
+                SnapshotMode.log("ByDesign-Beispiel per Texterkennung: \(rows.count) Einträge")
+                for row in rows {
+                    SnapshotMode.log("  \(row.code) | \(row.title) | \(row.activity ?? "-")")
+                }
             } else {
                 SnapshotMode.log("Texterkennung ohne Ergebnis")
             }
@@ -502,9 +509,18 @@ struct ByDesignWebView: NSViewRepresentable {
 /// Texterkennung mit dem Vision-Framework von macOS, z. B. für ein Bildschirmfoto der Aufgabenliste.
 enum ScreenTextReader {
     static func taskRows(from image: CGImage) async throws -> [SAPTaskRow] {
-        let cells = try await cells(from: image)
-        let repaired = cells.map { $0.map(SAPImport.repairOCRCell) }
-        var rows = SAPImport.rows(fromCells: repaired)
+        let items = try await recognize(image)
+        let boxes = items.map { item in
+            TextBox(
+                text: SAPImport.repairOCRCell(item.text),
+                x: item.box.minX * Double(image.width),
+                y: (1 - item.box.maxY) * Double(image.height),
+                width: item.box.width * Double(image.width),
+                height: item.box.height * Double(image.height)
+            )
+        }
+        let repaired = group(items).map { $0.map(SAPImport.repairOCRCell) }
+        var rows = SAPImport.best(of: [SAPImport.rows(fromLayout: boxes), SAPImport.rows(fromCells: repaired)])
         if rows.isEmpty {
             rows = SAPImport.rows(fromLines: repaired.map { $0.joined(separator: " ") })
         }
@@ -518,6 +534,11 @@ enum ScreenTextReader {
 
     /// Erkannter Text, nach Zeilen und von links nach rechts geordnet.
     static func cells(from image: CGImage) async throws -> [[String]] {
+        group(try await recognize(image))
+    }
+
+    /// Erkannter Text mit Lage (Vision zählt von unten links, Werte zwischen 0 und 1).
+    private static func recognize(_ image: CGImage) async throws -> [(box: CGRect, text: String)] {
         try await Task.detached(priority: .userInitiated) {
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
@@ -528,7 +549,7 @@ enum ScreenTextReader {
                 guard let text = observation.topCandidates(1).first?.string else { return nil }
                 return (observation.boundingBox, text)
             }
-            return group(items)
+            return items
         }.value
     }
 
@@ -549,13 +570,83 @@ enum ScreenTextReader {
 
 /// Beispielseite für Bildschirmfotos und den Test im Build, aufgebaut wie eine ByDesign-Tabelle.
 enum ByDesignDemoPage {
-    /// Sammelt Tabellenzeilen (auch ARIA-Raster aus Div-Elementen) und den Text der Seite samt Rahmen.
+    /// Sammelt Tabellenzeilen (auch ARIA-Raster aus Div-Elementen), den Text der Seite samt Rahmen
+    /// und jedes Text-Schnipsel mit seiner Lage auf dem Bildschirm (für das Lesen wie ein Mensch).
     static let extractionScript = """
     (() => {
       const rows = [];
       const texts = [];
+      const boxes = [];
       const cellSelector = '[role="gridcell"], [role="cell"], [role="columnheader"], [role="rowheader"], td, th';
-      const visit = (doc) => {
+      const skipTags = /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|OPTION|TITLE|HEAD)$/;
+      const layout = (doc, offsetX, offsetY) => {
+        const win = doc.defaultView;
+        const styles = new Map();
+        const styleOf = (el) => {
+          if (!styles.has(el)) { styles.set(el, win.getComputedStyle(el)); }
+          return styles.get(el);
+        };
+        const clips = new Map();
+        const clipOf = (el) => {
+          if (!el || el === doc.body || el === doc.documentElement) { return null; }
+          if (clips.has(el)) { return clips.get(el); }
+          let result = clipOf(el.parentElement);
+          const style = styleOf(el);
+          if (/(auto|scroll|hidden|clip)/.test(style.overflowX + ' ' + style.overflowY)) {
+            const r = el.getBoundingClientRect();
+            result = result
+              ? { left: Math.max(result.left, r.left), top: Math.max(result.top, r.top), right: Math.min(result.right, r.right), bottom: Math.min(result.bottom, r.bottom) }
+              : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+          }
+          clips.set(el, result);
+          return result;
+        };
+        const hidden = (el) => {
+          const style = styleOf(el);
+          return style.visibility === 'hidden' || style.display === 'none' || parseFloat(style.opacity) === 0;
+        };
+        const push = (raw, left, top, right, height, el) => {
+          const text = (raw || '').replace(/\\s+/g, ' ').trim();
+          if (!text || right - left <= 0 || height <= 0) { return; }
+          const clip = clipOf(el);
+          if (clip) {
+            const mid = top + height / 2;
+            if (mid < clip.top || mid > clip.bottom || left >= clip.right || right <= clip.left) { return; }
+            left = Math.max(left, clip.left);
+            right = Math.min(right, clip.right);
+          }
+          if (right - left <= 0) { return; }
+          boxes.push({ text: text.slice(0, 300), x: left + offsetX, y: top + offsetY, width: right - left, height: height });
+        };
+        if (doc.body) {
+          const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null);
+          const range = doc.createRange();
+          let node;
+          let count = 0;
+          while ((node = walker.nextNode()) && count < 20000) {
+            const parent = node.parentElement;
+            if (!parent || skipTags.test(parent.tagName) || !node.nodeValue || !node.nodeValue.trim()) { continue; }
+            range.selectNodeContents(node);
+            const rects = range.getClientRects();
+            if (!rects.length || hidden(parent)) { continue; }
+            count += 1;
+            const first = rects[0];
+            let left = first.left;
+            let right = first.right;
+            for (const r of rects) { left = Math.min(left, r.left); right = Math.max(right, r.right); }
+            push(node.nodeValue, left, first.top, right, first.height, parent);
+          }
+          doc.querySelectorAll('input, textarea').forEach((el) => {
+            const type = (el.type || '').toLowerCase();
+            if (['hidden', 'password', 'checkbox', 'radio', 'button', 'submit', 'image', 'file', 'reset'].includes(type) || !el.value) { return; }
+            if (hidden(el)) { return; }
+            const r = el.getBoundingClientRect();
+            const height = Math.min(r.height, 24);
+            push(el.value, r.left, r.top + (r.height - height) / 2, r.right, height, el);
+          });
+        }
+      };
+      const visit = (doc, offsetX, offsetY, depth) => {
         try {
           if (doc.body) { texts.push(doc.body.innerText || ''); }
           doc.querySelectorAll('[role="row"], tr').forEach((row) => {
@@ -564,13 +655,20 @@ enum ByDesignDemoPage {
               .map((cell) => (cell.innerText || cell.textContent || '').trim());
             if (cells.length > 0) { rows.push(cells); }
           });
+          try { layout(doc, offsetX, offsetY); } catch (error) {}
+          if (depth > 4) { return; }
           doc.querySelectorAll('iframe, frame').forEach((frame) => {
-            try { if (frame.contentDocument) { visit(frame.contentDocument); } } catch (error) {}
+            try {
+              if (frame.contentDocument) {
+                const r = frame.getBoundingClientRect();
+                visit(frame.contentDocument, offsetX + r.left + frame.clientLeft, offsetY + r.top + frame.clientTop, depth + 1);
+              }
+            } catch (error) {}
           });
         } catch (error) {}
       };
-      visit(document);
-      return JSON.stringify({ rows: rows, text: texts.join('\\n') });
+      visit(document, 0, 0, 0);
+      return JSON.stringify({ rows: rows, text: texts.join('\\n'), boxes: boxes });
     })()
     """
 
@@ -650,24 +748,48 @@ enum ByDesignDemoPage {
     return 'ausgefuellt';
     """
 
+    /// Aufgebaut wie die englische ByDesign-Liste: feste Spalte mit der Task ID links, der Rest in einer
+    /// eigenen Tabelle daneben, mehrere Activities je Aufgabe und „Group By…“ in der Werkzeugleiste.
     static let html = """
-    <!doctype html><html lang="de"><head><meta charset="utf-8"><title>Meine Aufgaben</title>
+    <!doctype html><html lang="en"><head><meta charset="utf-8"><title>My Work Packages</title>
     <style>
       body { font: 15px -apple-system, Helvetica, sans-serif; margin: 0; color: #1d2d3e; background: #f5f6f7; }
       header { background: #354a5f; color: white; padding: 12px 20px; font-size: 16px; }
-      main { padding: 20px; } .toolbar { margin-bottom: 12px; color: #556b82; }
-      .grid { background: white; border: 1px solid #d9d9d9; border-radius: 6px; display: table; width: 100%; }
-      .row { display: table-row; } .cell { display: table-cell; padding: 10px 14px; border-bottom: 1px solid #eee; }
-      .head .cell { font-weight: 600; background: #fafafa; }
+      main { padding: 20px; } .toolbar { margin-bottom: 12px; color: #556b82; display: flex; gap: 24px; }
+      .split { display: flex; background: white; border: 1px solid #d9d9d9; border-radius: 6px; overflow: hidden; }
+      .scroll { overflow-x: auto; flex: 1; }
+      table { border-collapse: collapse; } .scroll table { width: 100%; }
+      th, td { height: 22px; padding: 9px 14px; border-bottom: 1px solid #eee; text-align: left; white-space: nowrap; }
+      th { font-weight: 600; background: #fafafa; } .fixed { border-right: 1px solid #e5e5e5; }
+      a { color: #0a6ed1; text-decoration: none; }
     </style></head><body>
-    <header>SAP Business ByDesign · Beispiel</header>
-    <main><div class="toolbar">Gruppieren nach: Kategorie</div>
-    <div class="grid" role="grid">
-      <div class="row head" role="row"><div class="cell" role="columnheader">Kategorie</div><div class="cell" role="columnheader">Aufgabennummer</div><div class="cell" role="columnheader">Aufgabenname</div><div class="cell" role="columnheader">Projekt</div></div>
-      <div class="row" role="row"><div class="cell" role="gridcell">Projektaufgabenbestätigung</div><div class="cell" role="gridcell">CPSO8643-1</div><div class="cell" role="gridcell">Wartungsvertrag 2026</div><div class="cell" role="gridcell">CPSO8643</div></div>
-      <div class="row" role="row"><div class="cell" role="gridcell">Projektaufgabenbestätigung</div><div class="cell" role="gridcell">CPSO8643-2</div><div class="cell" role="gridcell">Störungen und Notfälle</div><div class="cell" role="gridcell">CPSO8643</div></div>
-      <div class="row" role="row"><div class="cell" role="gridcell">Projektaufgabenbestätigung</div><div class="cell" role="gridcell">CPSO8643-5</div><div class="cell" role="gridcell">Migration Exchange Online</div><div class="cell" role="gridcell">CPSO8643</div></div>
-      <div class="row" role="row"><div class="cell" role="gridcell">Projektaufgabenbestätigung</div><div class="cell" role="gridcell">CPSO8710-2</div><div class="cell" role="gridcell">Rollout Arbeitsplätze</div><div class="cell" role="gridcell">CPSO8710</div></div>
+    <header>SAP Business ByDesign · Example</header>
+    <main><div class="toolbar"><span>Show: My Current Work Packages</span><span>Group By…</span><span>Personalize</span></div>
+    <div class="split">
+      <table class="fixed" role="grid">
+        <thead><tr><th>Task ID</th></tr></thead>
+        <tbody>
+          <tr><td><a href="#">CPSO8643-1</a></td></tr>
+          <tr><td><a href="#">CPSO8643-1</a></td></tr>
+          <tr><td><a href="#">CPSO8643-2</a></td></tr>
+          <tr><td><a href="#">CPSO8643-5</a></td></tr>
+          <tr><td><a href="#">CPSO8710-2</a></td></tr>
+          <tr><td><a href="#">CPSO9001-3</a></td></tr>
+          <tr><td><a href="#">CPSO9001-3</a></td></tr>
+        </tbody>
+      </table>
+      <div class="scroll"><table role="grid">
+        <thead><tr><th>Work Package Task</th><th>Activity</th><th>Category</th><th>Project ID</th></tr></thead>
+        <tbody>
+          <tr><td><span>Maintenance Contract 2026</span></td><td>Consulting</td><td>Project Task</td><td>CPSO8643</td></tr>
+          <tr><td><span>Maintenance Contract 2026</span></td><td>Remote Support</td><td>Project Task</td><td>CPSO8643</td></tr>
+          <tr><td><span>Incidents and Emergencies</span></td><td>Remote Support</td><td>Project Task</td><td>CPSO8643</td></tr>
+          <tr><td><span>Migration Exchange Online</span></td><td>Consulting</td><td>Project Task</td><td>CPSO8643</td></tr>
+          <tr><td><span>Workstation Rollout</span></td><td>Installation</td><td>Project Task</td><td>CPSO8710</td></tr>
+          <tr><td><span>Team Meeting</span></td><td>Internal Meeting</td><td>Project Task</td><td>CPSO9001</td></tr>
+          <tr><td><span>Team Meeting</span></td><td>Training</td><td>Project Task</td><td>CPSO9001</td></tr>
+        </tbody>
+      </table></div>
     </div></main></body></html>
     """
 }

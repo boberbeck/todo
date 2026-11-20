@@ -73,11 +73,24 @@ struct FocusTaskPane: View {
 
     @State private var descriptionText = ""
     @State private var showsDetails = false
+    @State private var showsSubtaskField = false
 
     var body: some View {
         let running = model.isRunning(task.id)
         VStack(spacing: 22) {
             VStack(spacing: 10) {
+                if let parent = model.parent(of: task) {
+                    Button {
+                        model.focusedTaskID = parent.id
+                    } label: {
+                        Label("Teil von „\(parent.title)“", systemImage: "arrow.turn.left.up")
+                            .font(.callout)
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.tertiary)
+                    .help("Zur übergeordneten Aufgabe")
+                }
                 if let customer = model.customer(task.customerID) {
                     HStack(spacing: 6) {
                         CustomerDot(colorIndex: customer.colorIndex, size: 7)
@@ -92,7 +105,7 @@ struct FocusTaskPane: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
                     .frame(maxWidth: 760)
-                if task.source == .ticket, let number = task.externalID {
+                if let number = model.ticketNumber(for: task) {
                     Text("Ticket #\(number)")
                         .font(.callout)
                         .foregroundStyle(Theme.tertiary)
@@ -100,7 +113,7 @@ struct FocusTaskPane: View {
             }
 
             VStack(spacing: 4) {
-                Text(TimeMath.format(model.tracked(taskID: task.id, now: running ? model.now : Date()), showSeconds: true))
+                Text(TimeMath.format(model.trackedIncludingSubtasks(taskID: task.id, now: model.runningEntry != nil ? model.now : Date()), showSeconds: true))
                     .font(.system(size: 76, weight: .light))
                     .monospacedDigit()
                     .foregroundStyle(running ? Theme.text : Theme.secondary)
@@ -141,6 +154,23 @@ struct FocusTaskPane: View {
                 .help("Andere Aufgabe von heute in den Fokus holen")
             }
 
+            if !task.isSubtask, !task.isDone, !model.subtasks(of: task.id).isEmpty || showsSubtaskField {
+                SubtaskList(parent: task)
+                    .frame(maxWidth: 520)
+                    .card(padding: 10)
+            } else if !task.isSubtask, !task.isDone {
+                Button {
+                    showsSubtaskField = true
+                    model.beginSubtaskEntry(for: task.id)
+                } label: {
+                    Label("Unteraufgaben", systemImage: "checklist")
+                        .font(.callout)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.tertiary)
+                .help("In Schritte zerlegen; jeder Schritt kann eigene Zeit und ein eigenes Ticket haben")
+            }
+
             VStack(spacing: 10) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) { showsDetails.toggle() }
@@ -160,13 +190,11 @@ struct FocusTaskPane: View {
                         HStack(spacing: 10) {
                             WorkTypeMenu(task: task)
                             PSPMenu(task: task)
-                            if task.source == .ticket {
+                            TicketMenu(task: task)
+                            if model.resolved(task).hasTicket {
                                 WorklogTypeMenu(task: task)
                             }
-                            Spacer()
-                            Text("für Worklog und SAP")
-                                .font(.caption)
-                                .foregroundStyle(Theme.tertiary)
+                            Spacer(minLength: 0)
                         }
                         TextEditor(text: $descriptionText)
                             .font(.body)
@@ -185,7 +213,7 @@ struct FocusTaskPane: View {
                                 }
                             }
                     }
-                    .frame(maxWidth: 560)
+                    .frame(maxWidth: 620)
                     .card(padding: 14)
                 }
             }
@@ -194,7 +222,7 @@ struct FocusTaskPane: View {
         .onAppear {
             descriptionText = task.workDescription
             model.focusedTaskID = task.id
-            showsDetails = task.source == .ticket && task.workDescription.isEmpty
+            showsDetails = model.resolved(task).hasTicket && task.workDescription.isEmpty
         }
         .onChange(of: descriptionText) {
             model.setDescription(descriptionText, for: task.id)
@@ -205,7 +233,7 @@ struct FocusTaskPane: View {
     private var detailSummary: String {
         var parts: [String] = []
         parts.append(task.workType?.label ?? "Arbeitsart wählen")
-        parts.append(task.pspElement.flatMap { code in model.pspElements.first { $0.code == code }?.label } ?? task.pspElement ?? "SAP-Aufgabe wählen")
+        parts.append(model.pspLabel(for: task) ?? "SAP-Aufgabe wählen")
         parts.append(task.workDescription.isEmpty ? "Bearbeitung notieren" : "Bearbeitung")
         return parts.joined(separator: " · ")
     }

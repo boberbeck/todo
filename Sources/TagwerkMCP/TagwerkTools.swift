@@ -67,12 +67,15 @@ public final class TagwerkTools {
                     "notizen": text("Notizen"),
                     "arbeitsart": choice(WorkType.allCases.map(\.label), "Art der Arbeit, legt die Leistung in SAP fest"),
                     "psp": text("PSP-Element in SAP ByDesign"),
+                    "taetigkeit": text("Tätigkeit (Activity) aus SAP zum PSP-Element"),
+                    "ticket": text("Ticketnummer aus ManageEngine; die Zeit geht dann auch als Worklog dorthin"),
+                    "unteraufgabe_von": text("ID der übergeordneten Aufgabe; dann ist dies eine Unteraufgabe"),
                 ],
                 required: ["titel"]
             ),
             tool(
                 "aufgabe_aendern",
-                "Eine Aufgabe ändern: Titel, Notiz, Tag, Schätzung, Arbeitsart, PSP-Element, Beschreibung der Bearbeitung, Kunde oder erledigt.",
+                "Eine Aufgabe ändern: Titel, Notiz, Tag, Schätzung, Arbeitsart, PSP-Element mit Tätigkeit, Ticket, Beschreibung der Bearbeitung, Kunde oder erledigt.",
                 properties: [
                     "id": text("ID der Aufgabe (die ersten 8 Zeichen reichen)"),
                     "titel": text("Neuer Titel"),
@@ -81,6 +84,8 @@ public final class TagwerkTools {
                     "schaetzung_min": number("Schätzung in Minuten, 0 entfernt sie"),
                     "arbeitsart": choice(WorkType.allCases.map(\.label) + ["keine"], "Arbeitsart"),
                     "psp": text("PSP-Element; leer entfernt es"),
+                    "taetigkeit": text("Tätigkeit (Activity) aus SAP; leer entfernt sie"),
+                    "ticket": text("Ticketnummer zuordnen; leer entfernt die Zuordnung"),
                     "beschreibung": text("Beschreibung der Bearbeitung (Text für Worklog und SAP)"),
                     "kunde": text("Kundenname; leer entfernt den Kunden"),
                     "erledigt": flag("true = erledigt, false = wieder offen"),
@@ -191,7 +196,7 @@ public final class TagwerkTools {
             tasks = tasks.filter { $0.customerID == customer.id }
         }
         if bool(arguments, "eingang") == true {
-            tasks = tasks.filter { $0.plannedDate == nil }
+            tasks = tasks.filter { $0.plannedDate == nil && $0.parentID == nil }
         }
         if let query = string(arguments, "suche") {
             tasks = tasks.filter { task in
@@ -219,19 +224,30 @@ public final class TagwerkTools {
         guard let rawTitle = string(arguments, "titel") else { throw ToolError("Titel fehlt.") }
         let parsed = DurationParser.split(title: rawTitle)
         guard !parsed.title.isEmpty else { throw ToolError("Titel fehlt.") }
+        let parent = try string(arguments, "unteraufgabe_von").map { reference -> TaskItem in
+            let found = try resolveTask(reference, in: snapshot.tasks)
+            return found.parentID.flatMap { id in snapshot.tasks.first { $0.id == id } } ?? found
+        }
         let customer = try string(arguments, "kunde").map { try resolveCustomer($0, in: snapshot.customers) }
-        let plannedDate = try plannedDay(from: string(arguments, "datum"))
-        let task = TaskItem(
+        var plannedDate: LocalDate?
+        if parent == nil { plannedDate = try plannedDay(from: string(arguments, "datum")) }
+        var task = TaskItem(
             title: parsed.title,
             notes: string(arguments, "notizen") ?? "",
-            customerID: customer?.id,
+            customerID: customer?.id ?? parent?.customerID,
             plannedDate: plannedDate,
             estimateMinutes: int(arguments, "schaetzung_min") ?? parsed.minutes,
             workType: try string(arguments, "arbeitsart").map { try workType($0) },
             pspElement: string(arguments, "psp"),
-            sortIndex: DayPlan.nextSortIndex(in: snapshot.tasks.filter { $0.plannedDate == plannedDate }),
-            createdAt: now()
+            sortIndex: parent.map { parent in DayPlan.nextSortIndex(in: DayPlan.subtasks(of: parent.id, in: snapshot.tasks)) }
+                ?? DayPlan.nextSortIndex(in: snapshot.tasks.filter { $0.plannedDate == plannedDate && $0.parentID == nil }),
+            createdAt: now(),
+            parentID: parent?.id,
+            sapActivity: sapActivityArgument(arguments)
         )
+        if let number = string(arguments, "ticket") {
+            assignTicket(number, to: &task, in: snapshot)
+        }
         try store.save(task)
         let updated = try store.load()
         return json(["angelegt": describe(task, in: updated, day: nil)])
@@ -260,7 +276,19 @@ public final class TagwerkTools {
                 task.workType = nil
             }
         }
-        if arguments["psp"] != nil { task.pspElement = string(arguments, "psp") }
+        if arguments["psp"] != nil {
+            task.pspElement = string(arguments, "psp")
+            if task.pspElement == nil { task.sapActivity = nil }
+        }
+        if arguments["taetigkeit"] != nil { task.sapActivity = sapActivityArgument(arguments) }
+        if arguments["ticket"] != nil {
+            if let number = string(arguments, "ticket") {
+                assignTicket(number, to: &task, in: snapshot)
+            } else {
+                task.ticketNumber = nil
+                task.ticketKey = nil
+            }
+        }
         if arguments["kunde"] != nil {
             task.customerID = try string(arguments, "kunde").map { try resolveCustomer($0, in: snapshot.customers).id }
         }
@@ -486,7 +514,22 @@ public final class TagwerkTools {
         ]
     }
 
+    private func sapActivityArgument(_ arguments: [String: Any]) -> String? {
+        string(arguments, "taetigkeit")
+    }
+
+    /// Ordnet ein Ticket über seine Nummer zu. Die interne ID kommt von einem Ticket, das schon in Tagwerk liegt.
+    private func assignTicket(_ rawNumber: String, to task: inout TaskItem, in snapshot: Snapshot) {
+        guard task.source != .ticket else { return }
+        let number = rawNumber.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        let known = snapshot.tasks.first { $0.source == .ticket && $0.linkedTicketNumber == number }
+        task.ticketNumber = number
+        task.ticketKey = known?.linkedTicketKey
+    }
+
     private func describe(_ task: TaskItem, in snapshot: Snapshot, day: LocalDate?) -> [String: Any] {
+        let parent = task.parentID.flatMap { id in snapshot.tasks.first { $0.id == id } }
+        let effective = task.resolved(parent: parent)
         var entry: [String: Any] = [
             "id": task.id.uuidString,
             "titel": task.title,
@@ -496,11 +539,19 @@ public final class TagwerkTools {
             "erfasst_min": minutes(TimeMath.tracked(taskID: task.id, entries: snapshot.entries, now: now())),
         ]
         if let customer = snapshot.customers.first(where: { $0.id == task.customerID }) { entry["kunde"] = customer.name }
-        if task.source == .ticket, let number = task.externalID { entry["ticket"] = number }
+        if let number = effective.linkedTicketNumber { entry["ticket"] = number }
+        if let parent {
+            entry["unteraufgabe_von"] = ["id": parent.id.uuidString, "titel": parent.title]
+        }
+        let subtasks = DayPlan.subtasks(of: task.id, in: snapshot.tasks)
+        if !subtasks.isEmpty {
+            entry["unteraufgaben"] = subtasks.map { ["id": $0.id.uuidString, "titel": $0.title, "erledigt": $0.isDone] as [String: Any] }
+        }
         if let start = task.scheduledStart { entry["zeitblock"] = clock(start) }
         if let estimate = task.estimateMinutes { entry["schaetzung_min"] = estimate }
         if let workType = task.workType { entry["arbeitsart"] = workType.label }
-        if let psp = task.pspElement { entry["psp"] = psp }
+        if let psp = effective.pspElement { entry["psp"] = psp }
+        if let activity = effective.sapActivity { entry["taetigkeit"] = activity }
         if !task.workDescription.isEmpty { entry["beschreibung"] = task.workDescription }
         if !task.notes.isEmpty { entry["notizen"] = task.notes }
         if let goal = snapshot.goals.first(where: { $0.id == task.goalID }) { entry["wochenziel"] = goal.title }

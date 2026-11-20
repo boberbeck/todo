@@ -354,12 +354,14 @@ struct LogEventSheet: View {
     @State private var title = ""
     @State private var customerID: UUID?
     @State private var pspElement: String?
+    @State private var activity: String?
     @State private var workType: WorkType?
     @State private var showsTaskPicker = false
 
     private var pspLabel: String {
         guard let pspElement else { return "Suchen, z. B. „Team Sitzung“" }
-        return model.pspElements.first { $0.code == pspElement }?.label ?? pspElement
+        return model.pspElements.first(where: { $0.matches(code: pspElement, activity: activity) })?.label
+            ?? [pspElement, activity].compactMap { $0 }.joined(separator: " · ")
     }
 
     var body: some View {
@@ -381,12 +383,14 @@ struct LogEventSheet: View {
                             .lineLimit(1)
                     }
                     .popover(isPresented: $showsTaskPicker, arrowEdge: .bottom) {
-                        SAPTaskPicker(selectedCode: pspElement) { psp, customCode in
+                        SAPTaskPicker(selectedCode: pspElement, selectedActivity: activity) { psp, customCode in
                             if let psp {
                                 pspElement = psp.code
+                                activity = psp.activity
                                 customerID = psp.customerID
                             } else {
                                 pspElement = customCode
+                                activity = nil
                             }
                             showsTaskPicker = false
                         }
@@ -398,7 +402,7 @@ struct LogEventSheet: View {
                         Text(customer.name).tag(UUID?.some(customer.id))
                     }
                 }
-                Picker("Arbeitsart", selection: $workType) {
+                Picker(activity == nil ? "Arbeitsart" : "Arbeitsart (optional, Tätigkeit kommt aus SAP)", selection: $workType) {
                     Text("Keine").tag(WorkType?.none)
                     ForEach(WorkType.allCases) { type in
                         Text(type.label).tag(WorkType?.some(type))
@@ -414,7 +418,7 @@ struct LogEventSheet: View {
                 Button("Abbrechen") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Erfassen") {
-                    model.logEvent(event, title: title, assignment: .init(customerID: customerID, pspElement: pspElement, workType: workType))
+                    model.logEvent(event, title: title, assignment: .init(customerID: customerID, pspElement: pspElement, workType: workType, activity: activity))
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
@@ -428,14 +432,16 @@ struct LogEventSheet: View {
             if let remembered = model.eventAssignment(for: event) {
                 customerID = remembered.customerID
                 pspElement = remembered.pspElement
+                activity = remembered.activity
                 workType = remembered.workType
             }
         }
         .onChange(of: customerID) { old, new in
             // Anderer Kunde: eine SAP-Aufgabe eines anderen Kunden passt nicht mehr
             if old != nil, old != new, let code = pspElement,
-               model.pspElements.first(where: { $0.code == code })?.customerID != new {
+               model.pspElements.first(where: { $0.matches(code: code, activity: activity) })?.customerID != new {
                 pspElement = nil
+                activity = nil
             }
         }
     }

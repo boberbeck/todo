@@ -107,6 +107,18 @@ public struct PSPElement: Identifiable, Hashable, Codable, Sendable {
         self.activity = activity
     }
 
+    /// Gleiche SAP-Aufgabe (Nummer) und gleiche Tätigkeit?
+    public func matches(code: String?, activity: String?) -> Bool {
+        guard let code, self.code.caseInsensitiveCompare(code) == .orderedSame else { return false }
+        return PSPElement.sameActivity(self.activity, activity)
+    }
+
+    static func sameActivity(_ lhs: String?, _ rhs: String?) -> Bool {
+        let left = lhs?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        let right = rhs?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        return left == right
+    }
+
     /// „CPSO8643-5 · Firewall · Beratung“
     public var label: String {
         var parts = [code]
@@ -149,6 +161,14 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
     public var goalID: UUID?
     /// Work Log Type in ManageEngine, genau wie dort benannt (z. B. „Ticketbearbeitung“). `nil` = Standard.
     public var worklogType: String?
+    /// Übergeordnete Aufgabe, wenn dies eine Unteraufgabe ist.
+    public var parentID: UUID?
+    /// Zugeordnetes Ticket (Nummer, die Menschen sehen), wenn die Aufgabe selbst kein Ticket ist.
+    public var ticketNumber: String?
+    /// Interne Request-ID des zugeordneten Tickets in ManageEngine (für den Worklog).
+    public var ticketKey: String?
+    /// Tätigkeit aus SAP (Activity), passend zum PSP-Element, z. B. „Interne Besprechung“.
+    public var sapActivity: String?
 
     public init(
         id: UUID = UUID(),
@@ -171,7 +191,11 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         calendarEventID: String? = nil,
         externalKey: String? = nil,
         goalID: UUID? = nil,
-        worklogType: String? = nil
+        worklogType: String? = nil,
+        parentID: UUID? = nil,
+        ticketNumber: String? = nil,
+        ticketKey: String? = nil,
+        sapActivity: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -194,9 +218,47 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         self.externalKey = externalKey
         self.goalID = goalID
         self.worklogType = worklogType
+        self.parentID = parentID
+        self.ticketNumber = ticketNumber
+        self.ticketKey = ticketKey
+        self.sapActivity = sapActivity
     }
 
     public var isDone: Bool { status == .done }
+
+    public var isSubtask: Bool { parentID != nil }
+
+    /// Ticketnummer: beim Ticket selbst die eigene, sonst die zugeordnete.
+    public var linkedTicketNumber: String? {
+        source == .ticket ? (externalID ?? ticketNumber) : ticketNumber
+    }
+
+    /// Request-ID in ManageEngine: beim Ticket selbst die eigene, sonst die des zugeordneten Tickets.
+    public var linkedTicketKey: String? {
+        source == .ticket ? (externalKey ?? ticketKey) : ticketKey
+    }
+
+    /// Geht die Zeit auch als Worklog an ein Ticket?
+    public var hasTicket: Bool { linkedTicketNumber != nil || linkedTicketKey != nil }
+
+    /// Unteraufgaben erben von der übergeordneten Aufgabe, was sie nicht selbst festlegen:
+    /// Kunde, Arbeitsart, SAP-Aufgabe mit Tätigkeit, Ticket und Work Log Type.
+    public func resolved(parent: TaskItem?) -> TaskItem {
+        guard let parent, parentID == parent.id else { return self }
+        var copy = self
+        if copy.customerID == nil { copy.customerID = parent.customerID }
+        if copy.workType == nil { copy.workType = parent.workType }
+        if copy.pspElement == nil {
+            copy.pspElement = parent.pspElement
+            copy.sapActivity = parent.sapActivity
+        }
+        if !copy.hasTicket, parent.hasTicket {
+            copy.ticketNumber = parent.linkedTicketNumber
+            copy.ticketKey = parent.linkedTicketKey
+        }
+        if copy.worklogType == nil { copy.worklogType = parent.worklogType }
+        return copy
+    }
 
     /// Länge des Zeitblocks im Kalender.
     public var blockMinutes: Int { max(15, estimateMinutes ?? 30) }
@@ -207,7 +269,7 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
 
     /// Wohin die Zeit dieser Aufgabe beim Tagesabschluss gebucht wird.
     public var bookingTargets: String {
-        source == .ticket ? "SAP + ManageEngine" : "nur SAP"
+        hasTicket ? "SAP + ManageEngine" : "nur SAP"
     }
 }
 

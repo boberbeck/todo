@@ -210,3 +210,36 @@ final class MCPServerTests: XCTestCase {
         XCTAssertEqual((goals.json["ziele"] as? [[String: Any]])?.count, 1)
     }
 }
+
+final class MCPSubtaskTests: XCTestCase {
+    func testSubtaskWithTicketAndActivity() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 10))!
+        let ticket = TaskItem(title: "VPN", source: .ticket, externalID: "1240", externalKey: "100124")
+        let parent = TaskItem(title: "Firewall-Umzug", plannedDate: LocalDate(year: 2026, month: 11, day: 19))
+        let store = InMemoryStore(Snapshot(tasks: [ticket, parent]))
+        let tools = TagwerkTools(store: store, calendar: calendar, now: { now })
+
+        let text = try tools.call(name: "aufgabe_anlegen", arguments: [
+            "titel": "Regeln exportieren",
+            "unteraufgabe_von": String(parent.id.uuidString.prefix(8)),
+            "ticket": "#1240",
+            "psp": "CPSO8643-6",
+            "taetigkeit": "Consulting",
+        ])
+        let subtask = try XCTUnwrap(try store.load().tasks.first { $0.title == "Regeln exportieren" })
+        XCTAssertEqual(subtask.parentID, parent.id)
+        XCTAssertNil(subtask.plannedDate)
+        XCTAssertEqual(subtask.ticketNumber, "1240")
+        XCTAssertEqual(subtask.ticketKey, "100124", "interne ID vom Ticket in Tagwerk")
+        XCTAssertEqual(subtask.sapActivity, "Consulting")
+        XCTAssertTrue(text.contains("unteraufgabe_von"), text)
+
+        let inbox = try tools.call(name: "aufgaben", arguments: ["eingang": true])
+        XCTAssertFalse(inbox.contains("Regeln exportieren"), "Unteraufgaben stehen nicht im Eingang")
+
+        _ = try tools.call(name: "aufgabe_aendern", arguments: ["id": String(subtask.id.uuidString.prefix(8)), "ticket": ""])
+        XCTAssertNil(try store.load().tasks.first { $0.id == subtask.id }?.ticketNumber)
+    }
+}

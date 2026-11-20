@@ -5,7 +5,7 @@ public enum DayPlan {
     /// Aufgaben eines Tages in der geplanten Reihenfolge. Erledigte bleiben in der Liste stehen.
     public static func tasks(for day: LocalDate, in tasks: [TaskItem]) -> [TaskItem] {
         tasks
-            .filter { $0.plannedDate == day }
+            .filter { $0.plannedDate == day && $0.parentID == nil }
             .sorted { lhs, rhs in
                 if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
                 return lhs.createdAt < rhs.createdAt
@@ -15,7 +15,7 @@ public enum DayPlan {
     /// Offene Aufgaben ohne Tag, neueste zuerst.
     public static func inbox(_ tasks: [TaskItem]) -> [TaskItem] {
         tasks
-            .filter { $0.plannedDate == nil && !$0.isDone }
+            .filter { $0.plannedDate == nil && !$0.isDone && $0.parentID == nil }
             .sorted { $0.createdAt > $1.createdAt }
     }
 
@@ -34,7 +34,7 @@ public enum DayPlan {
         var nextIndex = nextSortIndex(in: tasks.filter { $0.plannedDate == today })
         var changed: [TaskItem] = []
         let stale = tasks
-            .filter { !$0.isDone && ($0.plannedDate.map { $0 < today } ?? false) }
+            .filter { !$0.isDone && $0.parentID == nil && ($0.plannedDate.map { $0 < today } ?? false) }
             .sorted { ($0.plannedDate!, $0.sortIndex) < ($1.plannedDate!, $1.sortIndex) }
         for var task in stale {
             task.plannedDate = today
@@ -53,6 +53,16 @@ public enum DayPlan {
         }
         let later = dayTasks[(position + 1)...].first { !$0.isDone }
         return later ?? open.first
+    }
+
+    /// Unteraufgaben einer Aufgabe in ihrer Reihenfolge.
+    public static func subtasks(of parentID: UUID, in tasks: [TaskItem]) -> [TaskItem] {
+        tasks
+            .filter { $0.parentID == parentID }
+            .sorted { lhs, rhs in
+                if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
+                return lhs.createdAt < rhs.createdAt
+            }
     }
 
     public static func nextSortIndex(in tasks: [TaskItem]) -> Double {

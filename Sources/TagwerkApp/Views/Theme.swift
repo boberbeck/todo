@@ -309,7 +309,14 @@ struct TaskCard: View {
                     .strikethrough(task.isDone, color: Theme.tertiary)
                     .lineLimit(compact ? 3 : 2)
                     .fixedSize(horizontal: false, vertical: true)
-                CardMeta(task: task, compact: compact)
+                HStack(spacing: 8) {
+                    CardMeta(task: task, compact: compact)
+                    SubtaskToggle(task: task)
+                }
+                if model.expandedTaskIDs.contains(task.id) {
+                    SubtaskList(parent: task)
+                        .padding(.top, 2)
+                }
             }
 
             Spacer(minLength: 4)
@@ -401,7 +408,7 @@ struct CardMeta: View {
 
     private var metaParts: [String] {
         var parts: [String] = []
-        if task.source == .ticket, let number = task.externalID { parts.append("#\(number)") }
+        if let number = task.linkedTicketNumber { parts.append("#\(number)") }
         if task.source == .mail { parts.append("Mail") }
         if !compact, let start = task.scheduledStart, !task.isDone { parts.append(start.formatted(date: .omitted, time: .shortened)) }
         if let estimate = task.estimateMinutes, compact || task.isDone { parts.append("\(TimeMath.format(minutes: estimate)) h") }

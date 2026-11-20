@@ -307,7 +307,7 @@ struct SAPSyncSheet: View {
                                     .lineLimit(1)
                             }
                             Spacer()
-                            badge(for: item.change)
+                            badge(for: item)
                         }
                     }
                 } header: {
@@ -326,7 +326,7 @@ struct SAPSyncSheet: View {
                             Text(psp.code)
                                 .font(.body.monospacedDigit())
                                 .frame(width: 150, alignment: .leading)
-                            Text(psp.title)
+                            Text([psp.title, psp.activity ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
                                 .lineLimit(1)
                             Spacer()
                             Text(model.customer(psp.customerID)?.name ?? "")
@@ -447,13 +447,20 @@ struct SAPSyncSheet: View {
     }
 
     @ViewBuilder
-    private func badge(for change: SAPImport.Change) -> some View {
-        switch change {
+    private func badge(for item: SAPImport.Item) -> some View {
+        switch item.change {
         case .new:
             tag("neu", color: .green)
         case .renamed(let old):
-            tag("Bezeichnung geändert", color: .orange)
-                .help(old.isEmpty ? "Bisher ohne Bezeichnung" : "Bisher: \(old)")
+            if old == item.row.title, (item.existing?.activity ?? "").isEmpty {
+                tag("Tätigkeit ergänzt", color: .blue)
+            } else if old == item.row.title {
+                tag("Tätigkeit geändert", color: .orange)
+                    .help("Bisher: \(item.existing?.activity ?? "")")
+            } else {
+                tag("Bezeichnung geändert", color: .orange)
+                    .help(old.isEmpty ? "Bisher ohne Bezeichnung" : "Bisher: \(old)")
+            }
         case .reactivated:
             tag("wieder aktiv", color: .blue)
         case .unchanged:

@@ -268,7 +268,7 @@ public enum TimeExport {
                 customer?.name ?? "",
                 task?.title ?? "",
                 task?.source.label ?? "",
-                task?.source == .ticket ? (task?.externalID ?? "") : "",
+                task?.linkedTicketNumber ?? "",
                 task?.workType?.label ?? "",
                 task?.pspElement ?? "",
                 task?.workDescription ?? "",

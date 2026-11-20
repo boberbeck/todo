@@ -99,6 +99,19 @@ final class ManageEngineClient {
         return try ManageEngineAPI.parseTickets(data, config: config)
     }
 
+    /// Sucht ein Ticket über die Nummer, die Menschen sehen: erst direkt (lokale Installation), dann per Suche (Cloud).
+    func ticket(number: String) async throws -> ManageEngineTicket? {
+        let config = self.config
+        let token = try requireToken()
+        let clean = number.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        if !config.isCloud, let data = try? await send(ManageEngineAPI.request(withID: clean, config: config, token: token)),
+           let ticket = try? ManageEngineAPI.parseTickets(data, config: config).first(where: { $0.number == clean || $0.key == clean }) {
+            return ticket
+        }
+        let data = try await send(ManageEngineAPI.requests(withDisplayID: clean, config: config, token: token))
+        return try ManageEngineAPI.parseTickets(data, config: config).first { $0.number == clean }
+    }
+
     /// Legt den Worklog an und gibt seine ID zurück.
     func addWorklog(requestKey: String, description: String, minutes: Int, start: Date, worklogType: String?) async throws -> String? {
         let request = try ManageEngineAPI.addWorklog(

@@ -26,7 +26,7 @@ public final class SQLiteStore: Store {
     private var db: OpaquePointer?
 
     /// Aktuelle Version des Datenbankschemas.
-    public static let schemaVersion = 7
+    public static let schemaVersion = 8
 
     public init(url: URL) throws {
         try FileManager.default.createDirectory(
@@ -220,6 +220,20 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+        if version < 8 {
+            // Unteraufgaben, Ticket an eigener Aufgabe, Tätigkeit aus SAP
+            try exec("""
+            BEGIN;
+            ALTER TABLE task ADD COLUMN parent_id TEXT;
+            ALTER TABLE task ADD COLUMN ticket_number TEXT;
+            ALTER TABLE task ADD COLUMN ticket_key TEXT;
+            ALTER TABLE task ADD COLUMN sap_activity TEXT;
+            ALTER TABLE booking ADD COLUMN activity TEXT;
+            CREATE INDEX IF NOT EXISTS task_parent ON task (parent_id);
+            PRAGMA user_version = 8;
+            COMMIT;
+            """)
+        }
     }
 
     /// Für einen späteren Abgleich: was sich seit `date` geändert hat (Tabelle → IDs) und was gelöscht wurde.
@@ -276,7 +290,8 @@ public final class SQLiteStore: Store {
         let tasks = try prepare("""
         SELECT id, title, notes, customer_id, source, external_id, external_url, planned_date,
                estimate_minutes, work_type, psp_element, work_description, status, completed_at,
-               sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type
+               sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type,
+               parent_id, ticket_number, ticket_key, sap_activity
         FROM task;
         """)
         while try tasks.step() {
@@ -302,7 +317,11 @@ public final class SQLiteStore: Store {
                 calendarEventID: tasks.text(17),
                 externalKey: tasks.text(18),
                 goalID: tasks.uuid(19),
-                worklogType: tasks.text(20)
+                worklogType: tasks.text(20),
+                parentID: tasks.uuid(21),
+                ticketNumber: tasks.text(22),
+                ticketKey: tasks.text(23),
+                sapActivity: tasks.text(24)
             ))
         }
 
@@ -334,7 +353,7 @@ public final class SQLiteStore: Store {
 
         let bookings = try prepare("""
         SELECT id, task_id, day, target, minutes, description, psp_element, work_type, ticket_key,
-               status, reference, last_error, attempts, updated_at
+               status, reference, last_error, attempts, updated_at, activity
         FROM booking;
         """)
         while try bookings.step() {
@@ -356,7 +375,8 @@ public final class SQLiteStore: Store {
                 reference: bookings.text(10),
                 lastError: bookings.text(11),
                 attempts: bookings.int(12) ?? 0,
-                updatedAt: bookings.date(13) ?? Date()
+                updatedAt: bookings.date(13) ?? Date(),
+                activity: bookings.text(14)
             ))
         }
 
@@ -401,8 +421,9 @@ public final class SQLiteStore: Store {
         try run("""
         INSERT INTO task (id, title, notes, customer_id, source, external_id, external_url, planned_date,
                           estimate_minutes, work_type, psp_element, work_description, status, completed_at,
-                          sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type,
+                          parent_id, ticket_number, ticket_key, sap_activity)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             notes = excluded.notes,
@@ -422,7 +443,11 @@ public final class SQLiteStore: Store {
             calendar_event_id = excluded.calendar_event_id,
             external_key = excluded.external_key,
             goal_id = excluded.goal_id,
-            worklog_type = excluded.worklog_type;
+            worklog_type = excluded.worklog_type,
+            parent_id = excluded.parent_id,
+            ticket_number = excluded.ticket_number,
+            ticket_key = excluded.ticket_key,
+            sap_activity = excluded.sap_activity;
         """, [
             .text(task.id.uuidString),
             .text(task.title),
@@ -445,6 +470,10 @@ public final class SQLiteStore: Store {
             .optionalText(task.externalKey),
             .optionalText(task.goalID?.uuidString),
             .optionalText(task.worklogType),
+            .optionalText(task.parentID?.uuidString),
+            .optionalText(task.ticketNumber),
+            .optionalText(task.ticketKey),
+            .optionalText(task.sapActivity),
         ])
     }
 
@@ -491,14 +520,15 @@ public final class SQLiteStore: Store {
     public func save(_ booking: Booking) throws {
         try run("""
         INSERT INTO booking (id, task_id, day, target, minutes, description, psp_element, work_type, ticket_key,
-                             status, reference, last_error, attempts, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             status, reference, last_error, attempts, updated_at, activity)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             minutes = excluded.minutes,
             description = excluded.description,
             psp_element = excluded.psp_element,
             work_type = excluded.work_type,
             ticket_key = excluded.ticket_key,
+            activity = excluded.activity,
             status = excluded.status,
             reference = excluded.reference,
             last_error = excluded.last_error,
@@ -519,6 +549,7 @@ public final class SQLiteStore: Store {
             .optionalText(booking.lastError),
             .int(booking.attempts),
             .double(booking.updatedAt.timeIntervalSince1970),
+            .optionalText(booking.activity),
         ])
     }
 

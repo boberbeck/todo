@@ -376,10 +376,11 @@ struct AddTimeSheet: View {
     }
 
     private func label(for task: TaskItem) -> String {
+        let title = model.parent(of: task).map { "\($0.title) › \(task.title)" } ?? task.title
         if let customer = model.customer(task.customerID) {
-            return "\(task.title) · \(customer.name)"
+            return "\(title) · \(customer.name)"
         }
-        return task.title
+        return title
     }
 
     private func combined(_ day: Date, _ time: Date) -> Date {

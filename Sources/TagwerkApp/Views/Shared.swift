@@ -43,9 +43,9 @@ struct TaskMetaLine: View {
                 Text("·")
                 Text(workType.label)
             }
-            if showsBooking, let psp = task.pspElement {
+            if showsBooking, let psp = model.pspLabel(for: task) {
                 Text("·")
-                Text("PSP \(psp)")
+                Text("SAP \(psp)")
             }
             if showsBooking, let goal = model.goal(task.goalID) {
                 Text("·")
@@ -59,8 +59,8 @@ struct TaskMetaLine: View {
     }
 
     private var sourceText: String {
-        if task.source == .ticket, let number = task.externalID {
-            return "Ticket #\(number)"
+        if let number = model.ticketNumber(for: task) {
+            return task.source == .ticket ? "Ticket #\(number)" : "\(task.source.label) · Ticket #\(number)"
         }
         return task.source.label
     }
@@ -94,7 +94,13 @@ struct TaskContextMenu: View {
 
     var body: some View {
         Button("Im Fokus öffnen") { model.openFocus(task.id) }
-        if task.plannedDate != model.today {
+        if !task.isDone {
+            Button(task.isSubtask ? "Weitere Unteraufgabe" : "Unteraufgabe hinzufügen") { model.beginSubtaskEntry(for: task.id) }
+        }
+        if task.isSubtask {
+            Button("Wieder eigene Aufgabe") { model.promoteSubtask(task.id) }
+        }
+        if task.plannedDate != model.today, !task.isSubtask {
             Button("Für heute einplanen") { model.plan(task.id, for: model.today) }
         }
         if !task.isDone {
@@ -104,8 +110,10 @@ struct TaskContextMenu: View {
                 Button("Zeitblock entfernen") { model.schedule(task.id, at: nil) }
             }
         }
-        Button("Auf morgen verschieben") { model.plan(task.id, for: model.today.adding(days: 1)) }
-        if task.plannedDate != nil {
+        if !task.isSubtask {
+            Button("Auf morgen verschieben") { model.plan(task.id, for: model.today.adding(days: 1)) }
+        }
+        if task.plannedDate != nil, !task.isSubtask {
             Button("Zurück in den Eingang") { model.plan(task.id, for: nil) }
         }
         Divider()
@@ -138,7 +146,19 @@ struct TaskContextMenu: View {
                 Button("Keine SAP-Aufgabe") { model.setPSPElement("", for: task.id) }
             }
         }
-        if task.source == .ticket {
+        if task.source != .ticket {
+            Menu(model.ticketNumber(for: task).map { "Ticket #\($0)" } ?? "Ticket zuordnen") {
+                ForEach(model.ticketTasks.filter { !$0.isDone }.prefix(15)) { ticket in
+                    Button("#\(ticket.linkedTicketNumber ?? "?") \(ticket.title)") { model.linkTicket(ticket, to: task.id) }
+                }
+                Divider()
+                Button("Suchen oder Nummer eingeben …") { model.ticketPickerTaskID = task.id }
+                if task.ticketNumber != nil || task.ticketKey != nil {
+                    Button("Kein Ticket") { model.unlinkTicket(from: task.id) }
+                }
+            }
+        }
+        if model.resolved(task).hasTicket {
             Menu("Work Log Type: \(model.worklogType(for: task))") {
                 ForEach(Preferences.knownWorklogTypes, id: \.self) { type in
                     Button(type) { model.setWorklogType(type, for: task.id) }
@@ -147,12 +167,14 @@ struct TaskContextMenu: View {
                 Button("Standard (\(model.defaultWorklogType))") { model.setWorklogType(nil, for: task.id) }
             }
         }
-        Menu("Wochenziel") {
-            ForEach(model.goals(forWeekStarting: model.currentWeekStart)) { goal in
-                Button(goal.title) { model.setGoal(goal.id, for: task.id) }
+        if !task.isSubtask {
+            Menu("Wochenziel") {
+                ForEach(model.goals(forWeekStarting: model.currentWeekStart)) { goal in
+                    Button(goal.title) { model.setGoal(goal.id, for: task.id) }
+                }
+                Divider()
+                Button("Kein Wochenziel") { model.setGoal(nil, for: task.id) }
             }
-            Divider()
-            Button("Kein Wochenziel") { model.setGoal(nil, for: task.id) }
         }
         Menu("Schätzung") {
             ForEach([15, 30, 45, 60, 90, 120, 180, 240], id: \.self) { minutes in
@@ -252,7 +274,7 @@ struct PSPMenu: View {
         .controlSize(.small)
         .fixedSize()
         .popover(isPresented: $showsPicker, arrowEdge: .bottom) {
-            SAPTaskPicker(selectedCode: task.pspElement) { psp, customCode in
+            SAPTaskPicker(selectedCode: task.pspElement, selectedActivity: task.sapActivity) { psp, customCode in
                 if let psp {
                     model.setSAPTask(psp, for: task.id)
                 } else {
@@ -265,11 +287,8 @@ struct PSPMenu: View {
     }
 
     private var label: String {
-        guard let code = task.pspElement else { return "SAP-Aufgabe wählen" }
-        if let psp = model.pspElements.first(where: { $0.code == code }) {
-            return psp.label
-        }
-        return code
+        guard let label = model.pspLabel(for: task) else { return "SAP-Aufgabe wählen" }
+        return task.pspElement == nil ? "\(label) (geerbt)" : label
     }
 }
 
@@ -278,6 +297,7 @@ struct PSPMenu: View {
 struct SAPTaskPicker: View {
     @Environment(AppModel.self) private var model
     let selectedCode: String?
+    var selectedActivity: String? = nil
     /// (gewähltes PSP-Element, sonst eine von Hand eingetippte Nummer; beides nil = keine SAP-Aufgabe)
     let onSelect: (PSPElement?, String?) -> Void
 
@@ -311,15 +331,25 @@ struct SAPTaskPicker: View {
                         } label: {
                             HStack(spacing: 8) {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(psp.title.isEmpty ? psp.code : psp.title)
-                                        .lineLimit(1)
+                                    HStack(spacing: 6) {
+                                        Text(psp.title.isEmpty ? psp.code : psp.title)
+                                            .lineLimit(1)
+                                        if let activity = psp.activity, !activity.isEmpty, activity != psp.title {
+                                            Text(activity)
+                                                .font(.caption.weight(.medium))
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 1)
+                                                .background(Capsule().fill(Theme.accent.opacity(0.18)))
+                                                .lineLimit(1)
+                                        }
+                                    }
                                     Text(detail(for: psp))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                 }
                                 Spacer()
-                                if psp.code == selectedCode {
+                                if psp.matches(code: selectedCode, activity: selectedActivity) {
                                     Image(systemName: "checkmark")
                                         .foregroundStyle(Theme.accent)
                                 }
@@ -375,7 +405,7 @@ struct SAPTaskPicker: View {
                 let left = lhs.lastUsedAt ?? .distantPast
                 let right = rhs.lastUsedAt ?? .distantPast
                 if left != right { return left > right }
-                return lhs.code.localizedStandardCompare(rhs.code) == .orderedAscending
+                return lhs.label.localizedStandardCompare(rhs.label) == .orderedAscending
             }
     }
 }

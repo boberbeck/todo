@@ -58,6 +58,8 @@ public struct Booking: Identifiable, Hashable, Codable, Sendable {
     public var lastError: String?
     public var attempts: Int
     public var updatedAt: Date
+    /// Tätigkeit aus SAP (Activity); ohne sie bestimmt die Arbeitsart die Leistung.
+    public var activity: String?
 
     public init(
         id: UUID = UUID(),
@@ -73,7 +75,8 @@ public struct Booking: Identifiable, Hashable, Codable, Sendable {
         reference: String? = nil,
         lastError: String? = nil,
         attempts: Int = 0,
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        activity: String? = nil
     ) {
         self.id = id
         self.taskID = taskID
@@ -89,6 +92,7 @@ public struct Booking: Identifiable, Hashable, Codable, Sendable {
         self.lastError = lastError
         self.attempts = attempts
         self.updatedAt = updatedAt
+        self.activity = activity
     }
 }
 
@@ -102,7 +106,7 @@ public enum BookingIssue: String, Hashable, Sendable, CaseIterable {
     public var message: String {
         switch self {
         case .missingPSP: return "PSP-Element fehlt"
-        case .missingWorkType: return "Arbeitsart fehlt (legt die Leistung fest)"
+        case .missingWorkType: return "Arbeitsart oder SAP-Tätigkeit fehlt (legt die Leistung fest)"
         case .missingDescription: return "Beschreibung der Bearbeitung fehlt"
         case .missingTicketKey: return "Ticket ist nicht mit ManageEngine verbunden"
         }
@@ -136,6 +140,8 @@ public struct BookingLine: Identifiable, Equatable, Sendable {
     public var targets: [BookingTarget]
     public var issues: [BookingIssue]
     public var bookings: [BookingTarget: Booking]
+    /// Titel der übergeordneten Aufgabe, wenn dies eine Unteraufgabe ist.
+    public var parentTitle: String? = nil
 
     public func issues(for target: BookingTarget) -> [BookingIssue] {
         issues.filter { $0.target == target }
@@ -160,10 +166,16 @@ public struct BookingLine: Identifiable, Equatable, Sendable {
         issues.filter { !(bookings[$0.target]?.status.isDone ?? false) }
     }
 
+    /// Titel für Kommentar und Worklog; bei Unteraufgaben mit der übergeordneten Aufgabe davor.
+    public var displayTitle: String {
+        guard let parentTitle, !parentTitle.isEmpty else { return task.title }
+        return "\(parentTitle): \(task.title)"
+    }
+
     /// Text für SAP: Ticketnummer vorweg, dann die Beschreibung.
     public var sapComment: String {
-        let text = task.workDescription.isEmpty ? task.title : task.workDescription
-        if task.source == .ticket, let number = task.externalID {
+        let text = task.workDescription.isEmpty ? displayTitle : task.workDescription
+        if let number = task.linkedTicketNumber {
             return "#\(number) \(text)"
         }
         return text
@@ -171,7 +183,7 @@ public struct BookingLine: Identifiable, Equatable, Sendable {
 
     /// Text für den Worklog in ManageEngine.
     public var worklogDescription: String {
-        task.workDescription.isEmpty ? task.title : task.workDescription
+        task.workDescription.isEmpty ? displayTitle : task.workDescription
     }
 }
 
@@ -190,20 +202,23 @@ public enum DailyClose {
         let dayEntries = entries.filter { TimeMath.overlap(of: $0, with: interval, now: now) > 0 }
         let firstStart = Dictionary(grouping: dayEntries.compactMap { entry in entry.taskID.map { ($0, entry.start) } }, by: \.0)
             .mapValues { $0.map(\.1).min() ?? .distantFuture }
+        let byID = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         return tasks
-            .compactMap { task -> BookingLine? in
-                let seconds = TimeMath.tracked(taskID: task.id, on: day, entries: dayEntries, now: now, calendar: calendar)
+            .compactMap { stored -> BookingLine? in
+                let seconds = TimeMath.tracked(taskID: stored.id, on: day, entries: dayEntries, now: now, calendar: calendar)
                 guard seconds > 0 else { return nil }
-                let targets: [BookingTarget] = task.source == .ticket ? [.sap, .manageEngine] : [.sap]
+                let parent = stored.parentID.flatMap { byID[$0] }
+                let task = stored.resolved(parent: parent)
+                let targets: [BookingTarget] = task.hasTicket ? [.sap, .manageEngine] : [.sap]
                 var issues: [BookingIssue] = []
                 if task.pspElement == nil { issues.append(.missingPSP) }
-                if task.workType == nil { issues.append(.missingWorkType) }
+                if task.workType == nil, (task.sapActivity ?? "").isEmpty { issues.append(.missingWorkType) }
                 if targets.contains(.manageEngine) {
                     if task.workDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         issues.append(.missingDescription)
                     }
-                    if task.externalKey == nil { issues.append(.missingTicketKey) }
+                    if task.linkedTicketKey == nil { issues.append(.missingTicketKey) }
                 }
                 var byTarget: [BookingTarget: Booking] = [:]
                 for booking in bookings where booking.taskID == task.id && booking.day == day {
@@ -216,7 +231,8 @@ public enum DailyClose {
                     minutes: TimeMath.rounded(seconds, toMinutes: rules.roundingStep, mode: rules.roundingMode),
                     targets: targets,
                     issues: issues,
-                    bookings: byTarget
+                    bookings: byTarget,
+                    parentTitle: parent?.title
                 )
             }
             .sorted { (firstStart[$0.task.id] ?? .distantFuture) < (firstStart[$1.task.id] ?? .distantFuture) }
@@ -240,7 +256,8 @@ public enum DailyClose {
             booking.description = target == .sap ? line.sapComment : line.worklogDescription
             booking.pspElement = line.task.pspElement
             booking.workType = line.task.workType
-            booking.ticketKey = line.task.externalKey
+            booking.activity = line.task.sapActivity
+            booking.ticketKey = line.task.linkedTicketKey
             if booking.status != .failed {
                 booking.status = .pending
             }
@@ -262,7 +279,8 @@ public enum BookingQueue {
             description: target == .manageEngine ? line.worklogDescription : line.sapComment,
             pspElement: line.task.pspElement,
             workType: line.task.workType,
-            ticketKey: line.task.externalKey
+            ticketKey: line.task.linkedTicketKey,
+            activity: line.task.sapActivity
         )
         booking.status = .skipped
         booking.minutes = minutes
@@ -327,6 +345,14 @@ public enum SAPTransfer {
         return text.replacingOccurrences(of: ".", with: ",")
     }
 
+    /// Leistung für SAP: die Tätigkeit aus SAP, sonst was zur Arbeitsart eingestellt ist.
+    public static func service(for booking: Booking, serviceFor: (WorkType?) -> String) -> String {
+        if let activity = booking.activity?.trimmingCharacters(in: .whitespaces), !activity.isEmpty {
+            return activity
+        }
+        return serviceFor(booking.workType)
+    }
+
     /// Semikolon-getrennt für Excel (deutsch): Datum;PSP-Element;Leistung;Stunden;Kommentar
     public static func csv(_ bookings: [Booking], serviceFor: (WorkType?) -> String) -> String {
         var lines = ["Datum;PSP-Element;Leistung;Stunden;Kommentar"]
@@ -335,7 +361,7 @@ public enum SAPTransfer {
             let fields = [
                 date,
                 booking.pspElement ?? "",
-                serviceFor(booking.workType),
+                service(for: booking, serviceFor: serviceFor),
                 hours(booking.minutes),
                 booking.description,
             ]
