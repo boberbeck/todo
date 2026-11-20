@@ -1228,3 +1228,44 @@ final class SubtaskAndTicketTests: XCTestCase {
         XCTAssertEqual(try store.load().bookings.first?.activity, "Installation")
     }
 }
+
+
+/// Vergessen, den Timer zu starten.
+final class BackdatedTimerTests: XCTestCase {
+    private let base = Date(timeIntervalSince1970: 1_800_000_000)
+    private func minutes(_ value: Double) -> Date { base.addingTimeInterval(value * 60) }
+
+    func testStartsInThePast() {
+        let task = UUID()
+        let change = TimerLogic.start(taskID: task, entries: [], since: minutes(-30), now: base)
+        XCTAssertEqual(change.started?.start, minutes(-30))
+        XCTAssertEqual(change.started?.taskID, task)
+        XCTAssertTrue(change.stopped.isEmpty)
+    }
+
+    func testNeverOverlapsEarlierEntries() {
+        let earlier = TimeEntry(taskID: UUID(), start: minutes(-60), end: minutes(-20))
+        let change = TimerLogic.start(taskID: UUID(), entries: [earlier], since: minutes(-45), now: base)
+        XCTAssertEqual(change.started?.start, minutes(-20), "beginnt, wo der letzte Eintrag endet")
+    }
+
+    func testStopsOtherTimerAtTheNewStart() {
+        let other = TimeEntry(taskID: UUID(), start: minutes(-50))
+        let change = TimerLogic.start(taskID: UUID(), entries: [other], since: minutes(-15), now: base)
+        XCTAssertEqual(change.stopped.first?.end, minutes(-15))
+        XCTAssertEqual(change.started?.start, minutes(-15))
+
+        let tooEarly = TimerLogic.start(taskID: UUID(), entries: [other], since: minutes(-90), now: base)
+        XCTAssertEqual(tooEarly.started?.start, minutes(-50), "nicht vor dem Beginn des laufenden Timers")
+    }
+
+    func testMovesStartOfSameRunningTimer() {
+        let task = UUID()
+        let running = TimeEntry(taskID: task, start: minutes(-5))
+        let change = TimerLogic.start(taskID: task, entries: [running], since: minutes(-25), now: base)
+        XCTAssertNil(change.started)
+        XCTAssertEqual(change.restarted?.id, running.id)
+        XCTAssertEqual(change.restarted?.start, minutes(-25))
+        XCTAssertNil(TimerLogic.start(taskID: task, entries: [running], since: minutes(-2), now: base).restarted, "später ändert nichts")
+    }
+}

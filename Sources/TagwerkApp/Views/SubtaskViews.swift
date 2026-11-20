@@ -353,3 +353,83 @@ struct TicketPicker: View {
         }
     }
 }
+
+/// „Vergessen zu starten?“: Timer rückwirkend starten oder Zeit nachtragen.
+struct BackdatedStartMenu: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+    /// Als eigener Menü-Knopf (Fokus) statt als Untermenü im Rechtsklick.
+    var asButton = false
+
+    var body: some View {
+        if asButton {
+            Menu {
+                items
+            } label: {
+                Label(model.isRunning(task.id) ? "Früher angefangen?" : "Vergessen zu starten?", systemImage: "clock.arrow.circlepath")
+                    .font(.callout)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .foregroundStyle(Theme.tertiary)
+            .help("Timer rückwirkend starten oder Zeit nachtragen")
+        } else {
+            Menu(model.isRunning(task.id) ? "Läuft eigentlich schon seit" : "Timer starten, läuft schon seit") {
+                items
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var items: some View {
+        if let last = model.lastEntryEndToday, Date().timeIntervalSince(last) >= 60, Date().timeIntervalSince(last) <= 10 * 3600 {
+            Button("dem letzten Eintrag (\(last.formatted(date: .omitted, time: .shortened)))") {
+                model.startTimer(task.id, since: last)
+            }
+        }
+        ForEach([5, 10, 15, 30, 45, 60, 90], id: \.self) { minutes in
+            Button(minutes < 60 ? "\(minutes) Minuten" : "\(TimeMath.format(minutes: minutes)) Stunden") {
+                model.startTimer(task.id, since: Date().addingTimeInterval(TimeInterval(-minutes * 60)))
+            }
+        }
+        if asButton {
+            Divider()
+            Button("Zeit nachtragen …") { model.beginTimeEntry(for: task.id) }
+        }
+    }
+}
+
+/// Unteraufgaben unter einer Zeile, wenn sie aufgeklappt sind (Eingang, Kunden).
+struct ExpandedSubtasks: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+
+    var body: some View {
+        if model.expandedTaskIDs.contains(task.id) {
+            SubtaskList(parent: task)
+                .padding(.leading, 26)
+                .padding(.top, 2)
+        }
+    }
+}
+
+/// Kleiner Knopf „Unteraufgabe“ zum Aufklappen und Anlegen, erscheint beim Darüberfahren.
+struct AddSubtaskButton: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+
+    var body: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { model.beginSubtaskEntry(for: task.id) }
+        } label: {
+            Image(systemName: "checklist")
+                .font(.system(size: 11))
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Color.white.opacity(0.08)))
+                .foregroundStyle(Theme.text)
+        }
+        .buttonStyle(.plain)
+        .help("Unteraufgabe hinzufügen")
+    }
+}

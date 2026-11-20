@@ -26,8 +26,13 @@ do {
     let appID = "local.tagwerk.app"
     let defaults = Bundle.main.bundleIdentifier == appID ? UserDefaults.standard : UserDefaults(suiteName: appID)
     let tools = TagwerkTools(store: store, defaults: defaults)
-    log("bereit, Daten: \(databaseURL.path)")
-    MCPServer(tools: tools).run()
+    // Stand der App, zu der dieser Server gehört (steht beim Bau in Info.plist)
+    let info = Bundle.main.infoDictionary ?? [:]
+    let short = info["CFBundleShortVersionString"] as? String ?? "0.1"
+    let build = info["CFBundleVersion"] as? String
+    let version = build.map { "\(short) (\($0))" } ?? short
+    log("bereit, Stand \(version), Daten: \(databaseURL.path)")
+    MCPServer(tools: tools, serverVersion: version).run()
 } catch {
     log("Datenbank lässt sich nicht öffnen: \(error)")
     exit(1)

@@ -387,41 +387,47 @@ struct CustomerTaskRow: View {
     let task: TaskItem
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button {
-                model.toggleDone(task.id)
-            } label: {
-                Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(task.isDone ? Color.green : Color.secondary)
-            }
-            .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 10) {
+                Button {
+                    model.toggleDone(task.id)
+                } label: {
+                    Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(task.isDone ? Color.green : Color.secondary)
+                }
+                .buttonStyle(.plain)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.title)
-                    .strikethrough(task.isDone, color: .secondary)
-                Text(planText)
-                    .font(.caption)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.title)
+                        .strikethrough(task.isDone, color: .secondary)
+                    HStack(spacing: 8) {
+                        Text(planText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        SubtaskToggle(task: task)
+                    }
+                }
+
+                Spacer()
+
+                if !task.isDone && task.plannedDate != model.today {
+                    Button("Heute") {
+                        model.plan(task.id, for: model.today)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                Text(model.timeLabel(for: task, now: Date()))
+                    .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-
-            Spacer()
-
-            if !task.isDone && task.plannedDate != model.today {
-                Button("Heute") {
-                    model.plan(task.id, for: model.today)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            .contextMenu {
+                TaskContextMenu(task: task)
             }
-
-            Text(model.timeLabel(for: task, now: Date()))
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
+            ExpandedSubtasks(task: task)
         }
         .padding(.vertical, 2)
-        .contextMenu {
-            TaskContextMenu(task: task)
-        }
     }
 
     private var planText: String {

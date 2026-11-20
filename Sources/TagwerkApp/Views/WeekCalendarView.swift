@@ -294,6 +294,8 @@ struct TimeEntryDraft: Identifiable {
     let id = UUID()
     var start: Date
     var minutes: Int
+    /// Aufgabe, für die nachgetragen wird; sonst wählt man im Fenster.
+    var taskID: UUID? = nil
 }
 
 /// Zeit nachträglich erfassen: Aufgabe wählen oder neu anlegen, Tag und Uhrzeit.
@@ -315,8 +317,13 @@ struct AddTimeSheet: View {
         let minutes = Int(end.timeIntervalSince(start) / 60)
 
         VStack(alignment: .leading, spacing: 18) {
-            Text("Zeit nachtragen")
-                .font(.title2.weight(.semibold))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Zeit nachtragen")
+                    .font(.title2.weight(.semibold))
+                Text("Vergessen, den Timer zu starten? Hier die Zeit eintragen; sie zählt wie gestoppte Zeit.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
 
             Form {
                 Picker("Aufgabe", selection: $taskID) {
@@ -338,6 +345,24 @@ struct AddTimeSheet: View {
                 DatePicker("Tag", selection: $day, displayedComponents: .date)
                 DatePicker("Von", selection: $from, displayedComponents: .hourAndMinute)
                 DatePicker("Bis", selection: $to, displayedComponents: .hourAndMinute)
+                LabeledContent("Bis jetzt") {
+                    HStack(spacing: 6) {
+                        ForEach([15, 30, 60, 90], id: \.self) { minutes in
+                            Button(minutes < 60 ? "\(minutes) Min" : "\(TimeMath.format(minutes: minutes)) h") {
+                                untilNow(minutes: minutes)
+                            }
+                        }
+                        if let last = model.lastEntryEndToday, Date().timeIntervalSince(last) >= 60 {
+                            Button("seit \(last.formatted(date: .omitted, time: .shortened))") {
+                                day = Date()
+                                from = last
+                                to = Date()
+                            }
+                            .help("Vom Ende des letzten Eintrags bis jetzt")
+                        }
+                    }
+                    .controlSize(.small)
+                }
                 LabeledContent("Dauer") {
                     Text(minutes > 0 ? "\(TimeMath.format(minutes: minutes)) h" : "Ende liegt vor dem Beginn")
                         .foregroundStyle(minutes > 0 ? Theme.text : Theme.accent)
@@ -363,16 +388,24 @@ struct AddTimeSheet: View {
             from = draft.start
             to = draft.start.addingTimeInterval(TimeInterval(draft.minutes * 60))
             let sameDay = LocalDate(draft.start)
-            taskID = model.dayTasks(sameDay).first { !$0.isDone }?.id ?? model.todayTasks.first?.id
+            taskID = draft.taskID ?? model.dayTasks(sameDay).first { !$0.isDone }?.id ?? model.todayTasks.first?.id
         }
+    }
+
+    private func untilNow(minutes: Int) {
+        let now = Date()
+        day = now
+        to = now
+        from = now.addingTimeInterval(TimeInterval(-minutes * 60))
     }
 
     /// Aufgaben des Tages, von heute und offene, ohne Doppelte.
     private var candidates: [TaskItem] {
+        let chosen = model.task(draft.taskID).map { [$0] } ?? []
         let sameDay = model.dayTasks(LocalDate(day))
         let open = model.tasks.filter { !$0.isDone }.sorted { $0.createdAt > $1.createdAt }
         var seen = Set<UUID>()
-        return (sameDay + model.todayTasks + open).filter { seen.insert($0.id).inserted }.prefix(60).map { $0 }
+        return (chosen + sameDay + model.todayTasks + open).filter { seen.insert($0.id).inserted }.prefix(60).map { $0 }
     }
 
     private func label(for task: TaskItem) -> String {

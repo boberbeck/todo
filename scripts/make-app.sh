@@ -17,6 +17,10 @@ cp "$BIN_DIR/Tagwerk" "$APP/Contents/MacOS/Tagwerk"
 # MCP-Server für Claude liegt neben der App
 cp "$BIN_DIR/tagwerk-mcp" "$APP/Contents/MacOS/tagwerk-mcp"
 cp Support/Info.plist "$APP/Contents/Info.plist"
+# Stand vermerken (Einstellungen › Allgemein und der MCP-Server zeigen ihn), z. B. „3be6049“
+BUILD="$(git rev-parse --short HEAD 2>/dev/null || echo lokal)"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD}" "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :TagwerkBuildDate string $(date '+%d.%m.%Y')" "$APP/Contents/Info.plist"
 
 # App-Symbol aus Support/AppIcon.png (1024 × 1024)
 ICONSET="build/AppIcon.iconset"

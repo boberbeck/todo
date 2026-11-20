@@ -113,6 +113,13 @@ struct StartTaskColumn: View {
                     }
                     Spacer()
                     Button {
+                        model.beginTimeEntry()
+                    } label: {
+                        Label("Nachtragen", systemImage: "clock.arrow.circlepath")
+                    }
+                    .buttonStyle(GhostButtonStyle())
+                    .help("Zeit nachtragen, wenn du vergessen hast, den Timer zu starten")
+                    Button {
                         model.selection = .planning
                     } label: {
                         Label("Tag planen", systemImage: "sunrise")
@@ -254,6 +261,7 @@ struct DoneRow: View {
 struct InboxRow: View {
     @Environment(AppModel.self) private var model
     let task: TaskItem
+    @State private var hovering = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -263,9 +271,19 @@ struct InboxRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)
                     .lineLimit(2)
-                CardMeta(task: task)
+                HStack(spacing: 8) {
+                    CardMeta(task: task)
+                    SubtaskToggle(task: task)
+                }
+                if model.expandedTaskIDs.contains(task.id) {
+                    SubtaskList(parent: task)
+                        .padding(.top, 2)
+                }
             }
             Spacer(minLength: 8)
+            if hovering {
+                AddSubtaskButton(task: task)
+            }
             Button {
                 model.plan(task.id, for: model.today)
             } label: {
@@ -275,6 +293,7 @@ struct InboxRow: View {
             .help("Für heute einplanen")
         }
         .padding(10)
+        .onHover { hovering = $0 }
         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.surface))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border))
         .contentShape(Rectangle())

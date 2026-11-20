@@ -154,6 +154,8 @@ struct FocusTaskPane: View {
                 .help("Andere Aufgabe von heute in den Fokus holen")
             }
 
+            BackdatedStartMenu(task: task, asButton: true)
+
             if !task.isSubtask, !task.isDone, !model.subtasks(of: task.id).isEmpty || showsSubtaskField {
                 SubtaskList(parent: task)
                     .frame(maxWidth: 520)

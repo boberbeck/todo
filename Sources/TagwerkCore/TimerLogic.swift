@@ -16,6 +16,8 @@ public enum TimerLogic {
         public var discarded: [TimeEntry] = []
         /// neu gestarteter Eintrag
         public var started: TimeEntry?
+        /// laufender Eintrag mit früherem Beginn („läuft eigentlich schon seit …“)
+        public var restarted: TimeEntry?
     }
 
     public static func stop(entries: [TimeEntry], at now: Date) -> Change {
@@ -29,6 +31,29 @@ public enum TimerLogic {
             }
         }
         return change
+    }
+
+    /// Vergessen zu starten: Der Timer läuft rückwirkend seit `since`. Er beginnt frühestens dort,
+    /// wo der letzte erfasste Eintrag endet, damit sich keine Zeiten doppeln. Läuft schon ein Timer
+    /// für eine andere Aufgabe, endet der dort; läuft er für dieselbe, rückt sein Beginn nach vorn.
+    public static func start(taskID: UUID, entries: [TimeEntry], since: Date, now: Date) -> Change {
+        let current = running(in: entries)
+        var start = min(since, now)
+        let latestEnd = entries.compactMap { entry -> Date? in
+            guard entry.id != current?.id, let end = entry.end, end <= now else { return nil }
+            return end
+        }.max()
+        if let latestEnd, start < latestEnd { start = latestEnd }
+        if let current, current.taskID == taskID {
+            var change = Change()
+            guard start < current.start else { return change }
+            var earlier = current
+            earlier.start = start
+            change.restarted = earlier
+            return change
+        }
+        if let current { start = max(start, current.start) }
+        return self.start(taskID: taskID, entries: entries, at: start)
     }
 
     public static func start(taskID: UUID, entries: [TimeEntry], at now: Date) -> Change {

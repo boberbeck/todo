@@ -69,6 +69,8 @@ struct TagwerkCommands: Commands {
                 .keyboardShortcut("t", modifiers: .command)
             Button("Erledigt") { model.completeFocused() }
                 .keyboardShortcut(.return, modifiers: .command)
+            Button("Zeit nachtragen …") { model.beginTimeEntry(for: model.focusTask?.id) }
+                .keyboardShortcut("t", modifiers: [.command, .option])
             Divider()
             Button("SAP-Aufgaben abgleichen …") { model.showsSAPSync = true }
         }

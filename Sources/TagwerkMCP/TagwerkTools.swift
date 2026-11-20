@@ -16,6 +16,9 @@ public final class TagwerkTools {
     Tagwerk ist die Aufgaben- und Zeiterfassungs-App des Nutzers (Mac). Aufgaben gehören optional zu einem Kunden, \
     haben einen geplanten Tag (sonst liegen sie im Eingang), eine Schätzung in Minuten, eine Arbeitsart \
     (Wartung, Störung, Projekt, Beratung) und ein PSP-Element für SAP. Es läuft höchstens ein Timer. \
+    Aufgaben können Unteraufgaben haben (aufgabe_anlegen mit unteraufgabe_von); diese erben Kunde, PSP-Element, \
+    Tätigkeit und Ticket. Eigene Aufgaben lassen sich einem Ticket aus ManageEngine zuordnen (Parameter ticket), \
+    zum PSP-Element gehört die Tätigkeit (Activity) aus SAP (Parameter taetigkeit). \
     IDs aus den Antworten sind für Änderungen nötig; die ersten 8 Zeichen reichen. \
     Datumsangaben: heute, morgen, gestern, JJJJ-MM-TT oder TT.MM.JJJJ. Gebucht wird nur in der App selbst.
     """

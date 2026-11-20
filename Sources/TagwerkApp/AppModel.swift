@@ -61,6 +61,8 @@ final class AppModel {
     var subtaskEntryTaskID: UUID?
     /// Aufgabe, für die gerade ein Ticket gesucht wird (öffnet die Ticketsuche).
     var ticketPickerTaskID: UUID?
+    /// Offenes Fenster „Zeit nachtragen“ (von überall aus der App).
+    var timeEntryDraft: TimeEntryDraft?
     var lastError: String?
 
     /// Aktuelle Uhrzeit, jede Sekunde aktualisiert. Nur lesen, wo ein Timer sichtbar läuft.
@@ -549,6 +551,33 @@ final class AppModel {
         apply(TimerLogic.stop(entries: entries, at: Date()))
     }
 
+    /// Vergessen zu starten: Timer läuft rückwirkend seit `since` (frühestens ab dem Ende des letzten Eintrags).
+    func startTimer(_ taskID: UUID, since: Date) {
+        apply(TimerLogic.start(taskID: taskID, entries: entries, since: since, now: Date()))
+        focusedTaskID = taskID
+    }
+
+    /// Ende des letzten abgeschlossenen Eintrags heute, z. B. für „seit dem letzten Eintrag“.
+    var lastEntryEndToday: Date? {
+        let start = today.startDate()
+        return entries.compactMap { entry -> Date? in
+            guard let end = entry.end, end >= start, end <= Date() else { return nil }
+            return end
+        }.max()
+    }
+
+    /// Öffnet „Zeit nachtragen“, für eine Aufgabe oder frei. Vorschlag: vom Ende des letzten Eintrags
+    /// (wenn es heute und nicht länger als vier Stunden her ist) bis jetzt, sonst die letzte halbe Stunde.
+    func beginTimeEntry(for taskID: UUID? = nil) {
+        let end = Date()
+        var start = end.addingTimeInterval(-30 * 60)
+        if let last = lastEntryEndToday, end.timeIntervalSince(last) <= 4 * 3600, end.timeIntervalSince(last) >= 5 * 60 {
+            start = last
+        }
+        let minutes = max(5, Int(end.timeIntervalSince(start) / 60))
+        timeEntryDraft = TimeEntryDraft(start: start, minutes: minutes, taskID: taskID)
+    }
+
     func toggleTimer(for taskID: UUID) {
         if isRunning(taskID) {
             stopTimer()
@@ -579,6 +608,10 @@ final class AppModel {
             }
         }
         do {
+            if let restarted = change.restarted {
+                try store.save(restarted)
+                replace(restarted)
+            }
             for entry in change.discarded {
                 try store.deleteEntry(id: entry.id)
                 entries.removeAll { $0.id == entry.id }

@@ -42,6 +42,9 @@ struct RootView: View {
         .sheet(isPresented: $model.showsSAPSync, onDismiss: { model.sapSyncRows = nil }) {
             SAPSyncSheet(initialRows: model.sapSyncRows)
         }
+        .sheet(item: $model.timeEntryDraft) { draft in
+            AddTimeSheet(draft: draft)
+        }
         .sheet(isPresented: Binding(
             get: { model.ticketPickerTaskID != nil },
             set: { if !$0 { model.ticketPickerTaskID = nil } }

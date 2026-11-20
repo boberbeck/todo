@@ -97,6 +97,10 @@ struct TaskContextMenu: View {
         if !task.isDone {
             Button(task.isSubtask ? "Weitere Unteraufgabe" : "Unteraufgabe hinzufügen") { model.beginSubtaskEntry(for: task.id) }
         }
+        Button("Zeit nachtragen …") { model.beginTimeEntry(for: task.id) }
+        if !task.isDone {
+            BackdatedStartMenu(task: task)
+        }
         if task.isSubtask {
             Button("Wieder eigene Aufgabe") { model.promoteSubtask(task.id) }
         }

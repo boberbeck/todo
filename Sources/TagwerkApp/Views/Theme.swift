@@ -329,17 +329,22 @@ struct TaskCard: View {
                             .foregroundStyle(running ? Theme.text : Theme.secondary)
                     }
                     if !task.isDone, running || hovering {
-                        Button {
-                            model.toggleTimer(for: task.id)
-                        } label: {
-                            Image(systemName: running ? "pause.fill" : "play.fill")
-                                .font(.system(size: 11))
-                                .frame(width: 24, height: 24)
-                                .background(Circle().fill(running ? Theme.accent : Color.white.opacity(0.08)))
-                                .foregroundStyle(running ? Color.black.opacity(0.85) : Theme.text)
+                        HStack(spacing: 6) {
+                            if hovering {
+                                AddSubtaskButton(task: task)
+                            }
+                            Button {
+                                model.toggleTimer(for: task.id)
+                            } label: {
+                                Image(systemName: running ? "pause.fill" : "play.fill")
+                                    .font(.system(size: 11))
+                                    .frame(width: 24, height: 24)
+                                    .background(Circle().fill(running ? Theme.accent : Color.white.opacity(0.08)))
+                                    .foregroundStyle(running ? Color.black.opacity(0.85) : Theme.text)
+                            }
+                            .buttonStyle(.plain)
+                            .help(running ? "Timer stoppen" : "Timer starten")
                         }
-                        .buttonStyle(.plain)
-                        .help(running ? "Timer stoppen" : "Timer starten")
                     }
                 }
             }

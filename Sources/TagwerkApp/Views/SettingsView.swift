@@ -142,6 +142,18 @@ struct GeneralSettings: View {
             }
 
             Section {
+                LabeledContent("Stand") {
+                    Text(AppVersion.description)
+                        .font(.callout.monospaced())
+                        .textSelection(.enabled)
+                }
+            } header: {
+                Text("Version")
+            } footer: {
+                SettingsFootnote("Die Nummer in Klammern steht auch beim Release „aktuell“ auf GitHub. Stimmt sie nicht, ist hier noch eine ältere Fassung installiert.")
+            }
+
+            Section {
                 LabeledContent("Schnell erfassen") {
                     Text("⌃ ⌥ Leertaste")
                         .font(.body.monospaced())
@@ -155,7 +167,7 @@ struct GeneralSettings: View {
                 SettingsFootnote("Funktioniert in jeder App. Mails ziehst du aus Outlook einfach in den Eingang; sie werden zur Aufgabe mit Betreff und Absender.")
             }
         }
-        .settingsPage(height: 580)
+        .settingsPage(height: 640)
         .onChange(of: workdayStart) { model.settingsChanged() }
         .onChange(of: workdayEnd) { model.settingsChanged() }
     }
@@ -649,6 +661,14 @@ struct ClaudeSettings: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            if let other = ClaudeIntegration.otherConfiguredCommand {
+                Section {
+                    Label("Claude Desktop startet tagwerk-mcp aus einer anderen Kopie: \(other). Die kennt neuere Werkzeuge (z. B. Unteraufgaben) womöglich nicht. „Auf diese Kopie umstellen“ trägt die Kopie ein, die gerade läuft; danach Claude Desktop mit ⌘Q beenden und neu öffnen.", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Section {
                 LabeledContent {
                     HStack(spacing: 8) {
@@ -665,7 +685,7 @@ struct ClaudeSettings: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("MCP-Server prüfen")
-                        Text(testResult?.message ?? "Startet tagwerk-mcp so, wie Claude es tut, und fragt die Werkzeuge ab.")
+                        Text(testResult?.message ?? "Startet tagwerk-mcp so, wie Claude Desktop es tut (dieselbe Kopie), und fragt die Werkzeuge ab.")
                             .font(.caption)
                             .foregroundStyle(testResult.map { $0.ok ? Color.green : Color.red } ?? Color.secondary)
                             .textSelection(.enabled)
@@ -675,7 +695,7 @@ struct ClaudeSettings: View {
             } header: {
                 Text("Prüfen")
             } footer: {
-                SettingsFootnote("Klappt der Test, Claude aber nicht: In Claude Desktop unter Einstellungen › Entwickler steht der Status von „tagwerk“; das Protokoll liegt in ~/Library/Logs/Claude/mcp-server-tagwerk.log. Lokale MCP-Server gehen nur in Claude Desktop und Claude Code, nicht im Browser oder auf dem iPhone.")
+                SettingsFootnote("Claude liest die Werkzeuge nur beim Start: Nach einem Update von Tagwerk Claude Desktop mit ⌘Q beenden und neu öffnen. Klappt der Test, Claude aber nicht: In Claude Desktop unter Einstellungen › Entwickler steht der Status von „tagwerk“; das Protokoll liegt in ~/Library/Logs/Claude/mcp-server-tagwerk.log. Lokale MCP-Server gehen nur in Claude Desktop und Claude Code, nicht im Browser oder auf dem iPhone.")
             }
             Section {
                 Text("Claude kann über MCP direkt mit Tagwerk arbeiten: den Tag zusammenfassen, Aufgaben anlegen und ändern, Timer starten und stoppen, Zeiten auswerten und sagen, was beim Tagesabschluss noch fehlt.")
@@ -693,7 +713,7 @@ struct ClaudeSettings: View {
                         Label("eingetragen", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                     } else {
-                        Button("In Claude Desktop eintragen") { installDesktop() }
+                        Button(ClaudeIntegration.otherConfiguredCommand == nil ? "In Claude Desktop eintragen" : "Auf diese Kopie umstellen") { installDesktop() }
                             .disabled(ClaudeIntegration.serverURL == nil)
                     }
                 } label: {
@@ -777,7 +797,7 @@ struct ClaudeSettings: View {
             try ClaudeIntegration.installInDesktop()
             installed = true
             statusIsError = false
-            status = "Eingetragen. Starte Claude Desktop neu, dann taucht Tagwerk bei den Werkzeugen auf."
+            status = "Eingetragen. Beende Claude Desktop mit ⌘Q und öffne es neu, dann hat Claude die Werkzeuge dieser Fassung."
         } catch {
             statusIsError = true
             status = String(describing: error)
@@ -837,11 +857,22 @@ enum ClaudeIntegration {
     }
 
     static var isInstalledInDesktop: Bool {
+        configuredDesktopCommand == serverPath
+    }
+
+    /// Welches Programm Claude Desktop für „tagwerk“ startet.
+    static var configuredDesktopCommand: String? {
         guard let data = try? Data(contentsOf: desktopConfigURL),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let servers = root["mcpServers"] as? [String: Any],
-              let entry = servers[serverName] as? [String: Any] else { return false }
-        return entry["command"] as? String == serverPath
+              let entry = servers[serverName] as? [String: Any] else { return nil }
+        return entry["command"] as? String
+    }
+
+    /// Eingetragen ist eine andere Kopie als die, die gerade läuft (z. B. eine alte in „Downloads“).
+    static var otherConfiguredCommand: String? {
+        guard let configured = configuredDesktopCommand, serverURL != nil, configured != serverPath else { return nil }
+        return configured
     }
 
     /// Ergänzt die Konfiguration von Claude Desktop um Tagwerk. Andere Einträge bleiben, wie sie sind.
@@ -858,8 +889,14 @@ enum ClaudeIntegration {
     }
 
     /// Startet tagwerk-mcp wie Claude und prüft die Antwort auf initialize und tools/list.
+    /// Geprüft wird die Kopie, die in Claude Desktop eingetragen ist, sonst die neben dieser App.
     static func testServer() async -> (ok: Bool, message: String) {
-        guard let url = serverURL else { return (false, "tagwerk-mcp fehlt neben der App.") }
+        let configured = configuredDesktopCommand.map { URL(fileURLWithPath: $0) }
+        if let configured, configured.path != serverPath, !FileManager.default.isExecutableFile(atPath: configured.path) {
+            return (false, "In Claude Desktop ist \(configured.path) eingetragen, aber dort liegt kein Programm mehr. „Auf diese Kopie umstellen“ drücken.")
+        }
+        guard let url = configured ?? serverURL else { return (false, "tagwerk-mcp fehlt neben der App.") }
+        let which = url.path == serverPath ? "" : " (eingetragene Kopie: \(url.path))"
         removeQuarantine(from: url)
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -890,6 +927,14 @@ enum ClaudeIntegration {
                 let out = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
                 let err = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
                 let lines = out.split(separator: "\n").map(String.init)
+                let version = lines.compactMap { line -> String? in
+                    guard let data = line.data(using: .utf8),
+                          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let result = root["result"] as? [String: Any],
+                          let info = result["serverInfo"] as? [String: Any] else { return nil }
+                    return info["version"] as? String
+                }.first ?? "?"
+                let hasSubtasks = out.contains("unteraufgabe_von")
                 let toolCount = lines.compactMap { line -> Int? in
                     guard let data = line.data(using: .utf8),
                           let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -897,8 +942,10 @@ enum ClaudeIntegration {
                           let tools = result["tools"] as? [Any] else { return nil }
                     return tools.count
                 }.first
-                if let toolCount {
-                    continuation.resume(returning: (true, "Läuft: antwortet mit \(toolCount) Werkzeugen. \(err.contains("bereit") ? "" : err.trimmingCharacters(in: .whitespacesAndNewlines))"))
+                if let toolCount, !hasSubtasks {
+                    continuation.resume(returning: (false, "Läuft, aber das ist eine ältere Fassung (Stand \(version))\(which): ohne Unteraufgaben, Tickets und Tätigkeit. Auf diese Kopie umstellen, dann Claude Desktop mit ⌘Q beenden und neu öffnen. (\(toolCount) Werkzeuge)"))
+                } else if let toolCount {
+                    continuation.resume(returning: (true, "Läuft: Stand \(version)\(which), \(toolCount) Werkzeuge, mit Unteraufgaben, Tickets und Tätigkeit. Sieht Claude sie nicht, Claude Desktop mit ⌘Q beenden und neu öffnen. \(err.contains("bereit") ? "" : err.trimmingCharacters(in: .whitespacesAndNewlines))"))
                 } else {
                     let detail = err.trimmingCharacters(in: .whitespacesAndNewlines)
                     continuation.resume(returning: (false, "Keine gültige Antwort. \(detail.isEmpty ? "Exit-Code \(process.terminationStatus)" : detail)"))
@@ -976,5 +1023,16 @@ struct DataSettings: View {
             }
         }
         .settingsPage(height: 380)
+    }
+}
+
+/// Stand der App: Version und der Commit, aus dem sie gebaut ist (wie beim Release „aktuell“).
+enum AppVersion {
+    static var description: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let short = info["CFBundleShortVersionString"] as? String ?? "0.1"
+        let build = info["CFBundleVersion"] as? String ?? "?"
+        let date = info["TagwerkBuildDate"] as? String
+        return "\(short) (\(build))" + (date.map { " · gebaut \($0)" } ?? "")
     }
 }
