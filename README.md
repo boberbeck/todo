@@ -110,6 +110,20 @@ Das Skript erzeugt ein selbst signiertes Zertifikat „Tagwerk Lokal“, legt es
 
 Ohne Zertifikat signiert der Build ad hoc. Den API-Schlüssel liest Tagwerk erst, wenn es wirklich mit ManageEngine spricht, und nur einmal pro Start.
 
+## Weg zum iPhone (vorbereitet)
+
+Eine iPhone-Fassung gibt es noch nicht, der Umstieg ist aber vorbereitet:
+
+- **Der Kern läuft auf dem iPhone.** `TagwerkCore` (Datenmodell, Zeitlogik, Datenbank, SAP-Import, ManageEngine) hängt nur an Foundation und SQLite; die CI baut ihn bei jedem Push zusätzlich für iOS.
+- **Die Datenbank merkt sich Änderungen.** Jede Zeile hat `modified_at`, Gelöschtes landet in `deleted_record`; `SQLiteStore.changes(since:)` liefert, was sich seit einem Zeitpunkt geändert hat. Trigger erfassen auch Änderungen des MCP-Servers. Alle Einträge haben UUIDs, damit Geräte ohne Zusammenstöße zusammenführen können.
+
+Noch zu tun, sobald es losgeht:
+
+1. Entscheidung zum Abgleich: iCloud (CloudKit, braucht das Apple-Entwicklerkonto, 99 € im Jahr) oder der Mac als Server für eine Web-App im WLAN oder per Tailscale (ohne Konto).
+2. Abgleich auf Basis von `changes(since:)` bauen (letzte Änderung gewinnt, Löschungen zuerst).
+3. iPhone-App-Ziel anlegen: Heute, Timer, Schnell erfassen, Fokus mit Musik (dort über MediaPlayer statt AppleScript), Eingang. SAP-Abgleich, Tagesabschluss und ManageEngine bleiben auf dem Mac.
+4. Mit Konto: Signatur und TestFlight in der CI.
+
 ## Daten
 
 Alle Daten liegen lokal in `~/Library/Application Support/Tagwerk/tagwerk.sqlite`. Time Machine sichert die Datei mit. Die App nutzt die SQLite-Bibliothek von macOS und braucht keine Fremdpakete.

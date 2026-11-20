@@ -28,6 +28,12 @@ jobs:
       - name: Testen
         run: swift test
 
+      # Vorbereitung fürs iPhone: Der Kern muss auch für iOS bauen.
+      - name: Kern für iPhone bauen
+        run: |
+          set -o pipefail
+          xcodebuild -scheme TagwerkCore -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build 2>&1 | tail -n 25
+
       # Feste Signatur aus den Secrets (scripts/signatur-einrichten.sh). Ohne Secrets wird ad hoc signiert.
       - name: Signatur vorbereiten
         env:

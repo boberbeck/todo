@@ -745,6 +745,27 @@ final class SAPImportTests: XCTestCase {
         XCTAssertEqual(try store.load().tasks.first?.worklogType, "Fehlalarm")
     }
 
+    func testChangeTrackingForSync() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tagwerk-sync-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = try SQLiteStore(url: folder.appendingPathComponent("tagwerk.sqlite"))
+        let start = Date().addingTimeInterval(-1)
+        let task = TaskItem(title: "Abgleich vorbereiten")
+        let entry = TimeEntry(taskID: task.id, start: Date().addingTimeInterval(-600), end: Date())
+        try store.save(task)
+        try store.save(entry)
+        var changes = try store.changes(since: start)
+        XCTAssertEqual(changes.modified["task"], [task.id])
+        XCTAssertEqual(changes.modified["time_entry"], [entry.id])
+        XCTAssertTrue(changes.deleted.isEmpty)
+
+        try store.deleteEntry(id: entry.id)
+        changes = try store.changes(since: start)
+        XCTAssertEqual(changes.deleted.map(\.id), [entry.id])
+        XCTAssertEqual(changes.deleted.first?.entity, "time_entry")
+        XCTAssertTrue(try store.changes(since: Date().addingTimeInterval(60)).isEmpty)
+    }
+
     func testGroupRowsAreNoTitles() {
         let cells = [
             ["Kategorie: Projektaufgabenbestätigung (null)", "CPSO8643-1"],

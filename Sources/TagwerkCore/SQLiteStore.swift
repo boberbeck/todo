@@ -26,7 +26,7 @@ public final class SQLiteStore: Store {
     private var db: OpaquePointer?
 
     /// Aktuelle Version des Datenbankschemas.
-    public static let schemaVersion = 6
+    public static let schemaVersion = 7
 
     public init(url: URL) throws {
         try FileManager.default.createDirectory(
@@ -174,6 +174,73 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+        if version < 7 {
+            // Vorbereitung für einen späteren Abgleich (z. B. mit dem iPhone):
+            // jede Zeile kennt ihre letzte Änderung, Gelöschtes wird protokolliert.
+            // Die Trigger erfassen auch, was der MCP-Server schreibt.
+            try exec("""
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS deleted_record (
+                entity TEXT NOT NULL,
+                id TEXT NOT NULL,
+                deleted_at REAL NOT NULL,
+                PRIMARY KEY (entity, id)
+            );
+            ALTER TABLE customer ADD COLUMN modified_at REAL;
+            UPDATE customer SET modified_at = (julianday('now') - 2440587.5) * 86400.0;
+            CREATE TRIGGER IF NOT EXISTS customer_inserted AFTER INSERT ON customer BEGIN UPDATE customer SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS customer_updated AFTER UPDATE ON customer BEGIN UPDATE customer SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS customer_deleted AFTER DELETE ON customer BEGIN INSERT OR REPLACE INTO deleted_record (entity, id, deleted_at) VALUES ('customer', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+            ALTER TABLE task ADD COLUMN modified_at REAL;
+            UPDATE task SET modified_at = (julianday('now') - 2440587.5) * 86400.0;
+            CREATE TRIGGER IF NOT EXISTS task_inserted AFTER INSERT ON task BEGIN UPDATE task SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS task_updated AFTER UPDATE ON task BEGIN UPDATE task SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS task_deleted AFTER DELETE ON task BEGIN INSERT OR REPLACE INTO deleted_record (entity, id, deleted_at) VALUES ('task', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+            ALTER TABLE time_entry ADD COLUMN modified_at REAL;
+            UPDATE time_entry SET modified_at = (julianday('now') - 2440587.5) * 86400.0;
+            CREATE TRIGGER IF NOT EXISTS time_entry_inserted AFTER INSERT ON time_entry BEGIN UPDATE time_entry SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS time_entry_updated AFTER UPDATE ON time_entry BEGIN UPDATE time_entry SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS time_entry_deleted AFTER DELETE ON time_entry BEGIN INSERT OR REPLACE INTO deleted_record (entity, id, deleted_at) VALUES ('time_entry', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+            ALTER TABLE psp_element ADD COLUMN modified_at REAL;
+            UPDATE psp_element SET modified_at = (julianday('now') - 2440587.5) * 86400.0;
+            CREATE TRIGGER IF NOT EXISTS psp_element_inserted AFTER INSERT ON psp_element BEGIN UPDATE psp_element SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS psp_element_updated AFTER UPDATE ON psp_element BEGIN UPDATE psp_element SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS psp_element_deleted AFTER DELETE ON psp_element BEGIN INSERT OR REPLACE INTO deleted_record (entity, id, deleted_at) VALUES ('psp_element', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+            ALTER TABLE booking ADD COLUMN modified_at REAL;
+            UPDATE booking SET modified_at = (julianday('now') - 2440587.5) * 86400.0;
+            CREATE TRIGGER IF NOT EXISTS booking_inserted AFTER INSERT ON booking BEGIN UPDATE booking SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS booking_updated AFTER UPDATE ON booking BEGIN UPDATE booking SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS booking_deleted AFTER DELETE ON booking BEGIN INSERT OR REPLACE INTO deleted_record (entity, id, deleted_at) VALUES ('booking', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+            ALTER TABLE weekly_goal ADD COLUMN modified_at REAL;
+            UPDATE weekly_goal SET modified_at = (julianday('now') - 2440587.5) * 86400.0;
+            CREATE TRIGGER IF NOT EXISTS weekly_goal_inserted AFTER INSERT ON weekly_goal BEGIN UPDATE weekly_goal SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS weekly_goal_updated AFTER UPDATE ON weekly_goal BEGIN UPDATE weekly_goal SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS weekly_goal_deleted AFTER DELETE ON weekly_goal BEGIN INSERT OR REPLACE INTO deleted_record (entity, id, deleted_at) VALUES ('weekly_goal', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+            PRAGMA user_version = 7;
+            COMMIT;
+            """)
+        }
+    }
+
+    /// Für einen späteren Abgleich: was sich seit `date` geändert hat (Tabelle → IDs) und was gelöscht wurde.
+    public func changes(since date: Date) throws -> StoreChanges {
+        var changes = StoreChanges()
+        for table in StoreChanges.tables {
+            let statement = try prepare("SELECT id FROM \(table) WHERE modified_at > ?;")
+            try statement.bind([.double(date.timeIntervalSince1970)])
+            var ids: [UUID] = []
+            while try statement.step() {
+                if let id = statement.uuid(0) { ids.append(id) }
+            }
+            if !ids.isEmpty { changes.modified[table] = ids }
+        }
+        let deleted = try prepare("SELECT entity, id, deleted_at FROM deleted_record WHERE deleted_at > ?;")
+        try deleted.bind([.double(date.timeIntervalSince1970)])
+        while try deleted.step() {
+            guard let entity = deleted.text(0), let id = deleted.uuid(1) else { continue }
+            changes.deleted.append(StoreChanges.Deletion(entity: entity, id: id, deletedAt: deleted.date(2) ?? date))
+        }
+        return changes
     }
 
     /// Zählt Änderungen durch andere Verbindungen (`PRAGMA data_version`).
@@ -630,4 +697,21 @@ final class Statement {
     func uuid(_ column: Int32) -> UUID? {
         text(column).flatMap { UUID(uuidString: $0) }
     }
+}
+
+/// Änderungen seit einem Zeitpunkt, als Grundlage für einen Abgleich zwischen Geräten.
+public struct StoreChanges: Equatable, Sendable {
+    public static let tables = ["customer", "task", "time_entry", "psp_element", "booking", "weekly_goal"]
+
+    public struct Deletion: Equatable, Sendable {
+        public var entity: String
+        public var id: UUID
+        public var deletedAt: Date
+    }
+
+    /// Tabelle → geänderte oder neue IDs
+    public var modified: [String: [UUID]] = [:]
+    public var deleted: [Deletion] = []
+
+    public var isEmpty: Bool { modified.isEmpty && deleted.isEmpty }
 }

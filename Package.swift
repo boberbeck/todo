@@ -61,7 +61,8 @@ targets.append(
 
 let package = Package(
     name: "Tagwerk",
-    platforms: [.macOS(.v14)],
+    // iOS: der Kern (TagwerkCore) baut schon fürs iPhone; die iPhone-App kommt später dazu.
+    platforms: [.macOS(.v14), .iOS(.v17)],
     products: products,
     targets: targets
 )
