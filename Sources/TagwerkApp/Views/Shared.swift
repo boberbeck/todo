@@ -122,6 +122,15 @@ struct TaskContextMenu: View {
             Divider()
             Button("Keine") { model.setWorkType(nil, for: task.id) }
         }
+        if task.source == .ticket {
+            Menu("Work Log Type: \(model.worklogType(for: task))") {
+                ForEach(Preferences.knownWorklogTypes, id: \.self) { type in
+                    Button(type) { model.setWorklogType(type, for: task.id) }
+                }
+                Divider()
+                Button("Standard (\(model.defaultWorklogType))") { model.setWorklogType(nil, for: task.id) }
+            }
+        }
         Menu("Wochenziel") {
             ForEach(model.goals(forWeekStarting: model.currentWeekStart)) { goal in
                 Button(goal.title) { model.setGoal(goal.id, for: task.id) }
@@ -320,5 +329,38 @@ struct ResizeHandle: View {
             .onDisappear {
                 if hovering { NSCursor.pop() }
             }
+    }
+}
+
+/// Work Log Type eines Tickets, mit den Namen aus ServiceDesk Plus.
+struct WorklogTypeMenu: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+
+    var body: some View {
+        Menu {
+            ForEach(Preferences.knownWorklogTypes, id: \.self) { type in
+                Button {
+                    model.setWorklogType(type, for: task.id)
+                } label: {
+                    if type == model.worklogType(for: task) {
+                        Label(type, systemImage: "checkmark")
+                    } else {
+                        Text(type)
+                    }
+                }
+            }
+            if task.worklogType != nil {
+                Divider()
+                Button("Standard (\(model.defaultWorklogType))") { model.setWorklogType(nil, for: task.id) }
+            }
+        } label: {
+            Text(model.worklogType(for: task))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .fixedSize()
+        .help("Work Log Type in ManageEngine (Pflichtfeld beim Worklog)")
     }
 }

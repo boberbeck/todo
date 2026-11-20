@@ -179,6 +179,9 @@ struct CloseLineRow: View {
             HStack(spacing: 8) {
                 PSPMenu(task: line.task)
                 WorkTypeMenu(task: line.task)
+                if line.targets.contains(.manageEngine) {
+                    WorklogTypeMenu(task: line.task)
+                }
                 let service = model.serviceProduct(for: line.task.workType)
                 if !service.isEmpty {
                     Text("Leistung \(service)")

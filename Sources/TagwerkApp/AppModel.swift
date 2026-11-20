@@ -940,10 +940,23 @@ final class AppModel {
 
     /// Leistung in SAP zur Arbeitsart, wie in den Einstellungen hinterlegt.
     /// Work Log Type in ManageEngine zur Arbeitsart, wie in den Einstellungen gewählt.
-    func worklogType(for workType: WorkType?) -> String {
+    /// Standard für Tickets ohne eigenen Work Log Type.
+    var defaultWorklogType: String {
         _ = settingsVersion
-        let stored = UserDefaults.standard.string(forKey: Preferences.worklogTypeKey(for: workType)) ?? ""
-        return stored.isEmpty ? Preferences.defaultWorklogType(for: workType) : stored
+        let stored = UserDefaults.standard.string(forKey: Preferences.defaultWorklogTypeKey) ?? ""
+        return stored.isEmpty ? "Ticketbearbeitung" : stored
+    }
+
+    /// Work Log Type eines Tickets: selbst gewählt oder der Standard.
+    func worklogType(for task: TaskItem?) -> String {
+        if let chosen = task?.worklogType, !chosen.isEmpty { return chosen }
+        return defaultWorklogType
+    }
+
+    func setWorklogType(_ value: String?, for id: UUID) {
+        guard var task = self.task(id), task.worklogType != value else { return }
+        task.worklogType = value
+        persist(task)
     }
 
     func serviceProduct(for workType: WorkType?) -> String {
@@ -1019,7 +1032,7 @@ final class AppModel {
                     description: booking.description,
                     minutes: booking.minutes,
                     start: start,
-                    worklogType: worklogType(for: booking.workType)
+                    worklogType: worklogType(for: task(booking.taskID))
                 )
                 save(BookingQueue.confirmed(booking, reference: reference, now: Date()))
                 sent += 1

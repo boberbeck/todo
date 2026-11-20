@@ -740,6 +740,9 @@ final class SAPImportTests: XCTestCase {
         let psp = PSPElement(customerID: UUID(), code: "CPSO9001-1", title: "Besprechung", activity: "Interne Tätigkeit")
         try store.save(psp)
         XCTAssertEqual(try store.load().pspElements, [psp])
+        let ticket = TaskItem(title: "Ticket", source: .ticket, createdAt: Date(timeIntervalSince1970: 1_700_000_000), worklogType: "Fehlalarm")
+        try store.save(ticket)
+        XCTAssertEqual(try store.load().tasks.first?.worklogType, "Fehlalarm")
     }
 
     func testGroupRowsAreNoTitles() {

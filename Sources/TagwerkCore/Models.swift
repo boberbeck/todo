@@ -147,6 +147,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
     public var externalKey: String?
     /// Wochenziel, auf das die Aufgabe einzahlt.
     public var goalID: UUID?
+    /// Work Log Type in ManageEngine, genau wie dort benannt (z. B. „Ticketbearbeitung“). `nil` = Standard.
+    public var worklogType: String?
 
     public init(
         id: UUID = UUID(),
@@ -168,7 +170,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         scheduledStart: Date? = nil,
         calendarEventID: String? = nil,
         externalKey: String? = nil,
-        goalID: UUID? = nil
+        goalID: UUID? = nil,
+        worklogType: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -190,6 +193,7 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         self.calendarEventID = calendarEventID
         self.externalKey = externalKey
         self.goalID = goalID
+        self.worklogType = worklogType
     }
 
     public var isDone: Bool { status == .done }

@@ -117,8 +117,9 @@ enum Preferences {
     static let bydesignAutoFetchKey = "bydesignAutoFetch"
     static let bydesignLastAutoFetchKey = "bydesignLastAutoFetch"
     static let bydesignPasswordAccount = "bydesign"
-    static func worklogTypeKey(for workType: WorkType?) -> String { "worklogType.\(workType?.rawValue ?? "ohne")" }
-    /// Worklog-Typen in ServiceDesk Plus (Pflichtfeld beim Worklog).
+    /// Standard-Work-Log-Type für Tickets, bei denen keiner gewählt ist.
+    static let defaultWorklogTypeKey = "worklogTypeDefault"
+    /// Work Log Types in ServiceDesk Plus, genau wie dort benannt (Pflichtfeld beim Worklog).
     static let knownWorklogTypes = [
         "Change Bearbeitung",
         "Fehlalarm",
@@ -128,13 +129,6 @@ enum Preferences {
         "Ticketbearbeitung",
         "Wartung",
     ]
-    static func defaultWorklogType(for workType: WorkType?) -> String {
-        switch workType {
-        case .wartung: return "Wartung"
-        case .stoerung: return "Fehleranalyse, Incident & Problem Bearbeitung"
-        case .projekt: return "Change Bearbeitung"
-        case .beratung, .none: return "Ticketbearbeitung"
-        }
     }
     static let calendarHourHeightKey = "calendarHourHeight"
 

@@ -414,35 +414,6 @@ struct BookingSettings: View {
     }
 }
 
-/// Work Log Type in ManageEngine für eine Arbeitsart.
-struct WorklogTypePicker: View {
-    @Environment(AppModel.self) private var model
-    let workType: WorkType?
-    let title: String
-    @State private var value = ""
-
-    var body: some View {
-        Picker(title, selection: $value) {
-            ForEach(options, id: \.self) { option in
-                Text(option).tag(option)
-            }
-        }
-        .onAppear {
-            value = model.worklogType(for: workType)
-        }
-        .onChange(of: value) {
-            UserDefaults.standard.set(value, forKey: Preferences.worklogTypeKey(for: workType))
-            model.settingsChanged()
-        }
-    }
-
-    private var options: [String] {
-        var list = Preferences.knownWorklogTypes
-        if !value.isEmpty, !list.contains(value) { list.insert(value, at: 0) }
-        return list
-    }
-}
-
 /// Leistung in SAP für eine Arbeitsart.
 struct ServiceProductField: View {
     @Environment(AppModel.self) private var model
@@ -476,6 +447,7 @@ struct ManageEngineSettings: View {
     @State private var check: AppModel.ManageEngineCheck?
     @State private var isChecking = false
     @State private var searchText = ""
+    @AppStorage(Preferences.defaultWorklogTypeKey) private var defaultWorklogType = "Ticketbearbeitung"
 
     var body: some View {
         let config = ManageEngineConfig(baseURL: baseURL, authKind: ManageEngineConfig.AuthKind(rawValue: authKind) ?? .authtoken, technicianID: technician)
@@ -515,14 +487,15 @@ struct ManageEngineSettings: View {
             }
 
             Section {
-                WorklogTypePicker(workType: nil, title: "Ohne Arbeitsart")
-                ForEach(WorkType.allCases) { workType in
-                    WorklogTypePicker(workType: workType, title: workType.label)
+                Picker("Standard", selection: $defaultWorklogType) {
+                    ForEach(Preferences.knownWorklogTypes, id: \.self) { type in
+                        Text(type).tag(type)
+                    }
                 }
             } header: {
-                Text("Work Log Type je Arbeitsart")
+                Text("Work Log Type")
             } footer: {
-                SettingsFootnote("Pflichtfeld beim Worklog in ServiceDesk Plus. Tagwerk wählt ihn nach der Arbeitsart der Aufgabe.")
+                SettingsFootnote("Heißen genau wie in ServiceDesk Plus. Pro Ticket wählst du ihn im Fokus, im Tagesabschluss oder per Rechtsklick; ohne Auswahl gilt dieser Standard.")
             }
 
             Section {
@@ -592,10 +565,11 @@ struct ManageEngineSettings: View {
                 SettingsFootnote("„Verbindung testen“ sucht dich in den letzten Tickets. Bist du dort nicht dabei, such nach deinem Namen; Tagwerk schaut dann in der Technikerliste von ServiceDesk Plus.")
             }
         }
-        .settingsPage(height: 700)
+        .settingsPage(height: 640)
         .onChange(of: baseURL) { model.settingsChanged() }
         .onChange(of: authKind) { model.settingsChanged() }
         .onChange(of: technician) { model.settingsChanged() }
+        .onChange(of: defaultWorklogType) { model.settingsChanged() }
         .onAppear {
             if searchText.isEmpty, !technician.isEmpty, !config.technicianIDIsNumeric { searchText = technician }
         }

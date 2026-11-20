@@ -26,7 +26,7 @@ public final class SQLiteStore: Store {
     private var db: OpaquePointer?
 
     /// Aktuelle Version des Datenbankschemas.
-    public static let schemaVersion = 5
+    public static let schemaVersion = 6
 
     public init(url: URL) throws {
         try FileManager.default.createDirectory(
@@ -166,6 +166,14 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+        if version < 6 {
+            try exec("""
+            BEGIN;
+            ALTER TABLE task ADD COLUMN worklog_type TEXT;
+            PRAGMA user_version = 6;
+            COMMIT;
+            """)
+        }
     }
 
     /// Zählt Änderungen durch andere Verbindungen (`PRAGMA data_version`).
@@ -201,7 +209,7 @@ public final class SQLiteStore: Store {
         let tasks = try prepare("""
         SELECT id, title, notes, customer_id, source, external_id, external_url, planned_date,
                estimate_minutes, work_type, psp_element, work_description, status, completed_at,
-               sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id
+               sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type
         FROM task;
         """)
         while try tasks.step() {
@@ -226,7 +234,8 @@ public final class SQLiteStore: Store {
                 scheduledStart: tasks.date(16),
                 calendarEventID: tasks.text(17),
                 externalKey: tasks.text(18),
-                goalID: tasks.uuid(19)
+                goalID: tasks.uuid(19),
+                worklogType: tasks.text(20)
             ))
         }
 
@@ -325,8 +334,8 @@ public final class SQLiteStore: Store {
         try run("""
         INSERT INTO task (id, title, notes, customer_id, source, external_id, external_url, planned_date,
                           estimate_minutes, work_type, psp_element, work_description, status, completed_at,
-                          sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             notes = excluded.notes,
@@ -345,7 +354,8 @@ public final class SQLiteStore: Store {
             scheduled_start = excluded.scheduled_start,
             calendar_event_id = excluded.calendar_event_id,
             external_key = excluded.external_key,
-            goal_id = excluded.goal_id;
+            goal_id = excluded.goal_id,
+            worklog_type = excluded.worklog_type;
         """, [
             .text(task.id.uuidString),
             .text(task.title),
@@ -367,6 +377,7 @@ public final class SQLiteStore: Store {
             .optionalText(task.calendarEventID),
             .optionalText(task.externalKey),
             .optionalText(task.goalID?.uuidString),
+            .optionalText(task.worklogType),
         ])
     }
 

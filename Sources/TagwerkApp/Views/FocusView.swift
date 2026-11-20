@@ -160,6 +160,9 @@ struct FocusTaskPane: View {
                         HStack(spacing: 10) {
                             WorkTypeMenu(task: task)
                             PSPMenu(task: task)
+                            if task.source == .ticket {
+                                WorklogTypeMenu(task: task)
+                            }
                             Spacer()
                             Text("für Worklog und SAP")
                                 .font(.caption)
