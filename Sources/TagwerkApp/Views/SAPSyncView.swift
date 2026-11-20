@@ -132,6 +132,8 @@ struct SAPSyncSheet: View {
     @State private var isTargeted = false
     @State private var showsFilePicker = false
     @State private var isReadingImage = false
+    @State private var namingProject: String?
+    @State private var newCustomerName = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -345,29 +347,90 @@ struct SAPSyncSheet: View {
                 }
             }
             Spacer()
-            if (choices[group.project] ?? .skip) == .skip {
-                Text("Kunde wählen")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-            Picker("Kunde", selection: Binding(
-                get: { choices[group.project] ?? .skip },
-                set: { choices[group.project] = $0 }
-            )) {
-                Text("Nicht übernehmen").tag(SAPCustomerChoice.skip)
-                if let name = group.customerName, !model.activeCustomers.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
-                    Text("Neuer Kunde „\(name)“").tag(SAPCustomerChoice.new(name))
+            let choice = choices[group.project] ?? .skip
+            Menu {
+                ForEach(model.activeCustomers) { customer in
+                    Button(customer.name) { choices[group.project] = .existing(customer.id) }
+                }
+                ForEach(pendingNewCustomers, id: \.self) { name in
+                    Button("\(name) (wird angelegt)") { choices[group.project] = .new(name) }
+                }
+                if let name = group.customerName,
+                   !model.activeCustomers.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }),
+                   !pendingNewCustomers.contains(name) {
+                    Button("Neuer Kunde „\(name)“") { choices[group.project] = .new(name) }
+                }
+                if !model.activeCustomers.isEmpty || !pendingNewCustomers.isEmpty {
+                    Divider()
+                }
+                Button("Neuer Kunde …") {
+                    newCustomerName = group.customerName ?? group.projectName ?? ""
+                    namingProject = group.project
+                }
+                if choice != .skip {
+                    Button("Diesen Kunden für alle Projekte ohne Kunde") {
+                        for other in plan?.groups ?? [] where (choices[other.project] ?? .skip) == .skip {
+                            choices[other.project] = choice
+                        }
+                    }
                 }
                 Divider()
-                ForEach(model.activeCustomers) { customer in
-                    Text(customer.name).tag(SAPCustomerChoice.existing(customer.id))
-                }
+                Button("Nicht übernehmen") { choices[group.project] = .skip }
+            } label: {
+                Text(label(for: choice))
             }
-            .labelsHidden()
+            .menuStyle(.button)
             .fixedSize()
-            .frame(width: 250, alignment: .trailing)
+            .foregroundStyle(choice == .skip ? Color.orange : Color.primary)
+            .popover(isPresented: Binding(
+                get: { namingProject == group.project },
+                set: { if !$0 { namingProject = nil } }
+            )) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Neuer Kunde für \(group.project)")
+                        .font(.headline)
+                    TextField("Name des Kunden", text: $newCustomerName)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 260)
+                        .onSubmit { confirmNewCustomer(for: group.project) }
+                    HStack {
+                        Spacer()
+                        Button("Übernehmen") { confirmNewCustomer(for: group.project) }
+                            .keyboardShortcut(.defaultAction)
+                            .disabled(newCustomerName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+                .padding(14)
+            }
         }
         .padding(.vertical, 4)
+    }
+
+    /// Neue Kunden, die in diesem Abgleich schon gewählt wurden (werden beim Übernehmen angelegt).
+    private var pendingNewCustomers: [String] {
+        Array(Set(choices.values.compactMap { choice -> String? in
+            if case .new(let name) = choice { return name }
+            return nil
+        })).sorted()
+    }
+
+    private func label(for choice: SAPCustomerChoice) -> String {
+        switch choice {
+        case .skip: return "Kunde wählen …"
+        case .existing(let id): return model.customer(id)?.name ?? "Kunde"
+        case .new(let name): return "\(name) (neu)"
+        }
+    }
+
+    private func confirmNewCustomer(for project: String) {
+        let name = newCustomerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        if let existing = model.activeCustomers.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            choices[project] = .existing(existing.id)
+        } else {
+            choices[project] = .new(name)
+        }
+        namingProject = nil
     }
 
     @ViewBuilder

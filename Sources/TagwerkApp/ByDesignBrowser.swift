@@ -150,6 +150,23 @@ final class ByDesignBrowserModel {
         }
     }
 
+    /// Speichert, was Tagwerk auf der Seite liest (Tabellenzeilen und Text), in „Downloads“.
+    /// Hilft, das Erkennen auf die echte ByDesign-Tabelle abzustimmen.
+    func savePageForDiagnosis() async -> URL? {
+        guard let webView,
+              let json = try? await webView.evaluateJavaScript(ByDesignDemoPage.extractionScript) as? String else { return nil }
+        let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        let url = folder.appendingPathComponent("Tagwerk-ByDesign-Seite.json")
+        do {
+            try Data(json.utf8).write(to: url)
+            status = "Gesichert: \(url.lastPathComponent) in Downloads. Bitte vor dem Weitergeben ansehen; sie enthält deine Aufgabenliste."
+            return url
+        } catch {
+            status = "Sichern fehlgeschlagen: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
     /// Bild der sichtbaren Seite (für die Texterkennung).
     func pageImage() async -> CGImage? {
         guard let webView else { return nil }
@@ -220,6 +237,16 @@ struct ByDesignBrowserView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                 Spacer()
+                Button {
+                    Task {
+                        if let url = await browser.savePageForDiagnosis() {
+                            NSWorkspace.shared.activateFileViewerSelecting([url])
+                        }
+                    }
+                } label: {
+                    Image(systemName: "doc.text.magnifyingglass")
+                }
+                .help("Seite sichern (Fehlersuche): speichert, was Tagwerk auf der Seite liest, in Downloads")
                 if !browser.collected.isEmpty {
                     Text("\(browser.collected.count) gesammelt")
                         .monospacedDigit()

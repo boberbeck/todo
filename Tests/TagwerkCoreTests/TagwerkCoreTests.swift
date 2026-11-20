@@ -716,6 +716,16 @@ final class SAPImportTests: XCTestCase {
         XCTAssertEqual(rows.map(\.title), ["Firewall erneuern", "Wartung 2026"])
     }
 
+    func testGroupRowsAreNoTitles() {
+        let cells = [
+            ["Kategorie: Projektaufgabenbestätigung (null)", "CPSO8643-1"],
+            ["Gruppieren nach...", "CPSO8643-2"],
+            ["Projektaufgabenbestätigung", "CPSO8643-3", "Firewall"],
+        ]
+        let rows = SAPImport.rows(fromCells: cells)
+        XCTAssertEqual(rows.map(\.title), ["", "", "Firewall"])
+    }
+
     func testOCRRepair() {
         XCTAssertEqual(SAPImport.repairOCRCell("CPSO8643 – 12"), "CPSO8643-12")
         XCTAssertEqual(SAPImport.repairOCRCell("Wartung - Server"), "Wartung - Server")

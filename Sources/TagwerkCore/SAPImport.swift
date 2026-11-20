@@ -108,13 +108,13 @@ public enum SAPImport {
                 line.replacingOccurrences(of: code, with: " ")
                     .trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "-–·:|;")))
             )
-            if title.isEmpty || isCategory(title), index + 1 < clean.count {
+            if title.isEmpty || isNoise(title), index + 1 < clean.count {
                 let next = clean[index + 1]
-                if firstTaskID(in: next) == nil, !isCategory(next), next.count <= 140, next.contains(where: \.isLetter) {
+                if firstTaskID(in: next) == nil, !isNoise(next), next.count <= 140, next.contains(where: \.isLetter) {
                     title = next
                 }
             }
-            if isCategory(title) { title = "" }
+            if isNoise(title) { title = "" }
             seen.insert(code)
             result.append(SAPTaskRow(code: code, title: title))
         }
@@ -171,11 +171,12 @@ public enum SAPImport {
         if let codeColumn = columns.code {
             guard let code = cell(codeColumn), looksLikeTaskID(code) else { return nil }
             var title = cell(columns.title) ?? ""
+            if isNoise(title) { title = "" }
             if title.isEmpty {
                 // Erste sinnvolle Textspalte, die nicht schon belegt ist
                 let used = Set([columns.code, columns.project, columns.projectName, columns.customer, columns.category].compactMap { $0 })
                 title = row.enumerated().first { index, value in
-                    !used.contains(index) && !value.isEmpty && !looksLikeTaskID(value) && value.contains(where: \.isLetter)
+                    !used.contains(index) && !value.isEmpty && !looksLikeTaskID(value) && value.contains(where: \.isLetter) && !isNoise(value)
                 }?.element ?? ""
             }
             let project = cell(columns.project).flatMap { looksLikeTaskID($0) ? projectKey(of: $0) : $0 }
@@ -201,13 +202,24 @@ public enum SAPImport {
         let others = row.enumerated()
             .filter { $0.offset != codeIndex && !$0.element.isEmpty && $0.element.contains(where: \.isLetter) && !looksLikeTaskID($0.element) }
             .map(\.element)
-        let title = others.filter { !isCategory($0) }.max { $0.count < $1.count } ?? ""
+        let title = others.filter { !isNoise($0) }.max { $0.count < $1.count } ?? ""
         return SAPTaskRow(code: code, title: title, category: others.first(where: isCategory))
     }
 
     private static func isCategory(_ text: String) -> Bool {
         let folded = text.lowercased()
         return folded.hasPrefix("projektaufgabe") || folded.hasPrefix("serviceauftrag") || folded == "aufgabe"
+    }
+
+    /// Text, der kein Aufgabenname ist: Kategorie, Gruppenzeilen, Überschriften der ByDesign-Liste.
+    static func isNoise(_ text: String) -> Bool {
+        let folded = text.lowercased().trimmingCharacters(in: .whitespaces)
+        return isCategory(text)
+            || folded.hasPrefix("kategorie")
+            || folded.hasPrefix("gruppieren nach")
+            || folded.hasPrefix("aktuelle arbeitspakete")
+            || folded.contains("(null)")
+            || folded.contains("projektaufgabenbestätigung")
     }
 
     private static func cleanTitle(_ text: String) -> String {
