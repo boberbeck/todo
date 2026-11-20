@@ -69,14 +69,15 @@ Für den Kalenderzugriff am besten `scripts/make-app.sh` nutzen und `build/Tagwe
 
 ## Abgleich mit SAP ByDesign
 
-Ohne API-Zugriff auf SAP holt Tagwerk die Projektaufgaben über die Tabelle, die du in ByDesign ohnehin siehst:
+Ohne API-Zugriff auf SAP holt Tagwerk die Projektaufgaben (z. B. `CPSO8643-12`) auf einem von drei Wegen; alle unter Kunden › SAP-Abgleich:
 
-1. In ByDesign die Liste deiner Aufgaben öffnen (Spalten Kategorie und Aufgabennummer, z. B. `CPSO8643-12`).
-2. Am besten auch Aufgabenname, Projekt und Kunde einblenden.
-3. Nach Excel exportieren und die Datei in Tagwerk unter Kunden › SAP-Abgleich hineinziehen, oder die Zeilen kopieren und „Aus Zwischenablage einfügen“ wählen.
-4. Jedem Projekt einmal den Kunden zuordnen. Beim nächsten Abgleich merkt Tagwerk sich das über die schon bekannten Aufgaben.
+1. **Direkt aus ByDesign:** „ByDesign öffnen“ öffnet ByDesign in einem Tagwerk-Fenster. Anmelden wie im Browser, die Liste deiner Aufgaben öffnen, „Aufgaben holen“. Tagwerk liest die Tabelle von der Seite, bei langen Listen weiterblättern und erneut holen. Die Anmeldung bleibt wie in Safari als Cookie auf dem Mac; ein Passwort speichert Tagwerk nicht. Die Adresse steht in Einstellungen › Buchung.
+2. **Bildschirmfoto:** Liste fotografieren (⇧⌘4) und ins Abgleich-Fenster ziehen oder einfügen; Tagwerk liest die Nummern per Texterkennung.
+3. **Excel-Export oder kopierte Tabelle**, falls ByDesign einen Export anbietet (`.xlsx`, Excel-XML, CSV, HTML).
 
-Gelesen werden `.xlsx`, Excel-XML (`.xls`), CSV und HTML-Tabellen. In SAP ändert sich dabei nichts.
+Danach jedem Projekt einmal den Kunden zuordnen. Beim nächsten Abgleich merkt Tagwerk sich das über die schon bekannten Aufgaben. In SAP ändert sich dabei nichts.
+
+Termine aus dem Kalender werden per Rechtsklick oder Doppelklick › „Als Zeit erfassen …“ zur erfassten Zeit, mit Kunde, PSP-Element und Arbeitsart; Tagwerk merkt sich die Auswahl je Termintitel. Im Tagesabschluss ist der Worklog im Ticket freiwillig („Ohne Worklog“), die Buchung in SAP nicht.
 
 ## Claude anbinden (MCP)
 

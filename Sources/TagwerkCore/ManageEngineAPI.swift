@@ -152,18 +152,23 @@ public enum ManageEngineAPI {
         requestKey: String,
         description: String,
         minutes: Int,
-        start: Date
+        start: Date,
+        worklogType: String? = nil
     ) throws -> URLRequest {
         guard config.isComplete else { throw ManageEngineError.notConfigured }
         guard config.technicianIDIsNumeric else { throw ManageEngineError.technicianNotNumeric }
         let end = start.addingTimeInterval(TimeInterval(minutes * 60))
-        let worklog: [String: Any] = [
+        var worklog: [String: Any] = [
             "description": description,
             "owner": ["id": config.trimmedTechnician],
             "start_time": ["value": String(Int64(start.timeIntervalSince1970 * 1000))],
             "end_time": ["value": String(Int64(end.timeIntervalSince1970 * 1000))],
             "time_spent": ["hours": String(minutes / 60), "minutes": String(minutes % 60)],
         ]
+        // „Work Log Type“ ist in vielen Installationen ein Pflichtfeld
+        if let worklogType = worklogType?.trimmingCharacters(in: .whitespaces), !worklogType.isEmpty {
+            worklog["type"] = ["name": worklogType]
+        }
         var request = try base(path: "/api/v3/requests/\(requestKey)/worklogs", query: nil, config: config, token: token)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")

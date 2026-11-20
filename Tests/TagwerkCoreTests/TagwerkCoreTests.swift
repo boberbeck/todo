@@ -484,7 +484,7 @@ final class ManageEngineAPITests: XCTestCase {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let request = try ManageEngineAPI.addWorklog(
             config: config, token: "SECRET", requestKey: "998877",
-            description: "Logs geprüft & Tunnel neu", minutes: 90, start: start
+            description: "Logs geprüft & Tunnel neu", minutes: 90, start: start, worklogType: "Ticketbearbeitung"
         )
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.url?.absoluteString, "https://helpdesk.example.com/api/v3/requests/998877/worklogs")
@@ -498,6 +498,7 @@ final class ManageEngineAPITests: XCTestCase {
         XCTAssertEqual((worklog?["time_spent"] as? [String: Any])?["minutes"] as? String, "30")
         XCTAssertEqual((worklog?["start_time"] as? [String: Any])?["value"] as? String, "1800000000000")
         XCTAssertEqual((worklog?["end_time"] as? [String: Any])?["value"] as? String, "1800005400000")
+        XCTAssertEqual((worklog?["type"] as? [String: Any])?["name"] as? String, "Ticketbearbeitung")
     }
 
     func testParseTickets() throws {
@@ -695,6 +696,38 @@ final class SAPImportTests: XCTestCase {
         let rows = SAPImport.rows(fromText: "Projektaufgabenbestätigung CPSO8643-7\nCPSO8643-8 Netzwerk\nGruppieren nach Kategorie")
         XCTAssertEqual(rows.map(\.code), ["CPSO8643-7", "CPSO8643-8"])
         XCTAssertEqual(rows[1].title, "Netzwerk")
+    }
+
+    func testLinesFromWebPage() {
+        // So liest sich eine Tabelle aus Div-Zellen: jede Zelle eine Zeile
+        let text = """
+        Kategorie
+        Aufgabennummer
+        Aufgabenname
+        Projektaufgabenbestätigung
+        CPSO8643-12
+        Firewall erneuern
+        Projektaufgabenbestätigung
+        CPSO8643-1
+        Wartung 2026
+        """
+        let rows = SAPImport.rows(fromText: text)
+        XCTAssertEqual(rows.map(\.code), ["CPSO8643-12", "CPSO8643-1"])
+        XCTAssertEqual(rows.map(\.title), ["Firewall erneuern", "Wartung 2026"])
+    }
+
+    func testOCRRepair() {
+        XCTAssertEqual(SAPImport.repairOCRCell("CPSO8643 – 12"), "CPSO8643-12")
+        XCTAssertEqual(SAPImport.repairOCRCell("Wartung - Server"), "Wartung - Server")
+        let rows = [
+            SAPTaskRow(code: "CPSO8643-1", title: "A"),
+            SAPTaskRow(code: "CPS08643-2", title: "B"),
+            SAPTaskRow(code: "CPSO8643-4", title: "C"),
+            SAPTaskRow(code: "CPS08643-1", title: "A doppelt"),
+        ]
+        let repaired = SAPImport.repairOCRCodes(rows)
+        XCTAssertEqual(repaired.map(\.code), ["CPSO8643-1", "CPSO8643-2", "CPSO8643-4"])
+        XCTAssertEqual(repaired[1].project, "CPSO8643")
     }
 
     func testCSVQuotes() {

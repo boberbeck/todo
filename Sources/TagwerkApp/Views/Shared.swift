@@ -223,7 +223,23 @@ struct PSPMenu: View {
             ForEach(options) { psp in
                 Button(psp.label) { model.setPSPElement(psp.code, for: task.id) }
             }
-            if !options.isEmpty {
+            if task.customerID == nil {
+                // Ohne Kunde (z. B. ein erfasster Termin): PSP-Elemente aller Kunden, setzt den Kunden mit
+                ForEach(model.activeCustomers) { customer in
+                    let psps = model.psps(for: customer.id)
+                    if !psps.isEmpty {
+                        Menu(customer.name) {
+                            ForEach(psps) { psp in
+                                Button(psp.label) {
+                                    model.setCustomer(customer.id, for: task.id)
+                                    model.setPSPElement(psp.code, for: task.id)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !options.isEmpty || task.customerID == nil {
                 Divider()
             }
             Button("Anderes PSP-Element …") {

@@ -91,6 +91,8 @@ jobs:
           rm -f screenshots/.done screenshots/.ready
           pkill -x Tagwerk || true
           ls -la screenshots
+          echo "--- Protokoll der App ---"
+          cat screenshots/protokoll.txt 2>/dev/null || echo "(kein Protokoll)"
 
       - uses: actions/upload-artifact@v4
         with:

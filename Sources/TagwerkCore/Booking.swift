@@ -24,6 +24,8 @@ public enum BookingStatus: String, Codable, Sendable {
     case confirmed
     /// von Hand übertragen und abgehakt (SAP ohne Schnittstelle)
     case entered
+    /// bewusst ausgelassen, z. B. kein Worklog im Ticket (dort ist er freiwillig)
+    case skipped
 
     public var label: String {
         switch self {
@@ -31,10 +33,11 @@ public enum BookingStatus: String, Codable, Sendable {
         case .failed: return "Fehler"
         case .confirmed: return "gebucht"
         case .entered: return "eingetragen"
+        case .skipped: return "ohne Worklog"
         }
     }
 
-    public var isDone: Bool { self == .confirmed || self == .entered }
+    public var isDone: Bool { self == .confirmed || self == .entered || self == .skipped }
 }
 
 /// Eine Buchung: Zeit einer Aufgabe an einem Tag für ein Zielsystem.
@@ -149,7 +152,12 @@ public struct BookingLine: Identifiable, Equatable, Sendable {
 
     /// Nach dem Buchen wurde die Zeit noch geändert.
     public var changedAfterBooking: Bool {
-        bookings.values.contains { $0.status.isDone && $0.minutes != minutes }
+        bookings.values.contains { ($0.status == .confirmed || $0.status == .entered) && $0.minutes != minutes }
+    }
+
+    /// Hinweise, die noch offen sind: Ziele, die erledigt oder ausgelassen sind, zählen nicht mehr.
+    public var openIssues: [BookingIssue] {
+        issues.filter { !(bookings[$0.target]?.status.isDone ?? false) }
     }
 
     /// Text für SAP: Ticketnummer vorweg, dann die Beschreibung.
@@ -244,6 +252,25 @@ public enum DailyClose {
 
 /// Warteschlange: was als Nächstes gesendet wird und wann ein Fehlversuch wiederholt wird.
 public enum BookingQueue {
+    /// Ziel bewusst auslassen (z. B. kein Worklog im Ticket).
+    public static func skipped(_ line: BookingLine, target: BookingTarget, minutes: Int, now: Date) -> Booking {
+        var booking = line.bookings[target] ?? Booking(
+            taskID: line.task.id,
+            day: line.day,
+            target: target,
+            minutes: minutes,
+            description: target == .manageEngine ? line.worklogDescription : line.sapComment,
+            pspElement: line.task.pspElement,
+            workType: line.task.workType,
+            ticketKey: line.task.externalKey
+        )
+        booking.status = .skipped
+        booking.minutes = minutes
+        booking.lastError = nil
+        booking.updatedAt = now
+        return booking
+    }
+
     /// 30 s, 1 min, 2 min, … höchstens 1 Stunde
     public static func retryDelay(attempts: Int) -> TimeInterval {
         guard attempts > 0 else { return 0 }
@@ -258,7 +285,7 @@ public enum BookingQueue {
                 return true
             case .failed:
                 return now >= booking.updatedAt.addingTimeInterval(retryDelay(attempts: booking.attempts))
-            case .confirmed, .entered:
+            case .confirmed, .entered, .skipped:
                 return false
             }
         }

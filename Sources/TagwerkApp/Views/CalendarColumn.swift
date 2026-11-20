@@ -235,6 +235,7 @@ struct EventBlock: View {
     let event: CalendarEvent
     let height: CGFloat
     let logged: Bool
+    @State private var showsLogSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -267,10 +268,16 @@ struct EventBlock: View {
                 .stroke(Color.primary.opacity(0.15))
         )
         .contextMenu {
-            Button(logged ? "Schon als Zeit erfasst" : "Als Zeit erfassen") {
-                model.logEvent(event)
+            Button(logged ? "Schon als Zeit erfasst" : "Als Zeit erfassen …") {
+                showsLogSheet = true
             }
             .disabled(logged)
+        }
+        .onTapGesture(count: 2) {
+            if !logged { showsLogSheet = true }
+        }
+        .sheet(isPresented: $showsLogSheet) {
+            LogEventSheet(event: event)
         }
         .help("\(event.displayTitle) · \(timeRange)")
     }
@@ -335,5 +342,83 @@ struct TaskBlock: View {
             Button("Zeitblock entfernen") { model.schedule(task.id, at: nil) }
         }
         .help("Ziehen verschiebt den Block, Doppelklick öffnet den Fokus")
+    }
+}
+
+/// Termin als Zeit erfassen: Kunde, PSP-Element und Arbeitsart wählen, damit er in SAP landet.
+struct LogEventSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let event: CalendarEvent
+
+    @State private var title = ""
+    @State private var customerID: UUID?
+    @State private var pspElement: String?
+    @State private var workType: WorkType?
+
+    var body: some View {
+        let psps = model.psps(for: customerID)
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Termin als Zeit erfassen")
+                    .font(.title2.weight(.semibold))
+                Text("\(event.start.formatted(date: .abbreviated, time: .shortened))–\(event.end.formatted(date: .omitted, time: .shortened)) · \(TimeMath.format(minutes: event.minutes)) h")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Form {
+                TextField("Titel", text: $title)
+                Picker("Kunde", selection: $customerID) {
+                    Text("Ohne Kunde").tag(UUID?.none)
+                    ForEach(model.activeCustomers) { customer in
+                        Text(customer.name).tag(UUID?.some(customer.id))
+                    }
+                }
+                Picker("PSP-Element", selection: $pspElement) {
+                    Text(customerID == nil ? "Erst Kunde wählen" : "Kein PSP-Element").tag(String?.none)
+                    ForEach(psps) { psp in
+                        Text(psp.label).tag(String?.some(psp.code))
+                    }
+                    if let pspElement, !psps.contains(where: { $0.code == pspElement }) {
+                        Text(pspElement).tag(String?.some(pspElement))
+                    }
+                }
+                .disabled(customerID == nil)
+                Picker("Arbeitsart", selection: $workType) {
+                    Text("Keine").tag(WorkType?.none)
+                    ForEach(WorkType.allCases) { type in
+                        Text(type.label).tag(WorkType?.some(type))
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            Text("Tagwerk merkt sich die Auswahl für Termine mit demselben Titel.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Abbrechen") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Erfassen") {
+                    model.logEvent(event, title: title, assignment: .init(customerID: customerID, pspElement: pspElement, workType: workType))
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 460)
+        .onAppear {
+            title = event.showsTitle ? event.displayTitle : "Termin"
+            if let remembered = model.eventAssignment(for: event) {
+                customerID = remembered.customerID
+                pspElement = remembered.pspElement
+                workType = remembered.workType
+            }
+        }
+        .onChange(of: customerID) { old, new in
+            if old != nil, old != new { pspElement = nil }
+        }
     }
 }

@@ -24,7 +24,7 @@ enum SnapshotMode {
     }
 
     @MainActor
-    static func run(model: AppModel, into directory: URL, openSettings: () -> Void) async {
+    static func run(model: AppModel, into directory: URL, openSettings: () -> Void, openWindow: (String) -> Void) async {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         // Beispielwerte für die Einstellungen; `register` schreibt nichts dauerhaft.
         UserDefaults.standard.register(defaults: [
@@ -126,7 +126,34 @@ enum SnapshotMode {
         UserDefaults.standard.set(SettingsView.Tab.general.rawValue, forKey: SettingsView.tabKey)
         NSApp.windows.first { $0.isVisible && $0 !== window && !($0 is NSPanel) && $0.frame.width > 300 }?.close()
         window.makeKeyAndOrderFront(nil)
+
+        // ByDesign-Fenster mit der Beispielseite
+        openWindow("bydesign")
+        try? await Task.sleep(for: .seconds(6))
+        if let browser = NSApp.windows.first(where: { $0.isVisible && $0.title == "SAP ByDesign" }) {
+            browser.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(for: .seconds(0.5))
+            await capture(browser, name: "bydesign", in: directory)
+            browser.close()
+        } else {
+            log("Snapshot: ByDesign-Fenster nicht gefunden")
+        }
         finish(in: directory)
+    }
+
+    /// Schreibt eine Zeile ins Protokoll des Builds (die App läuft dort ohne sichtbare Konsole).
+    static func log(_ message: String) {
+        print(message)
+        guard let directory else { return }
+        let file = directory.appendingPathComponent("protokoll.txt")
+        let line = Data((message + "\n").utf8)
+        if let handle = try? FileHandle(forWritingTo: file) {
+            handle.seekToEndOfFile()
+            handle.write(line)
+            try? handle.close()
+        } else {
+            try? line.write(to: file)
+        }
     }
 
     @MainActor

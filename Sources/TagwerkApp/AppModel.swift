@@ -564,14 +564,50 @@ final class AppModel {
     }
 
     /// Macht aus einem Termin einen erledigten Zeiteintrag (z. B. den Jour fixe).
-    func logEvent(_ event: CalendarEvent) {
+    /// Was beim letzten Erfassen eines Termins mit diesem Titel gewählt wurde.
+    struct EventAssignment: Codable, Equatable {
+        var customerID: UUID?
+        var pspElement: String?
+        var workType: WorkType?
+    }
+
+    private static let eventAssignmentsKey = "eventAssignments"
+
+    func eventAssignment(for event: CalendarEvent) -> EventAssignment? {
+        guard let data = UserDefaults.standard.data(forKey: Self.eventAssignmentsKey),
+              let all = try? JSONDecoder().decode([String: EventAssignment].self, from: data) else { return nil }
+        return all[Self.assignmentKey(event)]
+    }
+
+    private func remember(_ assignment: EventAssignment, for event: CalendarEvent) {
+        var all = (UserDefaults.standard.data(forKey: Self.eventAssignmentsKey))
+            .flatMap { try? JSONDecoder().decode([String: EventAssignment].self, from: $0) } ?? [:]
+        all[Self.assignmentKey(event)] = assignment
+        if let data = try? JSONEncoder().encode(all) {
+            UserDefaults.standard.set(data, forKey: Self.eventAssignmentsKey)
+        }
+    }
+
+    private static func assignmentKey(_ event: CalendarEvent) -> String {
+        event.displayTitle.lowercased().trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Termin als erfasste Zeit übernehmen, mit Kunde, PSP-Element und Arbeitsart für SAP.
+    /// Ohne Angaben gilt, was beim letzten Termin mit gleichem Titel gewählt wurde.
+    func logEvent(_ event: CalendarEvent, title: String? = nil, assignment: EventAssignment? = nil) {
         guard !isLogged(event) else { return }
+        let chosen = assignment ?? eventAssignment(for: event)
+        if let assignment { remember(assignment, for: event) }
+        let name = title?.trimmingCharacters(in: .whitespaces)
         let task = TaskItem(
-            title: event.showsTitle ? event.displayTitle : "Termin",
+            title: (name?.isEmpty == false ? name : nil) ?? (event.showsTitle ? event.displayTitle : "Termin"),
+            customerID: chosen?.customerID,
             source: .calendar,
             externalID: event.id,
             plannedDate: LocalDate(event.start),
             estimateMinutes: event.minutes,
+            workType: chosen?.workType,
+            pspElement: chosen?.pspElement,
             status: .done,
             completedAt: event.end,
             sortIndex: DayPlan.nextSortIndex(in: todayTasks)
@@ -823,6 +859,13 @@ final class AppModel {
     }
 
     /// Leistung in SAP zur Arbeitsart, wie in den Einstellungen hinterlegt.
+    /// Work Log Type in ManageEngine zur Arbeitsart, wie in den Einstellungen gewählt.
+    func worklogType(for workType: WorkType?) -> String {
+        _ = settingsVersion
+        let stored = UserDefaults.standard.string(forKey: Preferences.worklogTypeKey(for: workType)) ?? ""
+        return stored.isEmpty ? Preferences.defaultWorklogType(for: workType) : stored
+    }
+
     func serviceProduct(for workType: WorkType?) -> String {
         _ = settingsVersion
         guard let workType else { return "" }
@@ -895,7 +938,8 @@ final class AppModel {
                     requestKey: key,
                     description: booking.description,
                     minutes: booking.minutes,
-                    start: start
+                    start: start,
+                    worklogType: worklogType(for: booking.workType)
                 )
                 save(BookingQueue.confirmed(booking, reference: reference, now: Date()))
                 sent += 1
@@ -919,6 +963,18 @@ final class AppModel {
             return
         }
         save(BookingQueue.entered(prepared, now: Date()))
+    }
+
+    /// Kein Worklog im Ticket für diese Zeile (dort freiwillig); SAP bleibt.
+    func skipManageEngine(_ line: BookingLine, minutes: Int) {
+        save(BookingQueue.skipped(line, target: .manageEngine, minutes: minutes, now: Date()))
+    }
+
+    func unskipManageEngine(_ line: BookingLine) {
+        guard var booking = line.bookings[.manageEngine], booking.status == .skipped else { return }
+        booking.status = .pending
+        booking.updatedAt = Date()
+        save(booking)
     }
 
     func undoEnteredInSAP(_ line: BookingLine) {

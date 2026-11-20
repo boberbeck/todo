@@ -380,7 +380,7 @@ public final class TagwerkTools {
             ]
             if let psp = line.task.pspElement { entry["psp"] = psp }
             if let workType = line.task.workType { entry["arbeitsart"] = workType.label }
-            if !line.issues.isEmpty { entry["fehlt"] = line.issues.map(\.message) }
+            if !line.openIssues.isEmpty { entry["fehlt"] = line.openIssues.map(\.message) }
             if line.changedAfterBooking { entry["hinweis"] = "Zeit nach dem Buchen geändert" }
             return entry
         }

@@ -100,14 +100,15 @@ final class ManageEngineClient {
     }
 
     /// Legt den Worklog an und gibt seine ID zurück.
-    func addWorklog(requestKey: String, description: String, minutes: Int, start: Date) async throws -> String? {
+    func addWorklog(requestKey: String, description: String, minutes: Int, start: Date, worklogType: String?) async throws -> String? {
         let request = try ManageEngineAPI.addWorklog(
             config: config,
             token: try requireToken(),
             requestKey: requestKey,
             description: description,
             minutes: minutes,
-            start: start
+            start: start,
+            worklogType: worklogType
         )
         let data = try await send(request)
         return try ManageEngineAPI.parseWorklogID(data)

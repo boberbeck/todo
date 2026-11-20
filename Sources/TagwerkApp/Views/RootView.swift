@@ -4,6 +4,7 @@ import TagwerkCore
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         @Bindable var model = model
@@ -24,7 +25,7 @@ struct RootView: View {
         .task {
             model.installQuickCapture()
             if let directory = SnapshotMode.directory {
-                await SnapshotMode.run(model: model, into: directory) { openSettings() }
+                await SnapshotMode.run(model: model, into: directory, openSettings: { openSettings() }, openWindow: { openWindow(id: $0) })
             }
         }
         .sheet(item: $model.idlePrompt) { prompt in

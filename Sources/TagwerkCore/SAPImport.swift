@@ -87,7 +87,76 @@ public enum SAPImport {
 
     /// Text aus der Zwischenablage oder einer CSV-Datei: Tabulator, Semikolon oder Komma als Trenner.
     public static func rows(fromText text: String) -> [SAPTaskRow] {
-        rows(fromCells: TableText.cells(from: text))
+        let cells = TableText.cells(from: text)
+        if cells.allSatisfy({ $0.count <= 1 }) {
+            return rows(fromLines: cells.compactMap(\.first))
+        }
+        return rows(fromCells: cells)
+    }
+
+    /// Text ohne Spalten, z. B. von einer Webseite abgelesen: jede Zelle eine Zeile.
+    /// Steht in der Zeile nur die Aufgabennummer, ist die nächste Zeile meist der Aufgabenname.
+    public static func rows(fromLines lines: [String]) -> [SAPTaskRow] {
+        let clean = lines
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        var result: [SAPTaskRow] = []
+        var seen = Set<String>()
+        for (index, line) in clean.enumerated() {
+            guard let code = firstTaskID(in: line), !seen.contains(code) else { continue }
+            var title = cleanTitle(
+                line.replacingOccurrences(of: code, with: " ")
+                    .trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "-–·:|;")))
+            )
+            if title.isEmpty || isCategory(title), index + 1 < clean.count {
+                let next = clean[index + 1]
+                if firstTaskID(in: next) == nil, !isCategory(next), next.count <= 140, next.contains(where: \.isLetter) {
+                    title = next
+                }
+            }
+            if isCategory(title) { title = "" }
+            seen.insert(code)
+            result.append(SAPTaskRow(code: code, title: title))
+        }
+        return result
+    }
+
+    // MARK: Texterkennung
+
+    /// Bereinigt eine Zelle aus der Texterkennung: „CPSO8643 – 12“ → „CPSO8643-12“.
+    public static func repairOCRCell(_ text: String) -> String {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let joined = value
+            .replacingOccurrences(of: "–", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
+            .replacingOccurrences(of: " ", with: "")
+        if !looksLikeTaskID(value), looksLikeTaskID(joined) { return joined }
+        return value
+    }
+
+    /// Die Texterkennung verwechselt gern Buchstaben und Ziffern („CPS08643“ statt „CPSO8643“).
+    /// Haben die meisten Nummern dieselbe Buchstabenfolge vorne, werden Ausreißer daran angeglichen.
+    public static func repairOCRCodes(_ rows: [SAPTaskRow]) -> [SAPTaskRow] {
+        func letterPrefix(_ code: String) -> String { String(code.prefix { $0.isLetter }) }
+        let counts = Dictionary(rows.map { (letterPrefix($0.code), 1) }, uniquingKeysWith: +)
+        guard let dominant = counts.max(by: { $0.value < $1.value })?.key, !dominant.isEmpty else { return rows }
+        let lookalike: [Character: Character] = ["O": "0", "I": "1", "S": "5", "B": "8", "Z": "2", "G": "6"]
+        var seen = Set<String>()
+        return rows.compactMap { row in
+            var code = row.code
+            let prefix = letterPrefix(code)
+            if prefix != dominant, dominant.hasPrefix(prefix) {
+                let missing = dominant.dropFirst(prefix.count)
+                let misread = String(missing.map { lookalike[$0] ?? $0 })
+                let rest = code.dropFirst(prefix.count)
+                if rest.hasPrefix(misread) {
+                    code = dominant + rest.dropFirst(misread.count)
+                }
+            }
+            guard looksLikeTaskID(code), seen.insert(code).inserted else { return nil }
+            guard code != row.code else { return row }
+            return SAPTaskRow(code: code, title: row.title, projectName: row.projectName, customerName: row.customerName, category: row.category)
+        }
     }
 
     private static func parse(_ row: [String], columns: Columns) -> SAPTaskRow? {

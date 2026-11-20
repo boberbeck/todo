@@ -313,6 +313,7 @@ struct BookingSettings: View {
     @Environment(\.openWindow) private var openWindow
     @AppStorage(Preferences.roundingStepKey) private var roundingStep = 15
     @AppStorage(Preferences.roundingModeKey) private var roundingMode = RoundingMode.nearest.rawValue
+    @AppStorage(Preferences.bydesignURLKey) private var bydesignURL = ""
 
     var body: some View {
         Form {
@@ -343,6 +344,9 @@ struct BookingSettings: View {
             }
 
             Section {
+                SettingsField(title: "Adresse von ByDesign", detail: "wie im Browser, z. B. https://my123456.sapbydesign.com") {
+                    SettingsTextField(prompt: "https://my…sapbydesign.com", text: $bydesignURL, width: 280)
+                }
                 LabeledContent {
                     Button("Abgleichen …") {
                         model.showsSAPSync = true
@@ -360,12 +364,41 @@ struct BookingSettings: View {
             } header: {
                 Text("SAP ByDesign")
             } footer: {
-                SettingsFootnote("Liest den Excel-Export deiner Aufgabenliste oder eine kopierte Tabelle. In SAP ändert sich dabei nichts.")
+                SettingsFootnote("„Abgleichen“ holt deine Aufgaben direkt aus ByDesign (Anmeldung im Tagwerk-Fenster), aus einem Excel-Export oder einem Bildschirmfoto. In SAP ändert sich dabei nichts.")
             }
         }
-        .settingsPage(height: 600)
+        .settingsPage(height: 640)
         .onChange(of: roundingStep) { model.settingsChanged() }
         .onChange(of: roundingMode) { model.settingsChanged() }
+    }
+}
+
+/// Work Log Type in ManageEngine für eine Arbeitsart.
+struct WorklogTypePicker: View {
+    @Environment(AppModel.self) private var model
+    let workType: WorkType?
+    let title: String
+    @State private var value = ""
+
+    var body: some View {
+        Picker(title, selection: $value) {
+            ForEach(options, id: \.self) { option in
+                Text(option).tag(option)
+            }
+        }
+        .onAppear {
+            value = model.worklogType(for: workType)
+        }
+        .onChange(of: value) {
+            UserDefaults.standard.set(value, forKey: Preferences.worklogTypeKey(for: workType))
+            model.settingsChanged()
+        }
+    }
+
+    private var options: [String] {
+        var list = Preferences.knownWorklogTypes
+        if !value.isEmpty, !list.contains(value) { list.insert(value, at: 0) }
+        return list
     }
 }
 
@@ -441,6 +474,17 @@ struct ManageEngineSettings: View {
             }
 
             Section {
+                WorklogTypePicker(workType: nil, title: "Ohne Arbeitsart")
+                ForEach(WorkType.allCases) { workType in
+                    WorklogTypePicker(workType: workType, title: workType.label)
+                }
+            } header: {
+                Text("Work Log Type je Arbeitsart")
+            } footer: {
+                SettingsFootnote("Pflichtfeld beim Worklog in ServiceDesk Plus. Tagwerk wählt ihn nach der Arbeitsart der Aufgabe.")
+            }
+
+            Section {
                 HStack(spacing: 10) {
                     Button {
                         Task {
@@ -492,7 +536,7 @@ struct ManageEngineSettings: View {
                 SettingsFootnote("„Verbindung testen“ sucht dich in den letzten Tickets. Bist du dort nicht dabei, such nach deinem Namen; Tagwerk schaut dann in der Technikerliste von ServiceDesk Plus.")
             }
         }
-        .settingsPage(height: 660)
+        .settingsPage(height: 700)
         .onChange(of: baseURL) { model.settingsChanged() }
         .onChange(of: authKind) { model.settingsChanged() }
         .onChange(of: technician) { model.settingsChanged() }

@@ -32,7 +32,7 @@ enum SAPImportLoader {
     static let fileTypes: [UTType] = [
         UTType(filenameExtension: "xlsx") ?? .spreadsheet,
         UTType(filenameExtension: "xls") ?? .spreadsheet,
-        .commaSeparatedText, .tabSeparatedText, .plainText, .html,
+        .commaSeparatedText, .tabSeparatedText, .plainText, .html, .image,
     ]
 
     static func rows(from url: URL) throws -> [SAPTaskRow] {
@@ -121,6 +121,7 @@ enum SAPImportLoader {
 struct SAPSyncSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
     var initialRows: [SAPTaskRow]?
 
     @State private var plan: SAPImport.Plan?
@@ -130,6 +131,7 @@ struct SAPSyncSheet: View {
     @State private var result: String?
     @State private var isTargeted = false
     @State private var showsFilePicker = false
+    @State private var isReadingImage = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -188,7 +190,7 @@ struct SAPSyncSheet: View {
             }
             .padding(16)
         }
-        .frame(width: 760, height: 600)
+        .frame(width: 760, height: 660)
         .onAppear {
             if plan == nil, let initialRows { show(initialRows) }
         }
@@ -201,16 +203,41 @@ struct SAPSyncSheet: View {
 
     private var start: some View {
         VStack(spacing: 22) {
+            HStack(spacing: 14) {
+                Image(systemName: "globe")
+                    .font(.system(size: 26, weight: .light))
+                    .foregroundStyle(Theme.accent)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Direkt aus ByDesign holen")
+                        .font(.headline)
+                    Text("Anmelden wie im Browser, Aufgabenliste öffnen, „Aufgaben holen“. Ohne Export.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("ByDesign öffnen") {
+                    dismiss()
+                    openWindow(id: "bydesign")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.accentSoft))
+
             VStack(spacing: 12) {
                 Image(systemName: "tablecells.badge.ellipsis")
                     .font(.system(size: 40, weight: .light))
                     .foregroundStyle(isTargeted ? Color.accentColor : Color.secondary)
-                Text("Excel-Export aus ByDesign hierher ziehen")
+                Text("Oder: Excel-Export oder Bildschirmfoto der Liste hierher ziehen")
                     .font(.headline)
                 HStack(spacing: 10) {
                     Button("Datei wählen …") { showsFilePicker = true }
                     Button("Aus Zwischenablage einfügen") { loadFromPasteboard() }
                         .keyboardShortcut("v", modifiers: .command)
+                }
+                if isReadingImage {
+                    ProgressView("Texterkennung läuft …")
+                        .controlSize(.small)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -234,7 +261,7 @@ struct SAPSyncSheet: View {
                     .font(.headline)
                 step(1, "Öffne in ByDesign die Liste deiner Aufgaben (die mit Kategorie und Aufgabennummer).")
                 step(2, "Blende über die Tabellen-Einstellungen am besten auch Aufgabenname, Projekt und Kunde ein. Dann ordnet Tagwerk die Aufgaben selbst den Kunden zu.")
-                step(3, "Exportiere die Tabelle nach Excel und zieh die Datei hierher. Oder markiere die Zeilen, kopiere sie mit ⌘C und klicke „Aus Zwischenablage einfügen“.")
+                step(3, "Ohne Export: Bildschirmfoto der Liste machen (⇧⌘4, mit ⌃ landet es in der Zwischenablage) und hierher ziehen oder einfügen. Tagwerk liest die Nummern per Texterkennung.")
                 Text("Du kannst den Abgleich jederzeit wiederholen. Bekannte Aufgaben werden aktualisiert, nichts wird doppelt angelegt.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -386,6 +413,10 @@ struct SAPSyncSheet: View {
     // MARK: Aktionen
 
     private func load(_ url: URL) {
+        if let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image) {
+            readImage { try await ScreenTextReader.taskRows(fromImageAt: url) }
+            return
+        }
         do {
             show(try SAPImportLoader.rows(from: url))
         } catch {
@@ -394,10 +425,35 @@ struct SAPSyncSheet: View {
     }
 
     private func loadFromPasteboard() {
+        let pasteboard = NSPasteboard.general
+        if pasteboard.string(forType: .string) == nil,
+           let image = NSImage(pasteboard: pasteboard)?.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            readImage { try await ScreenTextReader.taskRows(from: image) }
+            return
+        }
         do {
             show(try SAPImportLoader.rowsFromPasteboard())
         } catch {
             problem = String(describing: error)
+        }
+    }
+
+    /// Bildschirmfoto per Texterkennung lesen.
+    private func readImage(_ read: @escaping () async throws -> [SAPTaskRow]) {
+        isReadingImage = true
+        problem = nil
+        Task {
+            defer { isReadingImage = false }
+            do {
+                let rows = try await read()
+                if rows.isEmpty {
+                    problem = "Auf dem Bild keine Aufgabennummern wie „CPSO8643-12“ gefunden."
+                } else {
+                    show(rows)
+                }
+            } catch {
+                problem = String(describing: error)
+            }
         }
     }
 

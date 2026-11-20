@@ -200,7 +200,7 @@ struct CloseLineRow: View {
                 }
             }
 
-            ForEach(line.issues, id: \.self) { issue in
+            ForEach(line.openIssues, id: \.self) { issue in
                 Label(issue.message, systemImage: "exclamationmark.circle")
                     .font(.caption)
                     .foregroundStyle(.orange)
@@ -227,14 +227,25 @@ struct TargetStatusView: View {
                 .font(.caption.weight(.medium))
             if target == .sap {
                 sapTools(status: status)
-            } else if status == .failed, let error = line.bookings[target]?.lastError {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .help(error)
-                Button("Erneut senden") {
-                    Task { _ = await model.retryManageEngine() }
+            } else {
+                if status == .failed, let error = line.bookings[target]?.lastError {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .help(error)
+                    Button("Erneut senden") {
+                        Task { _ = await model.retryManageEngine() }
+                    }
+                    .controlSize(.small)
                 }
-                .controlSize(.small)
+                // Der Worklog im Ticket ist freiwillig, SAP nicht.
+                if status == .skipped {
+                    Button("Doch senden") { model.unskipManageEngine(line) }
+                        .controlSize(.small)
+                } else if status != .confirmed {
+                    Button("Ohne Worklog") { model.skipManageEngine(line, minutes: minutes) }
+                        .controlSize(.small)
+                        .help("Nur in SAP buchen, keinen Worklog im Ticket anlegen")
+                }
             }
         }
         .padding(.horizontal, 8)
@@ -276,6 +287,7 @@ struct TargetStatusView: View {
     private func color(for status: BookingStatus?) -> Color {
         switch status {
         case .confirmed, .entered: return .green
+        case .skipped: return .gray
         case .failed: return .orange
         default: return .secondary
         }

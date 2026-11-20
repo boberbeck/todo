@@ -26,6 +26,12 @@ struct TagwerkApplication: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("SAP ByDesign", id: "bydesign") {
+            ByDesignBrowserView()
+                .environment(model)
+        }
+        .defaultSize(width: 1180, height: 780)
+
         Settings {
             SettingsView()
                 .environment(model)
@@ -105,6 +111,26 @@ enum Preferences {
     static let meAutoFetchKey = "manageEngineAutoFetch"
     static let idleMinutesKey = "idleMinutes"
     static let calendarWidthKey = "calendarColumnWidth"
+    static let bydesignURLKey = "bydesignURL"
+    static func worklogTypeKey(for workType: WorkType?) -> String { "worklogType.\(workType?.rawValue ?? "ohne")" }
+    /// Worklog-Typen in ServiceDesk Plus (Pflichtfeld beim Worklog).
+    static let knownWorklogTypes = [
+        "Change Bearbeitung",
+        "Fehlalarm",
+        "Fehleranalyse, Incident & Problem Bearbeitung",
+        "Incident zur Kenntnis genommen",
+        "ServiceCenter",
+        "Ticketbearbeitung",
+        "Wartung",
+    ]
+    static func defaultWorklogType(for workType: WorkType?) -> String {
+        switch workType {
+        case .wartung: return "Wartung"
+        case .stoerung: return "Fehleranalyse, Incident & Problem Bearbeitung"
+        case .projekt: return "Change Bearbeitung"
+        case .beratung, .none: return "Ticketbearbeitung"
+        }
+    }
     static let calendarHourHeightKey = "calendarHourHeight"
 
     static let defaultCalendarWidth: Double = 260
