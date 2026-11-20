@@ -383,6 +383,9 @@ struct ByDesignBrowserView: View {
     }
 
     private var hint: String {
+        if isAutomaticRun {
+            return "Automatischer Abruf läuft: Tagwerk meldet sich an, sammelt die Aufgaben ein und schließt dieses Fenster danach selbst. Neue Projekte zeigt es dir anschließend im SAP-Abgleich."
+        }
         if !browser.hasPage {
             return "Trag oben die Adresse von ByDesign ein (wie im Browser) und klick „Öffnen“."
         }
