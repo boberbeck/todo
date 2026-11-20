@@ -637,9 +637,46 @@ struct ClaudeSettings: View {
     @State private var statusIsError = false
     @State private var installed = ClaudeIntegration.isInstalledInDesktop
     @State private var copied: String?
+    @State private var testResult: (ok: Bool, message: String)?
+    @State private var isTesting = false
 
     var body: some View {
         Form {
+            if let warning = ClaudeIntegration.locationWarning {
+                Section {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Section {
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        if isTesting { ProgressView().controlSize(.small) }
+                        Button("Testen") {
+                            isTesting = true
+                            Task {
+                                testResult = await ClaudeIntegration.testServer()
+                                isTesting = false
+                            }
+                        }
+                        .disabled(isTesting || ClaudeIntegration.serverURL == nil)
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("MCP-Server prüfen")
+                        Text(testResult?.message ?? "Startet tagwerk-mcp so, wie Claude es tut, und fragt die Werkzeuge ab.")
+                            .font(.caption)
+                            .foregroundStyle(testResult.map { $0.ok ? Color.green : Color.red } ?? Color.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            } header: {
+                Text("Prüfen")
+            } footer: {
+                SettingsFootnote("Klappt der Test, Claude aber nicht: In Claude Desktop unter Einstellungen › Entwickler steht der Status von „tagwerk“; das Protokoll liegt in ~/Library/Logs/Claude/mcp-server-tagwerk.log. Lokale MCP-Server gehen nur in Claude Desktop und Claude Code, nicht im Browser oder auf dem iPhone.")
+            }
             Section {
                 Text("Claude kann über MCP direkt mit Tagwerk arbeiten: den Tag zusammenfassen, Aufgaben anlegen und ändern, Timer starten und stoppen, Zeiten auswerten und sagen, was beim Tagesabschluss noch fehlt.")
                     .fixedSize(horizontal: false, vertical: true)
@@ -808,8 +845,81 @@ enum ClaudeIntegration {
     }
 
     /// Ergänzt die Konfiguration von Claude Desktop um Tagwerk. Andere Einträge bleiben, wie sie sind.
+    /// Hinweis, wenn Tagwerk nicht aus „Programme“ läuft: Der eingetragene Pfad wäre sonst bald falsch.
+    static var locationWarning: String? {
+        let path = Bundle.main.bundleURL.path
+        if path.contains("/AppTranslocation/") {
+            return "Tagwerk läuft gerade aus einem temporären Ordner, den macOS beim Öffnen aus „Downloads“ anlegt. Zieh Tagwerk in den Ordner „Programme“, öffne es von dort und trag es dann hier neu ein."
+        }
+        if !path.hasPrefix("/Applications/") {
+            return "Tagwerk liegt nicht im Ordner „Programme“ (\(path)). Claude startet den Server über diesen Pfad; verschiebst oder löschst du diese Kopie, findet Claude ihn nicht mehr. Am besten Tagwerk nach „Programme“ ziehen und neu eintragen."
+        }
+        return nil
+    }
+
+    /// Startet tagwerk-mcp wie Claude und prüft die Antwort auf initialize und tools/list.
+    static func testServer() async -> (ok: Bool, message: String) {
+        guard let url = serverURL else { return (false, "tagwerk-mcp fehlt neben der App.") }
+        removeQuarantine(from: url)
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                process.executableURL = url
+                let input = Pipe()
+                let output = Pipe()
+                let errors = Pipe()
+                process.standardInput = input
+                process.standardOutput = output
+                process.standardError = errors
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(returning: (false, "Startet nicht: \(error.localizedDescription)"))
+                    return
+                }
+                let requests = [
+                    #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"tagwerk-test","version":"1"}}}"#,
+                    #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+                    #"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+                ].joined(separator: "\n") + "\n"
+                input.fileHandleForWriting.write(Data(requests.utf8))
+                try? input.fileHandleForWriting.close()
+                let deadline = Date().addingTimeInterval(8)
+                while process.isRunning, Date() < deadline { usleep(50_000) }
+                if process.isRunning { process.terminate() }
+                let out = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                let err = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                let lines = out.split(separator: "\n").map(String.init)
+                let toolCount = lines.compactMap { line -> Int? in
+                    guard let data = line.data(using: .utf8),
+                          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let result = root["result"] as? [String: Any],
+                          let tools = result["tools"] as? [Any] else { return nil }
+                    return tools.count
+                }.first
+                if let toolCount {
+                    continuation.resume(returning: (true, "Läuft: antwortet mit \(toolCount) Werkzeugen. \(err.contains("bereit") ? "" : err.trimmingCharacters(in: .whitespacesAndNewlines))"))
+                } else {
+                    let detail = err.trimmingCharacters(in: .whitespacesAndNewlines)
+                    continuation.resume(returning: (false, "Keine gültige Antwort. \(detail.isEmpty ? "Exit-Code \(process.terminationStatus)" : detail)"))
+                }
+            }
+        }
+    }
+
+    /// Ein aus dem Internet geladenes Programm ist markiert; Claude darf es dann nicht starten.
+    static func removeQuarantine(from url: URL) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+        process.arguments = ["-d", "com.apple.quarantine", url.path]
+        process.standardError = Pipe()
+        try? process.run()
+        process.waitUntilExit()
+    }
+
     static func installInDesktop() throws {
         guard let server = serverURL else { throw InstallError.serverMissing }
+        removeQuarantine(from: server)
         let url = desktopConfigURL
         var root: [String: Any] = [:]
         if let data = try? Data(contentsOf: url), !data.isEmpty {
