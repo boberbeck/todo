@@ -508,30 +508,21 @@ final class AppModel {
             setTicket(number: number, key: nil, for: id)
             return "Ticket #\(number) zugeordnet. Für den Worklog muss ManageEngine eingerichtet sein."
         }
-        do {
-            if let ticket = try await manageEngine.ticket(number: number) {
-                setTicket(number: ticket.number, key: ticket.key, for: id)
-                if let task = self.task(id), task.customerID == nil, let customerID = customerID(forAccount: ticket.accountName) {
-                    setCustomer(customerID, for: id)
-                }
-                return nil
-            }
-            setTicket(number: number, key: nil, for: id)
-            return "Ticket #\(number) gibt es in ManageEngine nicht oder es ist nicht sichtbar. Zugeordnet ist es trotzdem; ohne Verbindung geht kein Worklog."
-        } catch {
-            setTicket(number: number, key: nil, for: id)
-            return "Ticket #\(number) zugeordnet, aber ManageEngine antwortet nicht: \(error)"
+        let search = await manageEngine.findTickets(number)
+        if let ticket = search.tickets.first(where: { $0.number == number }) ?? search.tickets.first {
+            linkTicket(ticket, to: id)
+            return nil
         }
+        setTicket(number: number, key: nil, for: id)
+        return "Ticket #\(number) ohne Verbindung zugeordnet: ManageEngine fand es nicht (\(search.attempts.joined(separator: "; "))). Ohne Verbindung geht kein Worklog."
     }
 
     /// Sucht in ManageEngine nach Tickets, auch von anderen Technikern: Nummer oder Text im Betreff.
-    func searchManageEngineTickets(_ query: String) async throws -> [ManageEngineTicket] {
-        guard manageEngine.isReady else { throw ManageEngineError.notConfigured }
-        let clean = query.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        if !clean.isEmpty, clean.allSatisfy(\.isNumber) {
-            return try await manageEngine.ticket(number: clean).map { [$0] } ?? []
+    func searchManageEngineTickets(_ query: String) async -> ManageEngineClient.TicketSearch {
+        guard manageEngine.isReady else {
+            return ManageEngineClient.TicketSearch(attempts: ["ManageEngine ist noch nicht eingerichtet (Einstellungen › ManageEngine)."])
         }
-        return try await manageEngine.searchTickets(subject: clean)
+        return await manageEngine.findTickets(query)
     }
 
     /// Ordnet ein Ticket aus der Suche in ManageEngine zu (muss nicht das eigene sein).
@@ -540,6 +531,11 @@ final class AppModel {
         if let task = self.task(id), task.customerID == nil, let customerID = customerID(forAccount: ticket.accountName) {
             setCustomer(customerID, for: id)
         }
+    }
+
+    /// Nur die Nummer zuordnen, ohne Verbindung zu ManageEngine (dann ohne Worklog).
+    func linkTicketNumberOnly(_ number: String, to id: UUID) {
+        setTicket(number: number, key: nil, for: id)
     }
 
     func unlinkTicket(from id: UUID) {

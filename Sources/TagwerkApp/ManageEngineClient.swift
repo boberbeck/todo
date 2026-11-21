@@ -99,25 +99,55 @@ final class ManageEngineClient {
         return try ManageEngineAPI.parseTickets(data, config: config)
     }
 
-    /// Tickets aller Techniker mit diesem Text im Betreff; offene zuerst.
-    func searchTickets(subject: String) async throws -> [ManageEngineTicket] {
-        let config = self.config
-        let data = try await send(ManageEngineAPI.requests(withSubjectContaining: subject, config: config, token: try requireToken()))
-        let tickets = try ManageEngineAPI.parseTickets(data, config: config)
-        return tickets.filter(\.isOpen) + tickets.filter { !$0.isOpen }
+    /// Ergebnis einer Ticketsuche, mit dem, was versucht wurde (für die Meldung, wenn nichts kommt).
+    struct TicketSearch {
+        var tickets: [ManageEngineTicket] = []
+        var attempts: [String] = []
     }
 
-    /// Sucht ein Ticket über die Nummer, die Menschen sehen: erst direkt (lokale Installation), dann per Suche (Cloud).
-    func ticket(number: String) async throws -> ManageEngineTicket? {
+    /// Sucht Tickets aller Techniker: eine Nummer direkt und über die Suche, sonst Text im Betreff.
+    /// ServiceDesk Plus unterscheidet sich je nach Ausgabe; deshalb mehrere Wege nacheinander.
+    func findTickets(_ query: String) async -> TicketSearch {
+        var result = TicketSearch()
         let config = self.config
-        let token = try requireToken()
-        let clean = number.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        if !config.isCloud, let data = try? await send(ManageEngineAPI.request(withID: clean, config: config, token: token)),
-           let ticket = try? ManageEngineAPI.parseTickets(data, config: config).first(where: { $0.number == clean || $0.key == clean }) {
-            return ticket
+        let token: String
+        do {
+            token = try requireToken()
+        } catch {
+            result.attempts.append(String(describing: error))
+            return result
         }
-        let data = try await send(ManageEngineAPI.requests(withDisplayID: clean, config: config, token: token))
-        return try ManageEngineAPI.parseTickets(data, config: config).first { $0.number == clean }
+        let clean = query.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard !clean.isEmpty else { return result }
+
+        func attempt(_ label: String, _ build: () throws -> URLRequest, accept: ([ManageEngineTicket]) -> [ManageEngineTicket]) async -> Bool {
+            do {
+                let data = try await send(try build())
+                let found = accept(try ManageEngineAPI.parseTickets(data, config: config))
+                result.attempts.append("\(label): \(found.count) Treffer")
+                if !found.isEmpty {
+                    result.tickets = found.filter(\.isOpen) + found.filter { !$0.isOpen }
+                    return true
+                }
+            } catch {
+                result.attempts.append("\(label): \(error)")
+            }
+            return false
+        }
+
+        if clean.allSatisfy(\.isNumber) {
+            let byNumber: ([ManageEngineTicket]) -> [ManageEngineTicket] = { tickets in
+                let exact = tickets.filter { $0.number == clean || $0.key == clean }
+                return exact.isEmpty && tickets.count == 1 ? tickets : exact
+            }
+            if await attempt("Direkt abgerufen", { try ManageEngineAPI.request(withID: clean, config: config, token: token) }, accept: { $0 }) { return result }
+            if await attempt("Suche nach Nummer", { try ManageEngineAPI.requests(withDisplayID: clean, config: config, token: token) }, accept: byNumber) { return result }
+            _ = await attempt("Suchfeld Nummer", { try ManageEngineAPI.requests(searchFields: ["display_id": clean], config: config, token: token) }, accept: byNumber)
+        } else {
+            if await attempt("Betreff enthält", { try ManageEngineAPI.requests(withSubjectContaining: clean, config: config, token: token) }, accept: { $0 }) { return result }
+            _ = await attempt("Suchfeld Betreff", { try ManageEngineAPI.requests(searchFields: ["subject": clean], config: config, token: token) }, accept: { $0 })
+        }
+        return result
     }
 
     /// Legt den Worklog an und gibt seine ID zurück.

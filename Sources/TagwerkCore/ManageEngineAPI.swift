@@ -219,6 +219,20 @@ public enum ManageEngineAPI {
         return try get(path: "/api/v3/requests", input: input, config: config, token: token, requireTechnician: false)
     }
 
+    /// Liste über `search_fields` (manche Ausgaben von ServiceDesk Plus suchen nur so), z. B. ["display_id": "4711"].
+    public static func requests(searchFields: [String: String], config: ManageEngineConfig, token: String, rowCount: Int = 25) throws -> URLRequest {
+        let input: [String: Any] = [
+            "list_info": [
+                "row_count": rowCount,
+                "start_index": 1,
+                "sort_field": "created_time",
+                "sort_order": "desc",
+                "search_fields": searchFields,
+            ] as [String: Any],
+        ]
+        return try get(path: "/api/v3/requests", input: input, config: config, token: token, requireTechnician: false)
+    }
+
     // MARK: Antworten lesen
 
     public static func parseTickets(_ data: Data, config: ManageEngineConfig) throws -> [ManageEngineTicket] {

@@ -1367,6 +1367,12 @@ final class LongGoalTests: XCTestCase {
         XCTAssertEqual(criteria?["value"] as? String, "VPN Lager")
         XCTAssertFalse(input.contains("technician"), "sucht über alle Techniker")
 
+        let fields = try ManageEngineAPI.requests(searchFields: ["display_id": "392830"], config: config, token: "T")
+        let fieldsInput = URLComponents(url: fields.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "input_data" }?.value ?? ""
+        let fieldsInfo = (try JSONSerialization.jsonObject(with: Data(fieldsInput.utf8)) as? [String: Any])?["list_info"] as? [String: Any]
+        XCTAssertEqual((fieldsInfo?["search_fields"] as? [String: String])?["display_id"], "392830")
+        XCTAssertEqual(try ManageEngineAPI.request(withID: "#392830", config: config, token: "T").url?.path, "/api/v3/requests/392830")
+
         let single = """
         {"request":{"id":"100777","display_id":{"display_value":"4711","value":"4711"},"subject":"Drucker Lager","status":{"name":"Offen","in_progress":true}},"response_status":{"status_code":2000}}
         """
