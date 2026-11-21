@@ -572,7 +572,6 @@ struct BookingSummary: View {
     }
 
     private func ticketText(_ effective: TaskItem) -> String {
-        if task.source == .ticket { return "ManageEngine" }
         let title = model.ticketTitle(for: task) ?? ""
         if effective.linkedTicketKey == nil { return title.isEmpty ? "ohne Worklog" : "\(title) · ohne Worklog" }
         return title.isEmpty ? "ManageEngine" : title

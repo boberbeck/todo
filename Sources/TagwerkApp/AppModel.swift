@@ -91,6 +91,8 @@ final class AppModel {
     /// Letzter Stand der Datenbank, um Änderungen von außen (Claude über MCP) zu bemerken.
     @ObservationIgnored private var lastChangeToken: Int?
     @ObservationIgnored private var idleSince: Date?
+    /// Tickets, deren Betreff ManageEngine in dieser Sitzung nicht liefern konnte (nicht ständig neu fragen)
+    @ObservationIgnored private var ticketTitleMisses: Set<String> = []
     @ObservationIgnored private var quickCaptureController: QuickCaptureController?
 
     private var quickCapture: QuickCaptureController {
@@ -555,7 +557,7 @@ final class AppModel {
     /// Betreff des Tickets einer Aufgabe: beim Ticket selbst sein Titel, sonst der gemerkte oder der eines Tickets in Tagwerk.
     func ticketTitle(for task: TaskItem) -> String? {
         let effective = resolved(task)
-        if task.source == .ticket { return task.title }
+        if task.source == .ticket { return (task.ticketTitle ?? "").isEmpty ? task.title : task.ticketTitle }
         if let title = effective.ticketTitle, !title.isEmpty { return title }
         guard let number = effective.linkedTicketNumber else { return nil }
         return ticketTasks.first { $0.linkedTicketNumber == number }?.title
@@ -1362,7 +1364,10 @@ final class AppModel {
             let tickets = try await manageEngine.fetchTickets()
             var added = 0
             var known = 0
-            for ticket in tickets where ticket.isOpen {
+            for ticket in tickets {
+                // Betreff aktuell halten, auch bei Aufgaben, denen das Ticket nur zugeordnet ist
+                updateTicketTitle(ticket)
+                guard ticket.isOpen else { continue }
                 let isKnown = tasks.contains { $0.linkedTicketKey == ticket.key || $0.linkedTicketNumber == ticket.number }
                 guard !isKnown else {
                     known += 1
@@ -1374,11 +1379,13 @@ final class AppModel {
                     source: .ticket,
                     externalID: ticket.number,
                     externalURL: ticket.webURL,
-                    externalKey: ticket.key
+                    externalKey: ticket.key,
+                    ticketTitle: ticket.subject
                 )
                 persist(task)
                 added += 1
             }
+            await fillMissingTicketTitles()
             lastTicketSync = Date()
             ticketSyncMessage = added == 0 ? "Keine neuen Tickets." : "\(added) neue(s) Ticket(s) im Eingang."
             let open = tickets.filter(\.isOpen).count
@@ -1390,6 +1397,39 @@ final class AppModel {
         } catch {
             ticketSyncMessage = String(describing: error)
             ticketSyncDetail = "\(Date().formatted(date: .omitted, time: .standard)): \(String(describing: error))"
+        }
+    }
+
+    /// Merkt sich den Betreff eines Tickets bei allen Aufgaben, die zu diesem Ticket gehören.
+    private func updateTicketTitle(_ ticket: ManageEngineTicket) {
+        guard !ticket.subject.isEmpty else { return }
+        for var task in tasks where task.linkedTicketKey == ticket.key || task.linkedTicketNumber == ticket.number {
+            guard task.ticketTitle != ticket.subject else { continue }
+            task.ticketTitle = ticket.subject
+            persist(task)
+        }
+    }
+
+    /// Holt den Betreff für offene Aufgaben mit Ticket, bei denen er noch fehlt (z. B. Tickets von Kollegen).
+    func fillMissingTicketTitles() async {
+        guard manageEngine.isReady else { return }
+        let missing = tasks.filter { task in
+            !task.isDone && task.source != .ticket && task.ticketNumber != nil && (task.ticketTitle ?? "").isEmpty
+                && !ticketTitleMisses.contains(task.ticketNumber ?? "")
+        }
+        var looked = Set<String>()
+        for task in missing.prefix(15) {
+            guard let number = task.linkedTicketNumber, looked.insert(number).inserted else { continue }
+            let search = await manageEngine.findTickets(number)
+            if search.tickets.isEmpty { ticketTitleMisses.insert(number) }
+            if let ticket = search.tickets.first(where: { $0.number == number }) ?? search.tickets.first {
+                updateTicketTitle(ticket)
+                // Fehlte die Verbindung (nur Nummer), jetzt nachtragen
+                if var current = self.task(task.id), current.source != .ticket, current.ticketKey == nil {
+                    current.ticketKey = ticket.key
+                    persist(current)
+                }
+            }
         }
     }
 
