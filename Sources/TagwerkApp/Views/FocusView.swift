@@ -105,11 +105,8 @@ struct FocusTaskPane: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
                     .frame(maxWidth: 760)
-                if let number = model.ticketNumber(for: task) {
-                    Text("Ticket #\(number)")
-                        .font(.callout)
-                        .foregroundStyle(Theme.tertiary)
-                }
+                BookingSummary(task: task)
+                    .padding(.top, 2)
                 if let goal = model.longGoal(model.resolved(task).longGoalID) {
                     let progress = model.progress(of: goal)
                     Button {

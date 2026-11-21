@@ -153,6 +153,8 @@ struct GeneralSettings: View {
                 SettingsFootnote("Die Nummer in Klammern steht auch beim Release „aktuell“ auf GitHub. Stimmt sie nicht, ist hier noch eine ältere Fassung installiert.")
             }
 
+            SigningSection()
+
             Section {
                 LabeledContent("Schnell erfassen") {
                     Text("⌃ ⌥ Leertaste")
@@ -167,7 +169,7 @@ struct GeneralSettings: View {
                 SettingsFootnote("Funktioniert in jeder App. Mails ziehst du aus Outlook einfach in den Eingang; sie werden zur Aufgabe mit Betreff und Absender.")
             }
         }
-        .settingsPage(height: 640)
+        .settingsPage(height: 700)
         .onChange(of: workdayStart) { model.settingsChanged() }
         .onChange(of: workdayEnd) { model.settingsChanged() }
     }
@@ -1187,5 +1189,80 @@ struct RemoteAccessSection: View {
         case .failed: return .red
         case .off: return .secondary
         }
+    }
+}
+
+/// Feste Signatur einrichten: Zertifikat erzeugen und als zwei Secrets bei GitHub hinterlegen.
+struct SigningSection: View {
+    @State private var bundle: SigningSetup.Secrets?
+    @State private var error: String?
+    @State private var copied: String?
+
+    var body: some View {
+        Section {
+            LabeledContent("Diese Fassung") {
+                Text(SigningSetup.currentSignature)
+                    .foregroundStyle(SigningSetup.isFixed ? Color.green : Color.orange)
+            }
+            if !SigningSetup.isFixed {
+                if let bundle {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Jetzt zwei Secrets bei GitHub anlegen (Seite öffnen, je Name und Wert einfügen, „Add secret“):")
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            Button("GitHub-Seite öffnen") { NSWorkspace.shared.open(SigningSetup.secretsURL) }
+                            Spacer()
+                        }
+                        secretRow(name: "TAGWERK_SIGNING_P12", value: bundle.p12Base64)
+                        secretRow(name: "TAGWERK_SIGNING_PASSWORD", value: bundle.password)
+                        Text("Danach den nächsten Build abwarten (oder unter Actions „Run workflow“), die neue Fassung aus „aktuell“ installieren und den Kalender ein letztes Mal freigeben. Ab dann bleibt die Freigabe auch nach Updates.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    HStack {
+                        Button("Zertifikat erzeugen") {
+                            do {
+                                bundle = try SigningSetup.generate()
+                                error = nil
+                            } catch {
+                                self.error = String(describing: error)
+                            }
+                        }
+                        Spacer()
+                    }
+                }
+                if let error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+            }
+        } header: {
+            Text("Freigaben behalten")
+        } footer: {
+            SettingsFootnote(SigningSetup.isFixed
+                ? "macOS behält die Freigaben für Kalender, Schlüsselbund und Musik auch nach Updates."
+                : "macOS merkt sich die Kalenderfreigabe an der Signatur. Ohne festes Zertifikat ist jede neue Fassung für macOS eine andere App, und du musst den Kalender neu verbinden. Einmal einrichten, dann bleibt es.")
+        }
+    }
+
+    private func secretRow(name: String, value: String) -> some View {
+        HStack {
+            Text(name)
+                .font(.callout.monospaced())
+                .textSelection(.enabled)
+            Spacer()
+            Button(copied == name ? "Name kopiert" : "Name kopieren") { copy(name, key: name) }
+            Button(copied == name + "-wert" ? "Wert kopiert" : "Wert kopieren") { copy(value, key: name + "-wert") }
+        }
+    }
+
+    private func copy(_ text: String, key: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copied = key
     }
 }

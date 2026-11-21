@@ -316,6 +316,7 @@ public final class TagwerkTools {
             } else {
                 task.ticketNumber = nil
                 task.ticketKey = nil
+                task.ticketTitle = nil
             }
         }
         if arguments["kunde"] != nil {
@@ -617,6 +618,7 @@ public final class TagwerkTools {
         let known = snapshot.tasks.first { $0.source == .ticket && $0.linkedTicketNumber == number }
         task.ticketNumber = number
         task.ticketKey = known?.linkedTicketKey
+        task.ticketTitle = known?.title
     }
 
     private func describe(_ task: TaskItem, in snapshot: Snapshot, day: LocalDate?) -> [String: Any] {

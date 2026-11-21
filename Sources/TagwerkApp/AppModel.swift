@@ -465,6 +465,7 @@ final class AppModel {
         task.sapActivity = effective.sapActivity
         task.ticketNumber = effective.ticketNumber
         task.ticketKey = effective.ticketKey
+        task.ticketTitle = effective.ticketTitle
         task.worklogType = effective.worklogType
         task.sortIndex = DayPlan.nextSortIndex(in: tasks.filter { $0.plannedDate == nil })
         persist(task)
@@ -490,7 +491,7 @@ final class AppModel {
     /// Ordnet der Aufgabe ein Ticket zu, das schon in Tagwerk liegt. Die Zeit geht dann auch als Worklog an dieses Ticket.
     func linkTicket(_ ticket: TaskItem, to id: UUID) {
         guard ticket.id != id else { return }
-        setTicket(number: ticket.linkedTicketNumber, key: ticket.linkedTicketKey, for: id)
+        setTicket(number: ticket.linkedTicketNumber, key: ticket.linkedTicketKey, title: ticket.source == .ticket ? ticket.title : ticket.ticketTitle, for: id)
         if let task = self.task(id), task.customerID == nil, let customerID = ticket.customerID {
             setCustomer(customerID, for: id)
         }
@@ -527,7 +528,7 @@ final class AppModel {
 
     /// Ordnet ein Ticket aus der Suche in ManageEngine zu (muss nicht das eigene sein).
     func linkTicket(_ ticket: ManageEngineTicket, to id: UUID) {
-        setTicket(number: ticket.number, key: ticket.key, for: id)
+        setTicket(number: ticket.number, key: ticket.key, title: ticket.subject, for: id)
         if let task = self.task(id), task.customerID == nil, let customerID = customerID(forAccount: ticket.accountName) {
             setCustomer(customerID, for: id)
         }
@@ -542,12 +543,22 @@ final class AppModel {
         setTicket(number: nil, key: nil, for: id)
     }
 
-    private func setTicket(number: String?, key: String?, for id: UUID) {
+    private func setTicket(number: String?, key: String?, title: String? = nil, for id: UUID) {
         guard var task = self.task(id), task.source != .ticket else { return }
-        guard task.ticketNumber != number || task.ticketKey != key else { return }
+        guard task.ticketNumber != number || task.ticketKey != key || task.ticketTitle != title else { return }
         task.ticketNumber = number
         task.ticketKey = key
+        task.ticketTitle = title
         persist(task)
+    }
+
+    /// Betreff des Tickets einer Aufgabe: beim Ticket selbst sein Titel, sonst der gemerkte oder der eines Tickets in Tagwerk.
+    func ticketTitle(for task: TaskItem) -> String? {
+        let effective = resolved(task)
+        if task.source == .ticket { return task.title }
+        if let title = effective.ticketTitle, !title.isEmpty { return title }
+        guard let number = effective.linkedTicketNumber else { return nil }
+        return ticketTasks.first { $0.linkedTicketNumber == number }?.title
     }
 
     func openFocus(_ id: UUID) {

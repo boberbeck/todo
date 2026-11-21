@@ -167,6 +167,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
     public var ticketNumber: String?
     /// Interne Request-ID des zugeordneten Tickets in ManageEngine (für den Worklog).
     public var ticketKey: String?
+    /// Betreff des zugeordneten Tickets, zur Anzeige
+    public var ticketTitle: String?
     /// Tätigkeit aus SAP (Activity), passend zum PSP-Element, z. B. „Interne Besprechung“.
     public var sapActivity: String?
     /// Langes Ziel, auf das die Aufgabe einzahlt (z. B. „AZ-305 bestehen“).
@@ -198,7 +200,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         ticketNumber: String? = nil,
         ticketKey: String? = nil,
         sapActivity: String? = nil,
-        longGoalID: UUID? = nil
+        longGoalID: UUID? = nil,
+        ticketTitle: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -226,6 +229,7 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         self.ticketKey = ticketKey
         self.sapActivity = sapActivity
         self.longGoalID = longGoalID
+        self.ticketTitle = ticketTitle
     }
 
     public var isDone: Bool { status == .done }
@@ -259,6 +263,7 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         if !copy.hasTicket, parent.hasTicket {
             copy.ticketNumber = parent.linkedTicketNumber
             copy.ticketKey = parent.linkedTicketKey
+            copy.ticketTitle = parent.source == .ticket ? parent.title : parent.ticketTitle
         }
         if copy.worklogType == nil { copy.worklogType = parent.worklogType }
         if copy.longGoalID == nil { copy.longGoalID = parent.longGoalID }

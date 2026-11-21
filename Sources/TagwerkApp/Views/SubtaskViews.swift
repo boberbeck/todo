@@ -514,3 +514,87 @@ struct AddSubtaskButton: View {
         .help("Unteraufgabe hinzufügen")
     }
 }
+
+/// Wohin die Zeit einer Aufgabe geht: SAP-Aufgabe mit Tätigkeit und Ticket mit Titel. Ein Klick ändert es.
+struct BookingSummary: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+
+    @State private var showsSAP = false
+    @State private var showsTicket = false
+
+    var body: some View {
+        let effective = model.resolved(task)
+        HStack(spacing: 6) {
+            Button {
+                showsSAP = true
+            } label: {
+                chip(
+                    icon: "building.columns",
+                    label: "SAP",
+                    text: model.pspLabel(for: task) ?? "Aufgabe fehlt",
+                    state: effective.pspElement == nil ? .missing : .ok
+                )
+            }
+            .buttonStyle(.plain)
+            .help(effective.pspElement == nil ? "SAP-Aufgabe wählen; ohne sie lässt sich die Zeit nicht buchen" : "SAP-Aufgabe ändern")
+            .popover(isPresented: $showsSAP, arrowEdge: .bottom) {
+                SAPTaskPicker(selectedCode: task.pspElement, selectedActivity: task.sapActivity) { psp, customCode in
+                    if let psp {
+                        model.setSAPTask(psp, for: task.id)
+                    } else {
+                        model.setPSPElement(customCode ?? "", for: task.id)
+                    }
+                    showsSAP = false
+                }
+            }
+
+            if let number = effective.linkedTicketNumber {
+                Button {
+                    if task.source != .ticket { showsTicket = true }
+                } label: {
+                    chip(
+                        icon: "ticket",
+                        label: "#\(number)",
+                        text: ticketText(effective),
+                        state: effective.linkedTicketKey == nil ? .missing : .ok
+                    )
+                }
+                .buttonStyle(.plain)
+                .help(effective.linkedTicketKey == nil
+                      ? "Ticket ohne Verbindung zu ManageEngine: kein Worklog möglich"
+                      : "Die Zeit geht auch als Worklog an dieses Ticket")
+                .popover(isPresented: $showsTicket, arrowEdge: .bottom) {
+                    TicketPicker(taskID: task.id) { showsTicket = false }
+                }
+            }
+        }
+    }
+
+    private func ticketText(_ effective: TaskItem) -> String {
+        if task.source == .ticket { return "ManageEngine" }
+        let title = model.ticketTitle(for: task) ?? ""
+        if effective.linkedTicketKey == nil { return title.isEmpty ? "ohne Worklog" : "\(title) · ohne Worklog" }
+        return title.isEmpty ? "ManageEngine" : title
+    }
+
+    private enum ChipState { case ok, missing }
+
+    private func chip(icon: String, label: String, text: String, state: ChipState) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
+            Text(label)
+                .fontWeight(.semibold)
+            Text(text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .font(.caption)
+        .foregroundStyle(state == .ok ? Theme.secondary : Theme.accent)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(state == .ok ? Color.white.opacity(0.05) : Theme.accentSoft))
+        .contentShape(Capsule())
+    }
+}

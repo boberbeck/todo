@@ -1215,7 +1215,8 @@ final class SubtaskAndTicketTests: XCTestCase {
         let parent = TaskItem(title: "Umzug", createdAt: Date(timeIntervalSince1970: 1_700_000_000))
         let subtask = TaskItem(
             title: "Kabel", createdAt: Date(timeIntervalSince1970: 1_700_000_100),
-            parentID: parent.id, ticketNumber: "1240", ticketKey: "100124", sapActivity: "Installation"
+            parentID: parent.id, ticketNumber: "1240", ticketKey: "100124", sapActivity: "Installation",
+            ticketTitle: "Drucker im Lager"
         )
         try store.save(parent)
         try store.save(subtask)

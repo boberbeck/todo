@@ -108,7 +108,9 @@ Werkzeuge: `tagesuebersicht`, `aufgaben`, `aufgabe_anlegen`, `aufgabe_aendern`, 
 
 ## Signieren (einmal einrichten, damit Freigaben bleiben)
 
-macOS merkt sich die Freigaben für Kalender, Schlüsselbund (ManageEngine-Schlüssel) und Musik anhand der Signatur der App. Ohne festes Zertifikat ist jede neue Fassung für macOS eine andere App, und die Freigaben gehen verloren. Einmal auf dem eigenen Mac im Repository ausführen:
+macOS merkt sich die Freigaben für Kalender, Schlüsselbund (ManageEngine-Schlüssel) und Musik anhand der Signatur der App. Ohne festes Zertifikat ist jede neue Fassung für macOS eine andere App, und die Freigaben gehen verloren.
+
+Am einfachsten in der App: Einstellungen › Allgemein › „Freigaben behalten“ › „Zertifikat erzeugen“, dann die zwei angezeigten Secrets bei GitHub eintragen. Oder auf dem eigenen Mac im Repository ausführen:
 
 ```
 scripts/signatur-einrichten.sh

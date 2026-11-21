@@ -274,8 +274,11 @@ struct InboxRow: View {
                 Text(task.title)
                     .lineLimit(2)
                 HStack(spacing: 8) {
-                    CardMeta(task: task)
+                    CardMeta(task: task, compact: true)
                     SubtaskToggle(task: task)
+                }
+                if hovering || task.pspElement != nil || task.ticketNumber != nil {
+                    BookingSummary(task: task)
                 }
                 if model.expandedTaskIDs.contains(task.id) {
                     SubtaskList(parent: task)

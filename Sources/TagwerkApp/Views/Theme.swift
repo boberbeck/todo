@@ -313,6 +313,9 @@ struct TaskCard: View {
                     CardMeta(task: task, compact: compact)
                     SubtaskToggle(task: task)
                 }
+                if !compact, !task.isDone {
+                    BookingSummary(task: task)
+                }
                 if model.expandedTaskIDs.contains(task.id) {
                     SubtaskList(parent: task)
                         .padding(.top, 2)
@@ -413,7 +416,7 @@ struct CardMeta: View {
 
     private var metaParts: [String] {
         var parts: [String] = []
-        if let number = task.linkedTicketNumber { parts.append("#\(number)") }
+        if compact || task.isDone, let number = task.linkedTicketNumber { parts.append("#\(number)") }
         if let goal = model.longGoal(task.longGoalID) { parts.append("◎ \(goal.title)") }
         if task.source == .mail { parts.append("Mail") }
         if !compact, let start = task.scheduledStart, !task.isDone { parts.append(start.formatted(date: .omitted, time: .shortened)) }
