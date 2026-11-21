@@ -131,10 +131,26 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent build/Tagwerk.app build/Tagwerk.zip
           ls -la build/Tagwerk.zip
 
+      - name: DMG bauen
+        run: |
+          scripts/make-dmg.sh
+          # Probe: DMG öffnen, App und Verknüpfung müssen drin sein
+          MOUNT="$RUNNER_TEMP/dmg-probe"
+          mkdir -p "$MOUNT"
+          hdiutil attach -quiet -nobrowse -readonly -mountpoint "$MOUNT" build/Tagwerk.dmg
+          ls -la "$MOUNT"
+          test -x "$MOUNT/Tagwerk.app/Contents/MacOS/Tagwerk"
+          test -x "$MOUNT/Tagwerk.app/Contents/MacOS/tagwerk-mcp"
+          test -L "$MOUNT/Programme"
+          codesign --verify --deep --strict "$MOUNT/Tagwerk.app" && echo "Signatur der App in der DMG ist gültig"
+          hdiutil detach -quiet "$MOUNT"
+
       - uses: actions/upload-artifact@v4
         with:
           name: Tagwerk-App
-          path: build/Tagwerk.zip
+          path: |
+            build/Tagwerk.dmg
+            build/Tagwerk.zip
 
       - name: Release „aktuell“ aktualisieren
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -143,12 +159,13 @@ jobs:
         run: |
           NOTES="Automatisch gebaut aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}) am $(date -u '+%d.%m.%Y %H:%M') UTC.
 
-          Installieren: Tagwerk.zip laden, entpacken, Tagwerk.app in den Ordner Programme ziehen.
+          Installieren: Tagwerk.dmg laden und öffnen, Tagwerk auf „Programme“ ziehen (ältere Fassung ersetzen).
+          Tagwerk.zip ist dasselbe als ZIP.
           Beim ersten Öffnen blockt macOS die App, weil sie nicht von Apple beglaubigt ist:
           Systemeinstellungen › Datenschutz & Sicherheit › „Dennoch öffnen“.
           Oder im Terminal: xattr -dr com.apple.quarantine /Applications/Tagwerk.app"
           gh release delete aktuell --yes --cleanup-tag || true
-          gh release create aktuell build/Tagwerk.zip --prerelease --target "$GITHUB_SHA" --title "Tagwerk – aktueller Stand" --notes "$NOTES"
+          gh release create aktuell build/Tagwerk.dmg build/Tagwerk.zip --prerelease --target "$GITHUB_SHA" --title "Tagwerk – aktueller Stand" --notes "$NOTES"
 
       # Nur bei Bedarf: Commit-Nachricht mit [screenshots] oder manueller Start.
       - name: Screenshots ins Repository legen

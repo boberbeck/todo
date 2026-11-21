@@ -49,8 +49,8 @@ Noch nicht enthalten:
 
 GitHub baut die App bei jedem Push und legt sie unter **Releases › „Tagwerk – aktueller Stand“** ab.
 
-1. `Tagwerk.zip` herunterladen und entpacken.
-2. `Tagwerk.app` in den Ordner Programme ziehen (eine ältere Fassung ersetzen).
+1. `Tagwerk.dmg` herunterladen und öffnen. Fester Link auf die jeweils neueste Fassung: <https://github.com/boberbeck/todo/releases/download/aktuell/Tagwerk.dmg>
+2. Tagwerk auf „Programme“ ziehen und eine ältere Fassung ersetzen, danach die DMG auswerfen. (`Tagwerk.zip` ist dasselbe als ZIP.)
 3. Beim ersten Öffnen blockt macOS die App, weil sie nicht von Apple beglaubigt ist: Systemeinstellungen › Datenschutz & Sicherheit › „Dennoch öffnen“. Alternativ im Terminal: `xattr -dr com.apple.quarantine /Applications/Tagwerk.app`
 4. Fragt macOS nach dem Schlüsselbund, „Immer erlauben“ wählen. Damit das und die Kalender-Freigabe auch nach Updates bleiben, einmal die feste Signatur einrichten (siehe „Signieren“).
 
@@ -88,7 +88,7 @@ Termine aus dem Kalender werden per Rechtsklick oder Doppelklick › „Als Zeit
 
 ## Claude anbinden (MCP)
 
-`scripts/make-app.sh` legt den MCP-Server `tagwerk-mcp` neben die App: `Tagwerk.app/Contents/MacOS/tagwerk-mcp`.
+`scripts/make-app.sh` baut `build/Tagwerk.app` und legt den MCP-Server `tagwerk-mcp` neben die App: `Tagwerk.app/Contents/MacOS/tagwerk-mcp`. `scripts/make-dmg.sh` packt die App danach in `build/Tagwerk.dmg`.
 
 - **Claude Desktop:** Einstellungen › Claude › „In Claude Desktop eintragen“, danach Claude Desktop neu starten. Von Hand geht es über `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
