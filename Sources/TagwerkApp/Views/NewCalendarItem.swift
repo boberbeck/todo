@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TagwerkCore
 
@@ -14,6 +15,7 @@ struct NewCalendarItem: View {
 
     @State private var title = ""
     @State private var finished = false
+    @State private var appeared = Date.distantFuture
     @FocusState private var focused: Bool
 
     private var isPast: Bool { slot.start < Date() }
@@ -51,16 +53,22 @@ struct NewCalendarItem: View {
         .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
         .offset(y: top)
         .onAppear {
+            appeared = Date()
             DispatchQueue.main.async { focused = true }
         }
         // Anderer Reiter oder Tag: mit Titel anlegen, sonst verwerfen
         .onDisappear { finish() }
         .onChange(of: focused) {
             // Klick daneben: mit Titel anlegen, ohne Titel verwerfen (kurz warten, falls „…“ geklickt wurde)
+            // Nicht beim kurzen Fokuswechsel direkt nach dem Erscheinen und nicht, wenn nur zu einer anderen App gewechselt wurde
             guard !focused else { return }
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(150))
-                if !focused { finish() }
+                guard !focused, NSApp.isActive, Date().timeIntervalSince(appeared) > 0.6 else {
+                    if NSApp.isActive, !finished { focused = true }
+                    return
+                }
+                finish()
             }
         }
     }
