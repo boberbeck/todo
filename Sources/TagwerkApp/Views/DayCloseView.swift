@@ -176,7 +176,7 @@ struct CloseLineRow: View {
                 }
             }
 
-            HStack(spacing: 8) {
+            FlowLayout(spacing: 8) {
                 PSPMenu(task: line.task)
                 WorkTypeMenu(task: line.task)
                 TicketMenu(task: line.task)

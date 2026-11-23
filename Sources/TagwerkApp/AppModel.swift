@@ -1938,8 +1938,23 @@ final class AppModel {
             bookings = snapshot.bookings
             goals = snapshot.goals
             longGoals = snapshot.longGoals
+            cleanUpHTMLEntities()
         } catch {
             report(error)
+        }
+    }
+
+    /// Titel mit „&lt;“ und Co. (von früheren Claude-Anfragen) einmal in normale Zeichen umwandeln.
+    private func cleanUpHTMLEntities() {
+        for task in tasks where task.title.contains("&") || task.workDescription.contains("&") || task.notes.contains("&") {
+            var fixed = task
+            fixed.title = HTMLTable.decodeEntities(task.title)
+            fixed.workDescription = HTMLTable.decodeEntities(task.workDescription)
+            fixed.notes = HTMLTable.decodeEntities(task.notes)
+            if fixed != task {
+                try? store.save(fixed)
+                if let index = tasks.firstIndex(where: { $0.id == fixed.id }) { tasks[index] = fixed }
+            }
         }
     }
 

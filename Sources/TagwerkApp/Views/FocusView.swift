@@ -216,15 +216,15 @@ struct FocusTaskPane: View {
 
                 if showsDetails {
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
+                        FlowLayout(spacing: 8) {
                             WorkTypeMenu(task: task)
                             PSPMenu(task: task)
                             TicketMenu(task: task)
                             if model.resolved(task).hasTicket {
                                 WorklogTypeMenu(task: task)
                             }
-                            Spacer(minLength: 0)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         TextEditor(text: $descriptionText)
                             .font(.body)
                             .scrollContentBackground(.hidden)

@@ -774,9 +774,10 @@ public final class TagwerkTools {
         return value
     }
 
+    /// Text aus den Argumenten. HTML-Zeichen wie „&lt;“, die Claude manchmal mitschickt, werden zu „<“.
     private func rawString(_ arguments: [String: Any], _ key: String) -> String? {
         switch arguments[key] {
-        case let text as String: return text
+        case let text as String: return HTMLTable.decodeEntities(text)
         case let number as Int: return String(number)
         default: return nil
         }

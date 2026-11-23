@@ -699,7 +699,7 @@ public enum HTMLTable {
             .joined(separator: " ")
     }
 
-    static func decodeEntities(_ text: String) -> String {
+    public static func decodeEntities(_ text: String) -> String {
         guard text.contains("&") else { return text }
         var result = text
         let named = ["&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&apos;": "'",

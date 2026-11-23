@@ -75,7 +75,7 @@ struct SubtaskRow: View {
                 .strikethrough(task.isDone, color: Theme.tertiary)
                 .lineLimit(2)
 
-            if let number = task.ticketNumber {
+            if let number = task.ticketNumber, number != model.parent(of: task)?.linkedTicketNumber {
                 Text("#\(number)")
                     .font(.caption)
                     .foregroundStyle(Theme.accent)

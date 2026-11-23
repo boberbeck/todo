@@ -426,3 +426,49 @@ struct CardMeta: View {
         return parts
     }
 }
+
+/// Reiht Elemente nebeneinander und bricht in die nächste Zeile um, wenn der Platz nicht reicht
+/// (z. B. Arbeitsart, SAP-Aufgabe, Ticket mit langen Namen).
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var width: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            let itemWidth = min(size.width, maxWidth)
+            if x > 0, x + itemWidth > maxWidth {
+                y += lineHeight + lineSpacing
+                x = 0
+                lineHeight = 0
+            }
+            x += itemWidth + spacing
+            lineHeight = max(lineHeight, size.height)
+            width = max(width, x - spacing)
+        }
+        return CGSize(width: width, height: y + lineHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var lineHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            let itemWidth = min(size.width, bounds.width)
+            if x > bounds.minX, x + itemWidth > bounds.maxX {
+                y += lineHeight + lineSpacing
+                x = bounds.minX
+                lineHeight = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: itemWidth, height: size.height))
+            x += itemWidth + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+    }
+}

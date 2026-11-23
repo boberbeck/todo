@@ -322,3 +322,13 @@ final class MCPHTTPTests: XCTestCase {
         XCTAssertTrue(text.hasSuffix("\r\n\r\n"))
     }
 }
+
+
+final class MCPEntityTests: XCTestCase {
+    func testHTMLEntitiesBecomeCharacters() throws {
+        let store = InMemoryStore()
+        let tools = TagwerkTools(store: store)
+        _ = try tools.call(name: "aufgabe_anlegen", arguments: ["titel": "Konfiguration nach environments/&lt;env&gt;/ &amp; Modul"])
+        XCTAssertEqual(try store.load().tasks.first?.title, "Konfiguration nach environments/<env>/ & Modul")
+    }
+}
