@@ -9,13 +9,27 @@ struct RootView: View {
 
     var body: some View {
         @Bindable var model = model
-        VStack(spacing: 0) {
-            if model.selection != .focus {
-                TopBar()
+        page
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Reiter, Timer und Einstellungen stehen in der Titelleiste des Fensters, neben den Ampelknöpfen
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    if model.selection == .focus {
+                        FocusBackButton()
+                    } else {
+                        TopBarTabs()
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if model.selection == .focus {
+                        PomodoroToggle()
+                    } else {
+                        TopBarTrailing()
+                    }
+                }
             }
-            page
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+            .toolbarBackground(model.selection == .focus ? Theme.background : Theme.bar, for: .windowToolbar)
+            .toolbarBackground(.visible, for: .windowToolbar)
         .background(AppBackground())
         .foregroundStyle(Theme.text)
         .tint(Theme.accent)
@@ -138,8 +152,8 @@ struct RootView: View {
     }
 }
 
-/// Leiste oben: Logo, Reiter, laufender Timer und Einstellungen.
-struct TopBar: View {
+/// Logo und Reiter, links in der Titelleiste neben den Ampelknöpfen.
+struct TopBarTabs: View {
     @Environment(AppModel.self) private var model
 
     struct Tab: Identifiable {
@@ -160,10 +174,11 @@ struct TopBar: View {
     ]
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             LogoMark()
-                .frame(width: 26, height: 26)
-                .padding(.trailing, 14)
+                .frame(width: 20, height: 20)
+                .padding(.leading, 4)
+                .padding(.trailing, 10)
                 .help("Tagwerk")
             ForEach(tabs) { tab in
                 let selected = isSelected(tab.item)
@@ -175,20 +190,6 @@ struct TopBar: View {
                 .buttonStyle(.plain)
                 .help("\(tab.title) (⌘\(tab.shortcut))")
             }
-            Spacer(minLength: 16)
-            UpdatePill()
-            RunningTimerPill()
-            SettingsLink {
-                Image(systemName: "gearshape")
-            }
-            .buttonStyle(IconButtonStyle(size: 32))
-            .help("Einstellungen (⌘,)")
-        }
-        .padding(.horizontal, 20)
-        .frame(height: 56)
-        .background(Theme.bar)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Theme.border).frame(height: 1)
         }
     }
 
@@ -198,6 +199,37 @@ struct TopBar: View {
         case (.planning, .today), (.close, .today): return true
         default: return model.selection == item
         }
+    }
+}
+
+/// Rechts in der Titelleiste: Update-Hinweis, laufender Timer, Einstellungen.
+struct TopBarTrailing: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            UpdatePill()
+            RunningTimerPill()
+            SettingsLink {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(IconButtonStyle(size: 28))
+            .help("Einstellungen (⌘,)")
+        }
+    }
+}
+
+/// Im Fokus links in der Titelleiste: zurück zur vorigen Seite (auch mit Esc).
+struct FocusBackButton: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Button {
+            model.leaveFocus()
+        } label: {
+            Label("Zurück", systemImage: "chevron.left")
+        }
+        .buttonStyle(GhostButtonStyle())
+        .keyboardShortcut(.cancelAction)
+        .help("Zurück (Esc)")
     }
 }
 
@@ -211,8 +243,8 @@ struct TopBarTabLabel: View {
         Text(title)
             .font(.system(size: 14, weight: selected ? .medium : .regular))
             .foregroundStyle(selected ? Theme.text : (hovering ? Theme.text.opacity(0.85) : Theme.secondary))
-            .padding(.horizontal, 13)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
             .background {
                 if selected || hovering {
                     RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)

@@ -14,6 +14,8 @@ struct TagwerkApplication: App {
                 .frame(minWidth: 960, minHeight: 600)
         }
         .defaultSize(width: 1180, height: 760)
+        // Eine Leiste statt zwei: Reiter in der Titelleiste, ohne den Fenstertitel
+        .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             TagwerkCommands(model: model)
         }

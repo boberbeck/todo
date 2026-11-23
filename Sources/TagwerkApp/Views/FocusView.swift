@@ -1,32 +1,14 @@
 import SwiftUI
 import TagwerkCore
 
-/// Fokus: eine Aufgabe, sonst nichts. Ohne Leiste oben; zurück mit dem Pfeil oder Esc.
+/// Fokus: eine Aufgabe, sonst nichts. „Zurück“ (oder Esc) und Pomodoro stehen in der Titelleiste.
 struct FocusView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         let running = model.runningEntry != nil
         VStack(spacing: 0) {
-            HStack {
-                Button {
-                    model.leaveFocus()
-                } label: {
-                    Image(systemName: "arrow.left")
-                        .font(.system(size: 16))
-                        .frame(width: 32, height: 32)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Theme.secondary)
-                .keyboardShortcut(.cancelAction)
-                .help("Zurück (Esc)")
-                Spacer()
-                PomodoroToggle()
-                    .padding(.trailing, 14)
-            }
-            .padding(.horizontal, 28)
-            .padding(.top, 20)
+            Color.clear.frame(height: 8)
 
             Group {
                 if let pomodoro = model.pomodoro, pomodoro.phase.isBreak || pomodoro.phase == .ready {
