@@ -6,8 +6,9 @@ import TagwerkCore
 /// Öffnet sich per Doppelklick; alles lässt sich hier ändern.
 struct TaskDetailView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
     let taskID: UUID
+    /// Höhe, die im Hauptfenster zur Verfügung steht
+    var height: CGFloat = 720
 
     @State private var title = ""
     @State private var notes = ""
@@ -19,12 +20,6 @@ struct TaskDetailView: View {
 
     private static let estimates = [15, 30, 45, 60, 90, 120, 180, 240, 360, 480]
 
-    /// So hoch, dass das Fenster samt Knöpfen ins Hauptfenster passt.
-    private static var fittingHeight: CGFloat {
-        let window = NSApp.mainWindow ?? NSApp.keyWindow
-        let available = (window?.contentLayoutRect.height ?? 800) - 40
-        return max(420, min(760, available))
-    }
 
     var body: some View {
         if let task = model.task(taskID) {
@@ -32,7 +27,7 @@ struct TaskDetailView: View {
         } else {
             VStack(spacing: 12) {
                 Text("Die Aufgabe gibt es nicht mehr.")
-                Button("Schließen") { dismiss() }
+                Button("Schließen") { close() }
             }
             .padding(30)
         }
@@ -259,7 +254,7 @@ struct TaskDetailView: View {
                 .padding(.horizontal, 22)
                 .padding(.vertical, 12)
         }
-        .frame(width: 640, height: Self.fittingHeight)
+        .frame(width: 640, height: height)
         .onAppear {
             title = task.title
             notes = task.notes
@@ -274,7 +269,7 @@ struct TaskDetailView: View {
         .confirmationDialog("„\(task.title)“ löschen?", isPresented: $confirmsDelete) {
             Button("Löschen", role: .destructive) {
                 model.delete(task.id)
-                dismiss()
+                close()
             }
         } message: {
             Text("Mit Unteraufgaben und allen erfassten Zeiten.")
@@ -311,7 +306,23 @@ struct TaskDetailView: View {
                 .foregroundStyle(.secondary)
             }
             Spacer()
+            Button {
+                model.setTitle(title, for: taskID)
+                close()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(Color.white.opacity(0.08)))
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.cancelAction)
+            .help("Schließen (Esc), auch ein Klick daneben schließt")
         }
+    }
+
+    private func close() {
+        model.detailTaskID = nil
     }
 
     private func footer(_ task: TaskItem, running: Bool) -> some View {
@@ -321,7 +332,7 @@ struct TaskDetailView: View {
             Button("Im Fokus öffnen") {
                 model.setTitle(title, for: taskID)
                 model.openFocus(task.id)
-                dismiss()
+                close()
             }
             if !task.isDone {
                 Button {
@@ -332,7 +343,7 @@ struct TaskDetailView: View {
             }
             Button("Fertig") {
                 model.setTitle(title, for: taskID)
-                dismiss()
+                close()
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)

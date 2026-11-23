@@ -54,14 +54,27 @@ struct RootView: View {
         )) {
             BugReportView()
         }
-        .sheet(isPresented: Binding(
-            get: { model.detailTaskID != nil },
-            set: { if !$0 { model.detailTaskID = nil } }
-        )) {
+        .overlay {
+            // Aufgabenfenster über dem Hauptfenster; ein Klick daneben schließt es.
             if let id = model.detailTaskID {
-                TaskDetailView(taskID: id)
+                GeometryReader { geometry in
+                    ZStack {
+                        Color.black.opacity(0.45)
+                            .contentShape(Rectangle())
+                            .onTapGesture { model.detailTaskID = nil }
+                        TaskDetailView(taskID: id, height: max(420, min(780, geometry.size.height - 40)))
+                            .id(id)
+                            .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.borderStrong))
+                            .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                }
+                .transition(.opacity)
             }
         }
+        .animation(.easeOut(duration: 0.15), value: model.detailTaskID)
         .sheet(item: $model.timeEntryDraft) { draft in
             AddTimeSheet(draft: draft)
         }
