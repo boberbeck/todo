@@ -202,6 +202,7 @@ struct FocusSettings: View {
     @AppStorage(FocusMusic.autoPlayKey) private var autoPlay = true
     @AppStorage(FocusMusic.pauseWithTimerKey) private var pauseWithTimer = true
     @AppStorage(FocusMusic.shuffleKey) private var shuffle = false
+    @State private var customStream = ""
 
     var body: some View {
         let music = model.music
@@ -224,40 +225,102 @@ struct FocusSettings: View {
             PomodoroSettingsSection()
 
             Section {
-                LabeledContent("Playlist") {
-                    HStack(spacing: 8) {
-                        Picker("Playlist", selection: Binding(
-                            get: { music.selectedPlaylist },
-                            set: { music.selectedPlaylist = $0 }
-                        )) {
-                            Text("Keine Musik").tag(String?.none)
-                            if let selected = music.selectedPlaylist, !music.playlists.contains(selected) {
-                                Text(selected).tag(String?.some(selected))
-                            }
-                            ForEach(music.playlists, id: \.self) { name in
-                                Text(name).tag(String?.some(name))
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(maxWidth: 240)
-                        Button(music.isLoadingPlaylists ? "Lädt …" : "Playlists laden") {
-                            music.loadPlaylists()
-                        }
-                        .disabled(music.isLoadingPlaylists)
+                Picker("Quelle", selection: Binding(
+                    get: { music.source },
+                    set: { music.source = $0 }
+                )) {
+                    ForEach(MusicSource.allCases) { source in
+                        Text(source.label).tag(source)
                     }
                 }
+                .pickerStyle(.segmented)
+
+                switch music.source {
+                case .appleMusic:
+                    LabeledContent("Playlist") {
+                        HStack(spacing: 8) {
+                            Picker("Playlist", selection: Binding(
+                                get: { music.selectedPlaylist },
+                                set: { music.selectedPlaylist = $0 }
+                            )) {
+                                Text("Keine Musik").tag(String?.none)
+                                if let selected = music.selectedPlaylist, !music.playlists.contains(selected) {
+                                    Text(selected).tag(String?.some(selected))
+                                }
+                                ForEach(music.playlists, id: \.self) { name in
+                                    Text(name).tag(String?.some(name))
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(maxWidth: 240)
+                            Button(music.isLoadingPlaylists ? "Lädt …" : "Playlists laden") {
+                                music.loadPlaylists()
+                            }
+                            .disabled(music.isLoadingPlaylists)
+                        }
+                    }
+                    Toggle("Zufällige Reihenfolge", isOn: $shuffle)
+                case .radio:
+                    Picker("Sender", selection: Binding(
+                        get: { music.radioStation },
+                        set: { music.radioStation = $0 }
+                    )) {
+                        Text("Keiner").tag(RadioStation?.none)
+                        ForEach(RadioStation.builtIn) { station in
+                            Text("\(station.name) · \(station.detail)").tag(RadioStation?.some(station))
+                        }
+                        if let custom = music.radioStation, !RadioStation.builtIn.contains(custom) {
+                            Text("\(custom.name) · eigene Adresse").tag(RadioStation?.some(custom))
+                        }
+                    }
+                    LabeledContent("Eigene Adresse") {
+                        HStack(spacing: 8) {
+                            TextField("https://…/stream.mp3", text: $customStream)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 260)
+                            Button("Übernehmen") {
+                                if let station = RadioStation.custom(customStream) {
+                                    music.radioStation = station
+                                    customStream = ""
+                                }
+                            }
+                            .disabled(RadioStation.custom(customStream) == nil)
+                        }
+                    }
+                case .youtube:
+                    LabeledContent("Link") {
+                        TextField("https://www.youtube.com/watch?v=…", text: Binding(
+                            get: { music.youtubeLinkText },
+                            set: { music.youtubeLinkText = $0 }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 320)
+                    }
+                    if !music.youtubeLinkText.isEmpty {
+                        Text(music.youtubeLink.map { "Erkannt: \($0.summary)" } ?? "Das ist kein YouTube-Link für ein Video, eine Playlist oder einen Livestream")
+                            .font(.caption)
+                            .foregroundStyle(music.youtubeLink == nil ? Theme.warning : Theme.secondary)
+                    }
+                }
+
                 Toggle("Beim Start des Timers im Fokus abspielen", isOn: $autoPlay)
                 Toggle("Beim Stoppen des Timers anhalten", isOn: $pauseWithTimer)
-                Toggle("Zufällige Reihenfolge", isOn: $shuffle)
                 if let problem = music.problem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.warning)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } header: {
                 Text("Musik im Fokus")
             } footer: {
-                SettingsFootnote("Tagwerk steuert die Musik-App von macOS (Apple Music). Beim ersten Mal fragt macOS, ob Tagwerk die Musik-App steuern darf. Die Playlist wählst du auch direkt im Fokus über das Notensymbol.")
+                switch music.source {
+                case .appleMusic:
+                    SettingsFootnote("Tagwerk steuert die Musik-App von macOS (Apple Music). Beim ersten Mal fragt macOS, ob Tagwerk die Musik-App steuern darf. Die Playlist wählst du auch direkt im Fokus über das Notensymbol.")
+                case .radio:
+                    SettingsFootnote("Die Sender kommen von SomaFM, werbefrei und von den Hörern finanziert. Eigene Adressen: direkte MP3- oder AAC-Streams. Die Pomodoro-Pause hält das Radio an, danach geht es live weiter.")
+                case .youtube:
+                    SettingsFootnote("YouTube spielt mit dem offiziellen Player, sichtbar im Fokus, wie YouTube es verlangt. Verlässt du den Fokus, hält das Video an. Werbung ist möglich, und manche Kanäle erlauben kein Abspielen außerhalb von YouTube.")
+                }
             }
         }
         .settingsPage(height: 700)

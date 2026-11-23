@@ -24,7 +24,7 @@ Aufbau: dunkel und ruhig, oben die Leiste mit Start, Plan, Kalender, Fokus, Kund
 | Tag abschließen | Zeiten je Aufgabe gerundet prüfen und anpassen. Worklogs gehen an ManageEngine. SAP-Zeilen überträgst du mit Kopier-Knöpfen oder als Excel-Liste und hakst sie ab; nichts wird doppelt gebucht. |
 | ManageEngine | Eigene offene Tickets landen im Eingang (Konto → Kunde). Zugang in den Einstellungen, der API-Schlüssel liegt im Schlüsselbund. |
 | Pomodoro | Im Fokus oben „Pomodoro“ einschalten: 25 Minuten arbeiten (die große Uhr zählt herunter), dann 5 Minuten Pause, nach vier Runden 15 Minuten. In der Pause stoppen Zeit und Musik, die Pause zählt herunter; Ton und Mitteilung bei Pause und danach, „Weiter“ startet die nächste Runde mit derselben Aufgabe. Zeiten in Einstellungen › Fokus. |
-| Fokus | Vollbild mit einer Aufgabe, großem Timer, Erledigt und Nächste. Arbeitsart, PSP-Element und Bearbeitung klappen unten auf. Dazu Musik: eine Playlist aus der Musik-App startet mit dem Timer und hält mit ihm an. |
+| Fokus | Vollbild mit einer Aufgabe, großem Timer, Erledigt und Nächste. Arbeitsart, PSP-Element und Bearbeitung klappen unten auf. Dazu Musik aus Apple Music, Internetradio oder YouTube: startet mit dem Timer und hält mit ihm an. |
 | Kunden | Kennzahlen und eine Karte je Kunde mit Stunden dieser Woche und im Monat. Im Kunden: lokale Todos, PSP-Elemente, ManageEngine-Konto. |
 | Rückblick | Stunden gegen das Wochenziel, Tagesdurchschnitt, Anteil Kundenarbeit, Stunden je Tag und je Kunde, Verlauf der letzten Wochen, Wochenziele, Export als CSV. |
 | Leerlauf | Läuft der Timer und kommt länger keine Eingabe, fragt Tagwerk nach der Rückkehr: Zeit behalten, Pause abziehen oder einer anderen Aufgabe geben. |
@@ -161,7 +161,11 @@ Alle Daten liegen lokal in `~/Library/Application Support/Tagwerk/tagwerk.sqlite
 
 ## Musik im Fokus
 
-Unter Einstellungen › Fokus (oder im Fokus über das Notensymbol) wählst du eine Playlist aus der Musik-App. Sie startet, sobald du im Fokus den Timer startest, und hält an, wenn du ihn stoppst. Tagwerk steuert dafür die Musik-App per AppleScript; macOS fragt beim ersten Mal, ob Tagwerk das darf (Systemeinstellungen › Datenschutz & Sicherheit › Automation).
+Unter Einstellungen › Fokus (oder im Fokus über das Notensymbol) wählst du die Quelle. Die Musik startet, sobald du im Fokus den Timer startest, hält in der Pomodoro-Pause an und, wenn gewünscht, beim Stoppen des Timers.
+
+- **Apple Music:** eine Playlist aus der Musik-App. Tagwerk steuert die Musik-App per AppleScript; macOS fragt beim ersten Mal, ob Tagwerk das darf (Systemeinstellungen › Datenschutz & Sicherheit › Automation).
+- **Internetradio:** ruhige Sender von SomaFM (Groove Salad, Fluid, Drone Zone, Deep Space One), werbefrei und hörerfinanziert, oder eine eigene Stream-Adresse (MP3/AAC). Spielt direkt in Tagwerk, der laufende Titel erscheint, wenn der Sender ihn mitschickt.
+- **YouTube:** einen Link einfügen (Video, Playlist, Mix oder Livestream; liegt einer in der Zwischenablage, schlägt Tagwerk ihn vor). Er spielt mit dem offiziellen Player, sichtbar im Fokus, wie YouTube es verlangt; verlässt du den Fokus, hält das Video an. Werbung ist möglich, und manche Kanäle erlauben kein Abspielen außerhalb von YouTube.
 
 ## Aufbau
 

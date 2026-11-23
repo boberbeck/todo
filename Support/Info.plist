@@ -33,6 +33,9 @@
         <!-- Prüfung des eigenen MCP-Servers auf http://127.0.0.1 -->
         <key>NSAllowsLocalNetworking</key>
         <true/>
+        <!-- Eigene Radio-Streams, die nur über http senden -->
+        <key>NSAllowsArbitraryLoadsForMedia</key>
+        <true/>
     </dict>
     <key>NSAppleEventsUsageDescription</key>
     <string>Tagwerk spielt im Fokus deine Playlist in der Musik-App ab und hält sie an, wenn du den Timer stoppst.</string>

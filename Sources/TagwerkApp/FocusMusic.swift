@@ -1,8 +1,10 @@
 import Foundation
 import Observation
+import TagwerkCore
 
-/// Musik im Fokus über die Musik-App (Apple Music). Gesteuert per AppleScript, ohne Entwicklerkonto.
-/// macOS fragt beim ersten Mal, ob Tagwerk die Musik-App steuern darf.
+/// Musik im Fokus aus drei Quellen: Playlist der Musik-App (Apple Music, per AppleScript),
+/// Internetradio (direkt in Tagwerk) oder ein YouTube-Link (offizieller Player, sichtbar im Fokus).
+/// Für Apple Music fragt macOS beim ersten Mal, ob Tagwerk die Musik-App steuern darf.
 @MainActor
 @Observable
 final class FocusMusic {
@@ -16,6 +18,12 @@ final class FocusMusic {
     static let autoPlayKey = "focusMusicAutoPlay"
     static let pauseWithTimerKey = "focusMusicPauseWithTimer"
     static let shuffleKey = "focusMusicShuffle"
+    static let sourceKey = "focusMusicSource"
+    static let radioStationKey = "focusMusicRadioStation"
+    static let youtubeLinkKey = "focusMusicYouTubeLink"
+
+    let radio = RadioPlayer()
+    let youtube = YouTubePlayer()
 
     private(set) var playlists: [String] = []
     private(set) var state: State = .stopped
@@ -38,6 +46,129 @@ final class FocusMusic {
     private static func storedPlaylist() -> String? {
         let value = UserDefaults.standard.string(forKey: playlistKey)
         return value?.isEmpty == false ? value : nil
+    }
+
+    /// Woher die Musik kommt. Beim Wechsel verstummt die bisherige Quelle.
+    var source: MusicSource = MusicSource(rawValue: UserDefaults.standard.string(forKey: FocusMusic.sourceKey) ?? "") ?? .appleMusic {
+        didSet {
+            guard source != oldValue else { return }
+            UserDefaults.standard.set(source.rawValue, forKey: Self.sourceKey)
+            silence(oldValue)
+            state = .stopped
+            trackTitle = nil
+            trackArtist = nil
+            problem = nil
+        }
+    }
+
+    /// Gewählter Radiosender (eingebaut oder eigene Adresse).
+    var radioStation: RadioStation? = FocusMusic.storedStation() {
+        didSet {
+            let data = radioStation.flatMap { try? JSONEncoder().encode($0) }
+            UserDefaults.standard.set(data, forKey: Self.radioStationKey)
+        }
+    }
+
+    private static func storedStation() -> RadioStation? {
+        guard let data = UserDefaults.standard.data(forKey: radioStationKey) else { return nil }
+        return try? JSONDecoder().decode(RadioStation.self, from: data)
+    }
+
+    /// YouTube-Link, wie eingefügt.
+    var youtubeLinkText: String = UserDefaults.standard.string(forKey: FocusMusic.youtubeLinkKey) ?? "" {
+        didSet { UserDefaults.standard.set(youtubeLinkText, forKey: Self.youtubeLinkKey) }
+    }
+
+    var youtubeLink: YouTubeLink? { YouTubeLink.parse(youtubeLinkText) }
+
+    /// Ist für die gewählte Quelle etwas ausgesucht?
+    var hasSelection: Bool {
+        switch source {
+        case .appleMusic: return selectedPlaylist != nil
+        case .radio: return radioStation != nil
+        case .youtube: return youtubeLink != nil
+        }
+    }
+
+    /// Was gewählt ist, für die Anzeige.
+    var selectionName: String? {
+        switch source {
+        case .appleMusic: return selectedPlaylist
+        case .radio: return radioStation?.name
+        case .youtube: return youtubeLink == nil ? nil : "YouTube"
+        }
+    }
+
+    init() {
+        radio.onChange = { [weak self] playing, title, problem in
+            guard let self, self.source == .radio else { return }
+            self.update(playing: playing, title: title ?? self.radioStation?.name, subtitle: title == nil ? "Internetradio" : self.radioStation?.name, problem: problem)
+        }
+        youtube.onChange = { [weak self] playing, title, problem in
+            guard let self, self.source == .youtube else { return }
+            self.update(playing: playing, title: title, subtitle: "YouTube", problem: problem)
+        }
+    }
+
+    private func update(playing: Bool, title: String?, subtitle: String?, problem: String?) {
+        if playing {
+            state = .playing
+        } else if state != .stopped || problem != nil {
+            state = problem == nil ? .paused : .stopped
+        }
+        trackTitle = title
+        trackArtist = subtitle
+        if let problem {
+            self.problem = problem
+        } else if playing {
+            self.problem = nil
+        }
+    }
+
+    // MARK: Auswahl
+
+    func choosePlaylist(_ name: String) {
+        selectedPlaylist = name
+        source = .appleMusic
+    }
+
+    func chooseStation(_ station: RadioStation) {
+        let wasPlaying = state == .playing
+        radioStation = station
+        source = .radio
+        if wasPlaying || state == .playing { startMusic() }
+    }
+
+    func chooseYouTube(_ text: String) {
+        youtubeLinkText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        source = .youtube
+    }
+
+    /// „Keine Musik“: die Auswahl der aktuellen Quelle löschen.
+    func clearSelection() {
+        silence(source)
+        switch source {
+        case .appleMusic: selectedPlaylist = nil
+        case .radio: radioStation = nil
+        case .youtube: youtubeLinkText = ""
+        }
+        state = .stopped
+        trackTitle = nil
+        trackArtist = nil
+    }
+
+    private func silence(_ old: MusicSource) {
+        guard !isDemo else { return }
+        switch old {
+        case .appleMusic:
+            if state == .playing, startedByTagwerk {
+                Task { _ = try? await AppleMusicScript.run(AppleMusicScript.pause) }
+            }
+        case .radio:
+            radio.stop()
+        case .youtube:
+            youtube.pause()
+        }
     }
 
     private var autoPlay: Bool { UserDefaults.standard.object(forKey: Self.autoPlayKey) as? Bool ?? true }
@@ -64,13 +195,29 @@ final class FocusMusic {
         }
     }
 
-    /// Startet die gewählte Playlist (von vorne).
-    func playPlaylist() {
-        guard let playlist = selectedPlaylist else { return }
+    /// Startet die gewählte Musik (Playlist von vorne, Sender live, YouTube-Link).
+    func startMusic() {
         if isDemo {
             state = .playing
             return
         }
+        switch source {
+        case .appleMusic:
+            playPlaylist()
+        case .radio:
+            guard let station = radioStation else { return }
+            startedByTagwerk = true
+            radio.play(station)
+        case .youtube:
+            guard let link = youtubeLink else { return }
+            startedByTagwerk = true
+            youtube.play(link)
+        }
+    }
+
+    /// Startet die gewählte Playlist der Musik-App (von vorne).
+    private func playPlaylist() {
+        guard let playlist = selectedPlaylist else { return }
         startedByTagwerk = true
         Task {
             do {
@@ -88,6 +235,14 @@ final class FocusMusic {
             state = state == .playing ? .paused : .playing
             return
         }
+        guard source == .appleMusic else {
+            if state == .playing {
+                pause()
+            } else {
+                startMusic()
+            }
+            return
+        }
         switch state {
         case .stopped:
             playPlaylist()
@@ -100,8 +255,16 @@ final class FocusMusic {
         }
     }
 
+    /// Nächster Titel; beim Radio nicht möglich, bei YouTube das nächste Video der Playlist.
+    var canSkip: Bool { source != .radio }
+
     func nextTrack() {
         guard !isDemo else { return }
+        if source == .youtube {
+            youtube.next()
+            return
+        }
+        guard source == .appleMusic else { return }
         Task {
             _ = try? await AppleMusicScript.run(AppleMusicScript.next)
             await refresh()
@@ -113,6 +276,16 @@ final class FocusMusic {
             state = .paused
             return
         }
+        switch source {
+        case .radio:
+            radio.pause()
+            return
+        case .youtube:
+            youtube.pause()
+            return
+        case .appleMusic:
+            break
+        }
         Task {
             _ = try? await AppleMusicScript.run(AppleMusicScript.pause)
             await refresh()
@@ -122,11 +295,11 @@ final class FocusMusic {
     // MARK: Timer
 
     func timerStarted(inFocus: Bool) {
-        guard inFocus, autoPlay, selectedPlaylist != nil else { return }
+        guard inFocus, autoPlay, hasSelection else { return }
         if state == .paused, startedByTagwerk {
             togglePlayPause()
         } else if state != .playing {
-            playPlaylist()
+            startMusic()
         }
     }
 
@@ -156,7 +329,7 @@ final class FocusMusic {
         // Nur wer eine Playlist gewählt hat, nutzt die Musik; sonst fragt Tagwerk die Musik-App gar nicht erst.
         statusTask = Task { [weak self] in
             while !Task.isCancelled {
-                if self?.selectedPlaylist != nil {
+                if self?.source == .appleMusic, self?.selectedPlaylist != nil {
                     await self?.refresh()
                 }
                 try? await Task.sleep(for: .seconds(5))
@@ -167,6 +340,10 @@ final class FocusMusic {
     func stopWatching() {
         statusTask?.cancel()
         statusTask = nil
+        // YouTube nur mit sichtbarem Player: verlässt man den Fokus, hält das Video an
+        if source == .youtube, !isDemo {
+            youtube.pause()
+        }
     }
 
     private func refresh() async {
