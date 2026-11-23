@@ -183,6 +183,7 @@ final class ByDesignBrowserModel {
         let before = collected.count
         merge(found)
         let added = collected.count - before
+        AppLog.info("SAP", "Seite gelesen (\(source)): \(found.count) Einträge, \(found.filter { !($0.activity ?? "").isEmpty }.count) mit Tätigkeit, \(Set(found.map(\.code)).count) Aufgaben")
         if found.isEmpty {
             status = "Auf dieser Seite keine Aufgabennummern gefunden. Ist die Liste mit den Aufgaben (Task ID) offen?"
         } else {

@@ -57,6 +57,8 @@ GitHub baut die App bei jedem Push und legt sie unter **Releases › „Tagwerk 
 
 Daten und Einstellungen bleiben beim Ersetzen der App erhalten; sie liegen nicht in der App.
 
+**Fehler melden:** Menü Aufgabe › „Fehler melden …“ oder Einstellungen › Allgemein. Tagwerk legt Beschreibung, Fassung, Zustand der Anbindungen und das Protokoll (`~/Library/Logs/Tagwerk/tagwerk.log`, ohne Passwörter und Schlüssel) zusammen; nach einem Absturz bietet es den Bericht von macOS gleich mit an. Dann als GitHub-Issue (Seite öffnet sich vorausgefüllt), als Datei in „Downloads“ oder als Text für den Chat mit Claude.
+
 **Automatische Updates:** Einmal in Einstellungen › Allgemein › „Updates“ einen GitHub-Schlüssel eintragen, der nur lesen darf („Fine-grained token“, nur dieses Repository, Contents: Read-only). Danach schaut Tagwerk beim Start und alle sechs Stunden im Release „aktuell“ nach, zeigt, was neu ist, und ersetzt sich nach „Jetzt aktualisieren“ selbst; anschließend startet es neu. Die geladene App wird vorher geprüft (Kennung und Signatur).
 
 ## Starten

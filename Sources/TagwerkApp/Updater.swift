@@ -88,11 +88,13 @@ final class Updater {
             }
             available = Available(release: release, changes: changes)
             status = "Neue Fassung verfügbar (Stand \(release.shortCommit))."
+            AppLog.info("Update", "Neue Fassung \(release.shortCommit) verfügbar (laufend: \(currentBuild ?? "?"))")
             if userInitiated || dismissedCommit != release.commit {
                 showsPrompt = true
             }
         } catch {
             status = "Update-Prüfung fehlgeschlagen: \(error)"
+            AppLog.warning("Update", "Prüfung fehlgeschlagen: \(error)")
         }
     }
 
@@ -146,11 +148,13 @@ final class Updater {
             try Self.run("/usr/bin/codesign", ["--verify", "--deep", "--strict", staged.path])
 
             status = "Installiert, Tagwerk startet neu …"
+            AppLog.info("Update", "Fassung \(available.release.shortCommit) wird eingesetzt, Neustart")
             try launchReplacement(staged: staged, target: target, work: work)
             NSApp.terminate(nil)
         } catch {
             isInstalling = false
             status = "Update fehlgeschlagen: \(error)"
+            AppLog.error("Update", "Installation fehlgeschlagen: \(error)")
         }
     }
 

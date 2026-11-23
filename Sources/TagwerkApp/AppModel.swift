@@ -70,6 +70,10 @@ final class AppModel {
     var ticketPickerTaskID: UUID?
     /// Offenes Fenster „Zeit nachtragen“ (von überall aus der App).
     var timeEntryDraft: TimeEntryDraft?
+    /// Fenster „Fehler melden“
+    var showsBugReport = false
+    /// Absturzbericht von macOS seit dem letzten Start, noch nicht gemeldet
+    var pendingCrash: URL?
     var lastError: String?
 
     /// Aktuelle Uhrzeit, jede Sekunde aktualisiert. Nur lesen, wo ein Timer sichtbar läuft.
@@ -120,6 +124,12 @@ final class AppModel {
         if SnapshotMode.directory == nil {
             showPlanningIfDue()
             backupIfDue()
+            AppLog.info("Start", "Tagwerk \(AppVersion.description), \(SigningSetup.currentSignature), Kalender: \(calendarAccess)")
+            if let crash = BugReport.unreportedCrash() {
+                AppLog.warning("Start", "Absturzbericht gefunden: \(crash.lastPathComponent)")
+                pendingCrash = crash
+                showsBugReport = true
+            }
             remote.startIfEnabled()
             if isPomodoroEnabled { PomodoroNotifier.requestPermission() }
             Task { [weak self] in
@@ -682,6 +692,7 @@ final class AppModel {
             if pomodoroCountDay != today { pomodorosToday = 0; pomodoroCountDay = today }
             pomodorosToday += 1
             pomodoro = next
+            AppLog.info("Pomodoro", "Runde \(next.completedInSet) geschafft, \(next.phase == .longBreak ? "lange" : "kurze") Pause")
             let minutes = next.phase == .longBreak ? settings.longBreakMinutes : settings.shortBreakMinutes
             PomodoroNotifier.signal(
                 title: next.phase == .longBreak ? "Lange Pause" : "Pause",
@@ -842,6 +853,7 @@ final class AppModel {
 
     func requestCalendarAccess() async {
         calendarAccess = await calendarProvider.requestAccess()
+        AppLog.info("Kalender", "Zugriff angefragt: \(calendarAccess)")
         refreshEvents()
     }
 
@@ -1255,6 +1267,7 @@ final class AppModel {
 
     func reportSAPAutoFetch(_ message: String) {
         sapAutoStatus = "\(Date().formatted(date: .abbreviated, time: .shortened)): \(message)"
+        AppLog.info("SAP", "Automatischer Abruf: \(message)")
     }
 
     func sapImportPlan(_ rows: [SAPTaskRow]) -> SAPImport.Plan {
@@ -1289,7 +1302,9 @@ final class AppModel {
         if updated > 0 { parts.append("\(updated) aktualisiert") }
         if deactivated > 0 { parts.append("\(deactivated) deaktiviert") }
         if !created.isEmpty { parts.append(created.count == 1 ? "1 Kunde angelegt" : "\(created.count) Kunden angelegt") }
-        return parts.isEmpty ? "Alles war schon auf dem Stand." : parts.joined(separator: ", ") + "."
+        let summary = parts.isEmpty ? "Alles war schon auf dem Stand." : parts.joined(separator: ", ") + "."
+        AppLog.info("SAP", "Abgleich übernommen: \(summary)")
+        return summary
     }
 
     // MARK: Tagesabschluss und Buchung
@@ -1508,6 +1523,7 @@ final class AppModel {
             await fillMissingTicketTitles()
             lastTicketSync = Date()
             ticketSyncMessage = added == 0 ? "Keine neuen Tickets." : "\(added) neue(s) Ticket(s) im Eingang."
+            AppLog.info("Tickets", "Abruf: \(tickets.count) geliefert, \(tickets.filter(\.isOpen).count) offen, \(known) bekannt, \(added) neu")
             let open = tickets.filter(\.isOpen).count
             let statuses = Set(tickets.filter { !$0.isOpen }.map(\.statusName)).sorted().joined(separator: ", ")
             ticketSyncDetail = """
@@ -1517,6 +1533,7 @@ final class AppModel {
         } catch {
             ticketSyncMessage = String(describing: error)
             ticketSyncDetail = "\(Date().formatted(date: .omitted, time: .standard)): \(String(describing: error))"
+            AppLog.error("Tickets", "Abruf fehlgeschlagen: \(error)")
         }
     }
 
@@ -2049,6 +2066,7 @@ final class AppModel {
 
     private func report(_ error: Error) {
         lastError = String(describing: error)
+        AppLog.error("App", String(describing: error))
     }
 }
 

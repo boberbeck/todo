@@ -2,56 +2,152 @@ import Foundation
 import Security
 import TagwerkCore
 
-/// Geheimnisse (API-Schlüssel) im macOS-Schlüsselbund.
+/// Geheimnisse (API-Schlüssel, Passwort, Tokens) im macOS-Schlüsselbund, alle in **einem** Eintrag
+/// „Tagwerk“ / „zugangsdaten“. Gelesen wird er höchstens einmal pro Start; danach kommt alles aus dem Speicher.
+/// So fragt macOS nach einem Update nur noch einmal statt für jeden Schlüssel einzeln.
+/// Welche Schlüssel es gibt, steht unverschlüsselt im Kommentar des Eintrags; dafür fragt macOS nicht.
 enum Keychain {
     private static let service = "Tagwerk"
-
-    static func set(_ value: String, account: String) {
-        delete(account: account)
-        guard !value.isEmpty else { return }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecValueData as String: Data(value.utf8),
-        ]
-        SecItemAdd(query as CFDictionary, nil)
-    }
+    private static let vaultAccount = "zugangsdaten"
+    /// Frühere einzelne Einträge; werden beim ersten Lesen übernommen und gelöscht.
+    private static let legacyAccounts = ["manageengine", "bydesign", "github-update-token", "remote-mcp-token"]
+    private static let lock = NSLock()
+    private static var cache: [String: String]?
+    private static var cachedNames: Set<String>?
 
     static func get(account: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        lock.lock(); defer { lock.unlock() }
+        return loadIfNeeded()?[account]
+    }
+
+    static func set(_ value: String, account: String) {
+        lock.lock(); defer { lock.unlock() }
+        guard var vault = loadIfNeeded() else {
+            AppLog.warning("Schlüsselbund", "nicht gespeichert, Zugriff verweigert (\(account))")
+            return
+        }
+        if value.isEmpty {
+            vault.removeValue(forKey: account)
+        } else {
+            vault[account] = value
+        }
+        save(vault)
     }
 
     /// Gibt es einen Eintrag? Liest nur die Merkmale, nicht das Geheimnis; macOS fragt dafür nicht nach.
     static func exists(account: String) -> Bool {
-        let query: [String: Any] = [
+        lock.lock(); defer { lock.unlock() }
+        if let cache { return cache[account] != nil }
+        return names().contains(account)
+    }
+
+    static func delete(account: String) {
+        set("", account: account)
+    }
+
+    // MARK: Ein Eintrag für alles
+
+    private static func baseQuery(_ account: String) -> [String: Any] {
+        [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecReturnAttributes as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
         ]
+    }
+
+    /// Namen der gespeicherten Schlüssel, ohne das Geheimnis zu lesen.
+    private static func names() -> Set<String> {
+        if let cachedNames { return cachedNames }
+        var query = baseQuery(vaultAccount)
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess {
+            let comment = (result as? [String: Any])?[kSecAttrComment as String] as? String ?? ""
+            let found = Set(comment.split(separator: ",").map(String.init))
+            cachedNames = found
+            return found
+        }
+        // Noch der alte Aufbau mit einzelnen Einträgen
+        let found = Set(legacyAccounts.filter(legacyExists))
+        cachedNames = found
+        return found
+    }
+
+    /// Liest den Eintrag (einmal pro Start). `nil`, wenn der Zugriff verweigert wurde.
+    private static func loadIfNeeded() -> [String: String]? {
+        if let cache { return cache }
+        var query = baseQuery(vaultAccount)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        switch status {
+        case errSecSuccess:
+            let data = result as? Data ?? Data()
+            let vault = (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+            cache = vault
+            cachedNames = Set(vault.keys)
+            return vault
+        case errSecItemNotFound:
+            // Umzug der einzelnen Einträge in den gemeinsamen
+            var vault: [String: String] = [:]
+            for account in legacyAccounts where legacyExists(account) {
+                if let value = legacyGet(account) { vault[account] = value }
+            }
+            if !vault.isEmpty {
+                save(vault)
+                for account in vault.keys { SecItemDelete(baseQuery(account) as CFDictionary) }
+                AppLog.info("Schlüsselbund", "\(vault.count) Einträge in einen zusammengefasst")
+            } else {
+                cache = [:]
+                cachedNames = []
+            }
+            return vault
+        default:
+            AppLog.warning("Schlüsselbund", "Zugriff nicht möglich (Status \(status))")
+            return nil
+        }
+    }
+
+    private static func save(_ vault: [String: String]) {
+        let data = (try? JSONEncoder().encode(vault)) ?? Data()
+        let comment = vault.keys.sorted().joined(separator: ",")
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrComment as String: comment,
+            kSecAttrLabel as String: "Tagwerk Zugangsdaten",
+        ]
+        var status = SecItemUpdate(baseQuery(vaultAccount) as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            var add = baseQuery(vaultAccount)
+            add.merge(attributes) { _, new in new }
+            status = SecItemAdd(add as CFDictionary, nil)
+        }
+        if status == errSecSuccess {
+            cache = vault
+            cachedNames = Set(vault.keys)
+        } else {
+            AppLog.error("Schlüsselbund", "Speichern fehlgeschlagen (Status \(status))")
+        }
+    }
+
+    private static func legacyExists(_ account: String) -> Bool {
+        var query = baseQuery(account)
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
         return SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess
     }
 
-    static func delete(account: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(query as CFDictionary)
+    private static func legacyGet(_ account: String) -> String? {
+        var query = baseQuery(account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 }
 
@@ -237,13 +333,24 @@ final class ManageEngineClient {
     }
 
     private func send(_ request: URLRequest) async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        // Nur Methode und Pfad ins Protokoll, nie Kopfzeilen (dort steht der Schlüssel)
+        let label = "\(request.httpMethod ?? "GET") \(request.url?.path ?? "?")"
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            AppLog.error("ManageEngine", "\(label): \(error.localizedDescription)")
+            throw error
+        }
         guard let http = response as? HTTPURLResponse else { throw ManageEngineError.unexpectedResponse }
         guard (200..<300).contains(http.statusCode) else {
             let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let message = root.flatMap { ManageEngineAPI.errorMessage(in: $0) } ?? "HTTP \(http.statusCode)"
+            AppLog.warning("ManageEngine", "\(label): HTTP \(http.statusCode) \(message)")
             throw ManageEngineError.server(message)
         }
+        AppLog.info("ManageEngine", "\(label): HTTP \(http.statusCode), \(data.count) Bytes")
         return data
     }
 }

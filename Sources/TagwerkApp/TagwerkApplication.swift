@@ -69,6 +69,7 @@ struct TagwerkCommands: Commands {
                 .keyboardShortcut("t", modifiers: .command)
             Button("Erledigt") { model.completeFocused() }
                 .keyboardShortcut(.return, modifiers: .command)
+            Button("Fehler melden …") { model.showsBugReport = true }
             Button("Zeit nachtragen …") { model.beginTimeEntry(for: model.focusTask?.id) }
                 .keyboardShortcut("t", modifiers: [.command, .option])
             Divider()
@@ -121,6 +122,8 @@ enum Preferences {
     static let bydesignAutoFetchKey = "bydesignAutoFetch"
     /// Updates aus GitHub
     static let updateAutoCheckKey = "updateAutoCheck"
+    /// Zuletzt angebotener Absturzbericht (Dateiname)
+    static let lastSeenCrashKey = "lastSeenCrashReport"
     /// Pomodoro im Fokus
     static let pomodoroEnabledKey = "pomodoroEnabled"
     static let pomodoroWorkKey = "pomodoroWorkMinutes"

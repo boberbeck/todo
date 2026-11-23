@@ -48,6 +48,12 @@ struct RootView: View {
         )) {
             UpdatePromptView()
         }
+        .sheet(isPresented: Binding(
+            get: { model.showsBugReport },
+            set: { if !$0 { model.showsBugReport = false; model.pendingCrash = nil } }
+        )) {
+            BugReportView()
+        }
         .sheet(item: $model.timeEntryDraft) { draft in
             AddTimeSheet(draft: draft)
         }

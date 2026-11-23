@@ -147,6 +147,14 @@ struct GeneralSettings: View {
                         .font(.callout.monospaced())
                         .textSelection(.enabled)
                 }
+                LabeledContent("Probleme") {
+                    HStack(spacing: 8) {
+                        Button("Protokoll zeigen") {
+                            NSWorkspace.shared.activateFileViewerSelecting([AppLog.file])
+                        }
+                        Button("Fehler melden …") { model.showsBugReport = true }
+                    }
+                }
             } header: {
                 Text("Version")
             } footer: {

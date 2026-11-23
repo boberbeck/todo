@@ -149,14 +149,17 @@ final class RemoteAccess {
                 guard let self, self.server === finished else { return }
                 self.server = nil
                 self.serverState = .failed(message.isEmpty ? "Server beendet (Code \(finished.terminationStatus))." : message)
+                AppLog.warning("Fernzugriff", "Server beendet: \(message)")
             }
         }
         do {
             try process.run()
             server = process
             serverState = .running
+            AppLog.info("Fernzugriff", "Server gestartet auf Port \(port)")
         } catch {
             serverState = .failed("Startet nicht: \(error.localizedDescription)")
+            AppLog.error("Fernzugriff", "Server startet nicht: \(error.localizedDescription)")
         }
     }
 
@@ -182,6 +185,7 @@ final class RemoteAccess {
                 self.tunnel = nil
                 let last = self.tunnelOutput.split(separator: "\n").suffix(3).joined(separator: " ")
                 self.tunnelState = .failed(last.isEmpty ? "Tunnel beendet (Code \(finished.terminationStatus))." : last)
+                AppLog.warning("Fernzugriff", "Tunnel beendet: \(last)")
             }
         }
         do {
