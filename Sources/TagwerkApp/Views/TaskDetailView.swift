@@ -48,7 +48,7 @@ struct TaskDetailView: View {
                     Section {
                         LabeledContent("Teil von") {
                             Button(parent.title) { model.openDetail(parent.id) }
-                                .buttonStyle(.link)
+                                .buttonStyle(.borderless).foregroundStyle(Theme.accent)
                         }
                     }
                 }
@@ -116,7 +116,7 @@ struct TaskDetailView: View {
                                 .lineLimit(2)
                                 .multilineTextAlignment(.trailing)
                         }
-                        .buttonStyle(.link)
+                        .buttonStyle(.borderless).foregroundStyle(Theme.accent)
                         .popover(isPresented: $showsSAPPicker, arrowEdge: .bottom) {
                             SAPTaskPicker(selectedCode: task.pspElement, selectedActivity: task.sapActivity) { psp, customCode in
                                 if let psp {
@@ -150,7 +150,7 @@ struct TaskDetailView: View {
                                     .lineLimit(2)
                                     .multilineTextAlignment(.trailing)
                             }
-                            .buttonStyle(.link)
+                            .buttonStyle(.borderless).foregroundStyle(Theme.accent)
                             .popover(isPresented: $showsTicketPicker, arrowEdge: .bottom) {
                                 TicketPicker(taskID: task.id) { showsTicketPicker = false }
                             }
