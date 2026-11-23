@@ -78,6 +78,9 @@ struct RootView: View {
         .sheet(item: $model.timeEntryDraft) { draft in
             AddTimeSheet(draft: draft)
         }
+        .sheet(item: $model.editingEntry) { entry in
+            EditEntrySheet(entry: entry)
+        }
         .sheet(isPresented: Binding(
             get: { model.ticketPickerTaskID != nil },
             set: { if !$0 { model.ticketPickerTaskID = nil } }

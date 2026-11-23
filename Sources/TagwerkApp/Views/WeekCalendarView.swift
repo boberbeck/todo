@@ -1,7 +1,9 @@
+import AppKit
 import SwiftUI
 import TagwerkCore
 
-/// Kalender: die Woche mit Terminen, Zeitblöcken und erfasster Zeit. Doppelklick trägt Zeit nach.
+/// Kalender: die Woche mit Terminen, Zeitblöcken und erfasster Zeit. Doppelklick in eine freie Stelle trägt Zeit nach,
+/// erfasste Einträge lassen sich ziehen und per Doppelklick bearbeiten.
 struct WeekCalendarView: View {
     @Environment(AppModel.self) private var model
     @AppStorage(Preferences.calendarHourHeightKey) private var zoom = Preferences.defaultHourHeight
@@ -204,12 +206,9 @@ struct DayTimeline: View {
             }
 
             ForEach(model.dayEntries(day)) { entry in
-                let top = max(0, y(entry.start))
-                let bottom = min(total, y(entry.end ?? model.now))
-                EntryBlock(entry: entry, height: max(4, bottom - top))
+                EntryBlock(entry: entry, dayStart: dayStart, hourHeight: hourHeight, dayHeight: total)
                     .padding(.leading, 18)
                     .padding(.trailing, 3)
-                    .offset(y: top)
             }
 
             if isToday {
@@ -243,15 +242,41 @@ struct DayTimeline: View {
     }
 }
 
-/// Erfasste Zeit als Block in der Farbe des Kunden.
+/// Erfasste Zeit als Block in der Farbe des Kunden. Ziehen verschiebt den Eintrag, die obere und untere Kante
+/// ändern Beginn und Ende (auf fünf Minuten gerastet, ohne andere Einträge zu überlappen), Doppelklick öffnet „Zeit bearbeiten“.
 struct EntryBlock: View {
     @Environment(AppModel.self) private var model
     let entry: TimeEntry
-    let height: CGFloat
+    let dayStart: Date
+    let hourHeight: CGFloat
+    let dayHeight: CGFloat
+
+    @State private var drag: EntryDrag?
+    @State private var delta: TimeInterval = 0
+    @State private var neighbours: [TimeEntry] = []
+    @State private var cursorPushed = false
+
+    private var isRunning: Bool { entry.end == nil }
+
+    /// Zeiten, wie sie gerade aussehen (während des Ziehens die neuen).
+    private var shown: (start: Date, end: Date?) {
+        guard let drag else { return (entry.start, entry.end) }
+        return EntryEditing.dragged(entry, drag, by: delta, others: neighbours, now: model.now)
+    }
+
+    private func y(_ date: Date) -> CGFloat {
+        CGFloat(date.timeIntervalSince(dayStart) / 3600) * hourHeight
+    }
 
     var body: some View {
+        let times = shown
+        let top = max(0, y(times.start))
+        let bottom = min(dayHeight, y(times.end ?? model.now))
+        let height = max(4, bottom - top)
         let task = model.task(entry.taskID)
         let color = model.customer(task?.customerID).map { CustomerPalette.color($0.colorIndex) } ?? Theme.accent
+        let handleHeight = min(7, height / 4)
+
         HStack(spacing: 0) {
             Rectangle().fill(color).frame(width: 3)
             if height > 18 {
@@ -260,7 +285,7 @@ struct EntryBlock: View {
                         .font(.caption.weight(.semibold))
                         .lineLimit(height > 40 ? 2 : 1)
                     if height > 34 {
-                        Text(timeRange)
+                        Text(timeRange(times))
                             .font(.caption2.monospacedDigit())
                             .foregroundStyle(Theme.secondary)
                     }
@@ -272,21 +297,104 @@ struct EntryBlock: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(height: height, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 4).fill(color.opacity(0.22)))
+        .background(RoundedRectangle(cornerRadius: 4).fill(color.opacity(drag == nil ? 0.22 : 0.4)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(color, lineWidth: drag == nil ? 0 : 1.5)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 4))
-        .help("\(task?.title ?? "Erfasst") · \(timeRange)")
+        .contentShape(Rectangle())
+        // Kanten zum Ziehen: oben der Beginn, unten das Ende (beim laufenden Timer nur der Beginn)
+        .overlay(alignment: .top) {
+            edgeHandle(.start, height: handleHeight)
+        }
+        .overlay(alignment: .bottom) {
+            if !isRunning {
+                edgeHandle(.end, height: handleHeight)
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if drag != nil {
+                Text(badge(times))
+                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Theme.surface))
+                    .overlay(Capsule().strokeBorder(color))
+                    .fixedSize()
+                    .offset(y: -20)
+                    .allowsHitTesting(false)
+            }
+        }
+        .offset(y: top)
+        .gesture(dragGesture(.move), including: isRunning ? .subviews : .all)
+        .onTapGesture(count: 2) {
+            model.editingEntry = entry
+        }
+        .help("\(task?.title ?? "Erfasst") · \(timeRange(times))\nZiehen verschiebt, die Kanten ändern Beginn und Ende, Doppelklick bearbeitet")
         .contextMenu {
+            Button("Zeit bearbeiten …") { model.editingEntry = entry }
             if let task {
+                Button("Aufgabe öffnen …") { model.openDetail(task.id) }
                 Button("Im Fokus öffnen") { model.openFocus(task.id) }
             }
+            Divider()
             Button("Eintrag löschen", role: .destructive) { model.deleteEntry(entry.id) }
-                .disabled(entry.end == nil)
+                .disabled(isRunning)
         }
     }
 
-    private var timeRange: String {
-        let end = entry.end.map { $0.formatted(date: .omitted, time: .shortened) } ?? "läuft"
-        return "\(entry.start.formatted(date: .omitted, time: .shortened))–\(end)"
+    private func edgeHandle(_ kind: EntryDrag, height: CGFloat) -> some View {
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside, !cursorPushed {
+                    NSCursor.resizeUpDown.push()
+                    cursorPushed = true
+                } else if !inside, cursorPushed, drag == nil {
+                    NSCursor.pop()
+                    cursorPushed = false
+                }
+            }
+            .gesture(dragGesture(kind))
+    }
+
+    /// Fenster-Koordinaten, damit das Mitwandern des Blocks die Bewegung nicht verfälscht.
+    private func dragGesture(_ kind: EntryDrag) -> some Gesture {
+        DragGesture(minimumDistance: 3, coordinateSpace: .global)
+            .onChanged { value in
+                if drag == nil {
+                    neighbours = model.entriesAround(entry)
+                    drag = kind
+                }
+                delta = Double(value.translation.height / hourHeight) * 3600
+            }
+            .onEnded { value in
+                let moved = Double(value.translation.height / hourHeight) * 3600
+                let result = EntryEditing.dragged(entry, kind, by: moved, others: neighbours, now: model.now)
+                drag = nil
+                delta = 0
+                if cursorPushed {
+                    NSCursor.pop()
+                    cursorPushed = false
+                }
+                model.updateEntry(entry.id, start: result.start, end: result.end)
+            }
+    }
+
+    private func clock(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
+    }
+
+    private func timeRange(_ times: (start: Date, end: Date?)) -> String {
+        "\(clock(times.start))–\(times.end.map { clock($0) } ?? "läuft")"
+    }
+
+    private func badge(_ times: (start: Date, end: Date?)) -> String {
+        let minutes = Int(((times.end ?? model.now).timeIntervalSince(times.start) / 60).rounded())
+        return "\(timeRange(times)) · \(TimeMath.format(minutes: minutes)) h"
     }
 }
 

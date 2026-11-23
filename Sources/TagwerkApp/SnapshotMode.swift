@@ -102,6 +102,17 @@ enum SnapshotMode {
             try? await Task.sleep(for: .seconds(0.8))
         }
 
+        // Erfasste Zeit im Kalender bearbeiten
+        if let entry = model.entriesToday.first(where: { $0.end != nil }) {
+            model.selection = .calendar
+            try? await Task.sleep(for: .seconds(1))
+            model.editingEntry = entry
+            try? await Task.sleep(for: .seconds(1.5))
+            await capture(window.attachedSheet ?? window, name: "zeit-bearbeiten", in: directory)
+            model.editingEntry = nil
+            try? await Task.sleep(for: .seconds(0.8))
+        }
+
         // ganzer Bildschirm mit Menüleisten-Uhr
         model.selection = .today
         try? await Task.sleep(for: .seconds(1))

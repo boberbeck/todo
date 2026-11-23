@@ -182,9 +182,18 @@ struct CalendarColumn: View {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Theme.accent.opacity(0.75))
                     .frame(width: 4, height: max(3, y(entry.end ?? model.now) - top))
-                    .padding(.leading, labelWidth - 3)
+                    // breiter treffbar als sichtbar
+                    .frame(width: 12)
+                    .contentShape(Rectangle())
+                    .padding(.leading, labelWidth - 7)
                     .offset(y: top)
-                    .help("Erfasst")
+                    .onTapGesture(count: 2) { model.editingEntry = entry }
+                    .contextMenu {
+                        Button("Zeit bearbeiten …") { model.editingEntry = entry }
+                        Button("Eintrag löschen", role: .destructive) { model.deleteEntry(entry.id) }
+                            .disabled(entry.end == nil)
+                    }
+                    .help("Erfasst \(entry.start.formatted(date: .omitted, time: .shortened))–\(entry.end?.formatted(date: .omitted, time: .shortened) ?? "läuft") · Doppelklick bearbeitet")
             }
 
             ForEach(model.scheduledToday) { task in

@@ -70,6 +70,8 @@ final class AppModel {
     var ticketPickerTaskID: UUID?
     /// Offenes Fenster „Zeit nachtragen“ (von überall aus der App).
     var timeEntryDraft: TimeEntryDraft?
+    /// Erfasster Eintrag, der gerade im Fenster „Zeit bearbeiten“ offen ist (Doppelklick im Kalender).
+    var editingEntry: TimeEntry?
     /// Fenster „Fehler melden“
     var showsBugReport = false
     /// Aufgabe, die im Aufgabenfenster offen ist (Doppelklick)
@@ -1105,6 +1107,31 @@ final class AppModel {
         } catch {
             report(error)
         }
+    }
+
+    /// Ändert Beginn, Ende oder Aufgabe eines erfassten Eintrags (Kalender: ziehen oder „Zeit bearbeiten“).
+    /// Ein laufender Eintrag bleibt laufend; nur sein Beginn ändert sich.
+    func updateEntry(_ id: UUID, start: Date, end: Date?, taskID: UUID? = nil) {
+        guard var entry = entries.first(where: { $0.id == id }) else { return }
+        if let end, entry.end != nil, end <= start { return }
+        let before = entry
+        entry.start = start
+        if entry.end != nil, let end { entry.end = end }
+        if let taskID { entry.taskID = taskID }
+        guard entry != before else { return }
+        do {
+            try store.save(entry)
+            replace(entry)
+            let clock = { (date: Date?) in date?.formatted(date: .omitted, time: .shortened) ?? "läuft" }
+            AppLog.info("Zeit", "Eintrag geändert: \(clock(before.start))–\(clock(before.end)) → \(clock(entry.start))–\(clock(entry.end))")
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Andere erfasste Einträge rund um den Tag eines Eintrags (für Überschneidungen beim Ziehen).
+    func entriesAround(_ entry: TimeEntry) -> [TimeEntry] {
+        dayEntries(LocalDate(entry.start))
     }
 
     func deleteEntry(_ id: UUID) {
