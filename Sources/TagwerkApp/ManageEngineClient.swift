@@ -117,12 +117,26 @@ enum Keychain {
     private static func adoptForFixedSignature(_ vault: [String: String]) {
         let flag = "keychainAdoptedForFixedSignature"
         guard SigningSetup.isFixed, !UserDefaults.standard.bool(forKey: flag) else { return }
-        SecItemDelete(baseQuery(vaultAccount) as CFDictionary)
-        save(vault)
-        if cache != nil {
-            UserDefaults.standard.set(true, forKey: flag)
-            AppLog.info("Schlüsselbund", "Eintrag für die feste Signatur neu angelegt")
+        // Erst den neuen Eintrag anlegen, dann den alten löschen und den neuen umbenennen:
+        // so geht nichts verloren, falls ein Schritt scheitert.
+        let staging = vaultAccount + "-neu"
+        SecItemDelete(baseQuery(staging) as CFDictionary)
+        var add = baseQuery(staging)
+        add[kSecValueData as String] = (try? JSONEncoder().encode(vault)) ?? Data()
+        add[kSecAttrComment as String] = vault.keys.sorted().joined(separator: ",")
+        add[kSecAttrLabel as String] = "Tagwerk Zugangsdaten"
+        guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else {
+            AppLog.warning("Schlüsselbund", "Neuanlage für die feste Signatur fehlgeschlagen, alter Eintrag bleibt")
+            return
         }
+        guard SecItemDelete(baseQuery(vaultAccount) as CFDictionary) == errSecSuccess,
+              SecItemUpdate(baseQuery(staging) as CFDictionary, [kSecAttrAccount as String: vaultAccount] as CFDictionary) == errSecSuccess else {
+            SecItemDelete(baseQuery(staging) as CFDictionary)
+            AppLog.warning("Schlüsselbund", "Umstellung auf die feste Signatur nicht möglich, alter Eintrag bleibt")
+            return
+        }
+        UserDefaults.standard.set(true, forKey: flag)
+        AppLog.info("Schlüsselbund", "Eintrag für die feste Signatur neu angelegt")
     }
 
     private static func save(_ vault: [String: String]) {
