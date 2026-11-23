@@ -72,7 +72,12 @@ final class Updater {
         defer { isChecking = false }
         lastCheck = Date()
         do {
-            let data = try await Self.send(ReleaseCheck.releaseRequest(repository: Self.repository, tag: Self.tag, token: token))
+            let data: Data
+            do {
+                data = try await Self.send(ReleaseCheck.releaseRequest(repository: Self.repository, tag: Self.tag, token: token))
+            } catch let error as UpdateError where error.status == 404 {
+                throw await diagnoseNotFound(token: token)
+            }
             let release = try ReleaseCheck.parseRelease(data)
             guard release.isNewer(thanBuild: currentBuild) else {
                 available = nil
@@ -187,16 +192,30 @@ final class Updater {
 
     struct UpdateError: Error, CustomStringConvertible {
         let description: String
-        init(_ description: String) { self.description = description }
+        var status: Int = 0
+        init(_ description: String, status: Int = 0) {
+            self.description = description
+            self.status = status
+        }
+    }
+
+    /// GitHub meldet bei fehlenden Rechten „nicht gefunden“. Welches Recht fehlt, zeigt die Abfrage des Repositorys.
+    private func diagnoseNotFound(token: String) async -> UpdateError {
+        do {
+            _ = try await Self.send(ReleaseCheck.repositoryRequest(repository: Self.repository, token: token))
+            return UpdateError("Der Schlüssel sieht das Repository, darf aber keine Releases lesen. Bei GitHub den Schlüssel öffnen › Permissions › Repository permissions › „Contents“ auf „Read-only“ stellen und speichern. (Selten: das Release wird gerade neu gebaut, dann in ein paar Minuten noch einmal prüfen.)")
+        } catch {
+            return UpdateError("Der Schlüssel sieht das Repository \(Self.repository) nicht. Bei GitHub den Schlüssel öffnen › Repository access › „Only select repositories“ › \(Self.repository) auswählen und speichern; außerdem „Contents: Read-only“.")
+        }
     }
 
     private static func send(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            if status == 401 { throw UpdateError("Der GitHub-Schlüssel gilt nicht (mehr).") }
-            if status == 404 { throw UpdateError("Release nicht gefunden oder der Schlüssel darf das Repository nicht lesen.") }
-            throw UpdateError("GitHub antwortet mit HTTP \(status).")
+            if status == 401 { throw UpdateError("Der GitHub-Schlüssel gilt nicht (mehr). Neu anlegen und hier eintragen.", status: 401) }
+            if status == 404 { throw UpdateError("Release nicht gefunden oder der Schlüssel darf das Repository nicht lesen.", status: 404) }
+            throw UpdateError("GitHub antwortet mit HTTP \(status).", status: status)
         }
         return data
     }

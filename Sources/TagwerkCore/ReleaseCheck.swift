@@ -27,6 +27,11 @@ public enum ReleaseCheck {
         request(path: "/repos/\(repository)/releases/tags/\(tag)", token: token)
     }
 
+    /// Das Repository selbst (um zu prüfen, ob der Schlüssel es überhaupt sieht).
+    public static func repositoryRequest(repository: String, token: String) -> URLRequest {
+        request(path: "/repos/\(repository)", token: token)
+    }
+
     /// Commits zwischen der laufenden und der neuen Fassung (für „Was ist neu“).
     public static func compareRequest(repository: String, base: String, head: String, token: String) -> URLRequest {
         request(path: "/repos/\(repository)/compare/\(base)...\(head)", token: token)

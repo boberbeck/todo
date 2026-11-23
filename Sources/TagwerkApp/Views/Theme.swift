@@ -335,6 +335,7 @@ struct TaskCard: View {
                     if !task.isDone, running || hovering {
                         HStack(spacing: 6) {
                             if hovering {
+                                OpenDetailButton(task: task)
                                 AddSubtaskButton(task: task)
                             }
                             Button {

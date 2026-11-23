@@ -338,6 +338,7 @@ struct TaskBlock: View {
             model.openFocus(task.id)
         }
         .contextMenu {
+            Button("Öffnen …") { model.openDetail(task.id) }
             Button("Im Fokus öffnen") { model.openFocus(task.id) }
             Button("Zeitblock entfernen") { model.schedule(task.id, at: nil) }
         }

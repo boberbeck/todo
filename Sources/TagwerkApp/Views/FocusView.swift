@@ -184,9 +184,21 @@ struct FocusTaskPane: View {
             BackdatedStartMenu(task: task, asButton: true)
 
             if !task.isSubtask, !task.isDone, !model.subtasks(of: task.id).isEmpty || showsSubtaskField {
-                SubtaskList(parent: task)
-                    .frame(maxWidth: 520)
-                    .card(padding: 10)
+                VStack(alignment: .trailing, spacing: 6) {
+                    SubtaskList(parent: task)
+                        .frame(maxWidth: 560)
+                        .card(padding: 10)
+                    Button {
+                        model.openDetail(task.id)
+                    } label: {
+                        Label("Aufgabe öffnen", systemImage: "info.circle")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.tertiary)
+                    .help("Alle Angaben, Unteraufgaben und Zeiten in einem Fenster")
+                }
+                .frame(maxWidth: 580)
             } else if !task.isSubtask, !task.isDone {
                 Button {
                     showsSubtaskField = true

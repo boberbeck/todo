@@ -54,6 +54,9 @@ struct SubtaskRow: View {
 
     @State private var hovering = false
     @State private var showsTicketPicker = false
+    @State private var isEditing = false
+    @State private var draft = ""
+    @FocusState private var editorFocused: Bool
 
     var body: some View {
         let running = model.isRunning(task.id)
@@ -69,11 +72,23 @@ struct SubtaskRow: View {
             .buttonStyle(.plain)
             .help(task.isDone ? "Wieder öffnen" : "Erledigt")
 
-            Text(task.title)
-                .font(.callout)
-                .foregroundStyle(task.isDone ? Theme.secondary : Theme.text)
-                .strikethrough(task.isDone, color: Theme.tertiary)
-                .lineLimit(2)
+            if isEditing {
+                TextField("Unteraufgabe", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.callout)
+                    .focused($editorFocused)
+                    .onSubmit { commitRename() }
+                    .onExitCommand { isEditing = false }
+                    .onChange(of: editorFocused) { if !editorFocused, isEditing { commitRename() } }
+            } else {
+                Text(task.title)
+                    .font(.callout)
+                    .foregroundStyle(task.isDone ? Theme.secondary : Theme.text)
+                    .strikethrough(task.isDone, color: Theme.tertiary)
+                    .lineLimit(2)
+                    .onTapGesture(count: 2) { beginRename() }
+                    .help("Doppelklick zum Umbenennen")
+            }
 
             if let number = task.ticketNumber, number != model.parent(of: task)?.linkedTicketNumber {
                 Text("#\(number)")
@@ -122,8 +137,41 @@ struct SubtaskRow: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(running ? Theme.accentSoft : (hovering ? Color.white.opacity(0.04) : .clear)))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .onTapGesture(count: 2) { model.openFocus(task.id) }
-        .contextMenu { TaskContextMenu(task: task) }
+        .contextMenu {
+            Button("Umbenennen") { beginRename() }
+            TaskContextMenu(task: task)
+        }
+    }
+
+    private func beginRename() {
+        draft = task.title
+        isEditing = true
+        DispatchQueue.main.async { editorFocused = true }
+    }
+
+    private func commitRename() {
+        model.setTitle(draft, for: task.id)
+        isEditing = false
+    }
+}
+
+/// Kleiner Knopf, der das Aufgabenfenster mit allen Angaben öffnet.
+struct OpenDetailButton: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+
+    var body: some View {
+        Button {
+            model.openDetail(task.id)
+        } label: {
+            Image(systemName: "info")
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Color.white.opacity(0.08)))
+                .foregroundStyle(Theme.text)
+        }
+        .buttonStyle(.plain)
+        .help("Aufgabe öffnen: alle Angaben, Unteraufgaben und Zeiten")
     }
 }
 

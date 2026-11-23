@@ -72,6 +72,8 @@ final class AppModel {
     var timeEntryDraft: TimeEntryDraft?
     /// Fenster „Fehler melden“
     var showsBugReport = false
+    /// Aufgabe, die im Aufgabenfenster offen ist (Doppelklick)
+    var detailTaskID: UUID?
     /// Absturzbericht von macOS seit dem letzten Start, noch nicht gemeldet
     var pendingCrash: URL?
     var lastError: String?
@@ -398,6 +400,29 @@ final class AppModel {
         if let psp = psp(for: task) { return psp.label }
         if let activity = effective.sapActivity, !activity.isEmpty { return "\(code) · \(activity)" }
         return code
+    }
+
+    /// Öffnet das Aufgabenfenster mit allen Angaben (Doppelklick auf eine Aufgabe).
+    func openDetail(_ id: UUID) {
+        detailTaskID = id
+    }
+
+    func setTitle(_ text: String, for id: UUID) {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, var task = self.task(id), task.title != clean else { return }
+        task.title = clean
+        persist(task)
+    }
+
+    func setNotes(_ text: String, for id: UUID) {
+        guard var task = self.task(id), task.notes != text else { return }
+        task.notes = text
+        persist(task)
+    }
+
+    /// Zeiteinträge einer Aufgabe, neueste zuerst.
+    func entries(forTask id: UUID) -> [TimeEntry] {
+        entries.filter { $0.taskID == id }.sorted { $0.start > $1.start }
     }
 
     func setDescription(_ text: String, for id: UUID) {

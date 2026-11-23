@@ -93,6 +93,7 @@ struct TaskContextMenu: View {
     let task: TaskItem
 
     var body: some View {
+        Button("Öffnen …") { model.openDetail(task.id) }
         Button("Im Fokus öffnen") { model.openFocus(task.id) }
         if !task.isDone {
             Button(task.isSubtask ? "Weitere Unteraufgabe" : "Unteraufgabe hinzufügen") { model.beginSubtaskEntry(for: task.id) }

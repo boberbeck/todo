@@ -54,6 +54,14 @@ struct RootView: View {
         )) {
             BugReportView()
         }
+        .sheet(isPresented: Binding(
+            get: { model.detailTaskID != nil },
+            set: { if !$0 { model.detailTaskID = nil } }
+        )) {
+            if let id = model.detailTaskID {
+                TaskDetailView(taskID: id)
+            }
+        }
         .sheet(item: $model.timeEntryDraft) { draft in
             AddTimeSheet(draft: draft)
         }

@@ -92,6 +92,16 @@ enum SnapshotMode {
         await capture(window, name: "fokus-pause", in: directory)
         model.pomodoro = nil
 
+        // Aufgabenfenster mit Unteraufgaben
+        if let offer = model.todayTasks.first(where: { !model.subtasks(of: $0.id).isEmpty && $0.title.hasPrefix("Angebot") }) {
+            model.selection = .today
+            model.detailTaskID = offer.id
+            try? await Task.sleep(for: .seconds(1.5))
+            await capture(window.attachedSheet ?? window, name: "aufgabe", in: directory)
+            model.detailTaskID = nil
+            try? await Task.sleep(for: .seconds(0.8))
+        }
+
         // ganzer Bildschirm mit Menüleisten-Uhr
         model.selection = .today
         try? await Task.sleep(for: .seconds(1))

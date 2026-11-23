@@ -287,6 +287,7 @@ struct InboxRow: View {
             }
             Spacer(minLength: 8)
             if hovering {
+                OpenDetailButton(task: task)
                 AddSubtaskButton(task: task)
             }
             Button {
