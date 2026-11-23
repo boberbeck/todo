@@ -50,31 +50,14 @@ struct CustomersView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .fixedSize()
+                    // Auswahl ist keine Hauptaktion: nicht in Orange
+                    .tint(Theme.surfaceRaised)
                     Spacer()
                 }
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16)], spacing: 16) {
                     ForEach(shown) { customer in
                         CustomerCard(customer: customer)
-                    }
-                    if !showsArchived {
-                        Button {
-                            showsNewCustomer = true
-                        } label: {
-                            VStack(spacing: 8) {
-                                Image(systemName: "plus")
-                                    .font(.title2)
-                                Text("Neuer Kunde")
-                            }
-                            .foregroundStyle(Theme.secondary)
-                            .frame(maxWidth: .infinity, minHeight: 190)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .strokeBorder(Theme.borderStrong, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                            )
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -191,14 +174,7 @@ struct CustomerCard: View {
             }
             .padding(22)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 14).fill(hovering ? Theme.surfaceRaised : Theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.border))
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(color.opacity(0.7))
-                    .frame(height: 2)
-                    .padding(.horizontal, 22)
-            }
+            .surface(fill: hovering ? Theme.surfaceRaised : Theme.surface)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
