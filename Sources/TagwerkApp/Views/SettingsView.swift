@@ -291,6 +291,27 @@ struct FocusSettings: View {
                             .disabled(RadioStation.custom(customStream) == nil)
                         }
                     }
+                case .soundscape:
+                    Picker("Stimmung", selection: Binding(
+                        get: { music.soundscapeSettings.mode },
+                        set: { music.soundscapeSettings.mode = $0 }
+                    )) {
+                        ForEach(SoundscapeMode.allCases) { mode in
+                            Text("\(mode.label) · \(mode.detail)").tag(mode)
+                        }
+                    }
+                    Toggle("An die Tageszeit anpassen", isOn: Binding(
+                        get: { music.soundscapeSettings.adaptToTime },
+                        set: { music.soundscapeSettings.adaptToTime = $0 }
+                    ))
+                    Toggle("An dein Tippen anpassen", isOn: Binding(
+                        get: { music.soundscapeSettings.adaptToActivity },
+                        set: { music.soundscapeSettings.adaptToActivity = $0 }
+                    ))
+                    LabeledContent("Gerade") {
+                        Text(music.currentMood().description)
+                            .foregroundStyle(Theme.secondary)
+                    }
                 case .youtube:
                     LabeledContent("Link") {
                         TextField("https://www.youtube.com/watch?v=…", text: Binding(
@@ -347,6 +368,8 @@ struct FocusSettings: View {
                     SettingsFootnote("Tagwerk steuert die Musik-App von macOS (Apple Music). Beim ersten Mal fragt macOS, ob Tagwerk die Musik-App steuern darf. Die Playlist wählst du auch direkt im Fokus über das Notensymbol.")
                 case .radio:
                     SettingsFootnote("Die Sender kommen von SomaFM (hörerfinanziert) und Radio Swiss Classic, werbefrei und überwiegend ohne Gesang. Eigene Adressen: direkte MP3- oder AAC-Streams. Die Pomodoro-Pause hält das Radio an, danach geht es live weiter.")
+                case .soundscape:
+                    SettingsFootnote("Tagwerk erzeugt die Klangwelt selbst, endlos und offline: ein warmer Klangteppich, vereinzelte Glockentöne aus derselben Tonleiter und leises Rauschen wie fernes Wasser, ohne Gesang. Morgens heller und lebendiger, abends tiefer, langsamer und in Moll. Tippst du, bleibt sie lebendig; liest oder denkst du länger, wird sie ruhiger. Die Fokus-Frequenz lässt sich darunterlegen.")
                 case .youtube:
                     SettingsFootnote("YouTube spielt mit dem offiziellen Player im Fokus. Das Bild bleibt klein sichtbar, ohne YouTube-Bedienleiste; nur Ton erlaubt YouTube bei eingebetteten Videos nicht. Verlässt du den Fokus, hält das Video an. Werbung ist möglich, und manche Kanäle erlauben kein Abspielen außerhalb von YouTube. Nur Ton: Internetradio oder Apple Music.")
                 }

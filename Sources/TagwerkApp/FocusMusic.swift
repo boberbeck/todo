@@ -23,10 +23,46 @@ final class FocusMusic {
     static let youtubeLinkKey = "focusMusicYouTubeLink"
     static let youtubeHistoryKey = "focusMusicYouTubeHistory"
     static let toneKey = "focusToneSettings"
+    static let soundscapeKey = "focusSoundscapeSettings"
 
     let radio = RadioPlayer()
     let youtube = YouTubePlayer()
     let tones = ToneGenerator()
+    let soundscape = SoundscapePlayer()
+
+    /// Klangwelt: Stimmung und ob sie sich an Tageszeit und Tippen anpasst.
+    var soundscapeSettings: SoundscapeSettings = FocusMusic.storedSoundscapeSettings() {
+        didSet {
+            let data = try? JSONEncoder().encode(soundscapeSettings)
+            UserDefaults.standard.set(data, forKey: Self.soundscapeKey)
+            if source == .soundscape, state == .playing {
+                // gleich übernehmen, nicht erst beim nächsten Durchgang
+                soundscape.start()
+            }
+        }
+    }
+
+    private static func storedSoundscapeSettings() -> SoundscapeSettings {
+        guard let data = UserDefaults.standard.data(forKey: soundscapeKey),
+              let settings = try? JSONDecoder().decode(SoundscapeSettings.self, from: data) else { return SoundscapeSettings() }
+        return settings
+    }
+
+    /// Aktuelle Stimmung der Klangwelt aus Tageszeit und Tipp-Aktivität.
+    func currentMood(now: Date = Date()) -> SoundscapeMood {
+        let hour = Calendar.current.component(.hour, from: now)
+        // Tipp-Aktivität: eben getippt = 1, zwei Minuten Ruhe = 0
+        let idle = IdleMonitor.secondsSinceLastInput()
+        let activity = max(0, min(1, 1 - idle / 120))
+        return Soundscape.mood(mode: soundscapeSettings.mode, hour: hour, activity: activity, settings: soundscapeSettings)
+    }
+
+    func chooseSoundscape(_ mode: SoundscapeMode) {
+        let wasPlaying = state == .playing
+        soundscapeSettings.mode = mode
+        source = .soundscape
+        if wasPlaying || state == .playing { startMusic() }
+    }
 
     /// Fokus-Frequenz unter der Musik (oder allein).
     var toneSettings: FocusToneSettings = FocusMusic.storedToneSettings() {
@@ -183,6 +219,7 @@ final class FocusMusic {
         case .appleMusic: return selectedPlaylist != nil
         case .radio: return radioStation != nil
         case .youtube: return youtubeLink != nil
+        case .soundscape: return true
         }
     }
 
@@ -192,6 +229,7 @@ final class FocusMusic {
         case .appleMusic: return selectedPlaylist
         case .radio: return radioStation?.name
         case .youtube: return youtubeLink == nil ? nil : "YouTube"
+        case .soundscape: return "Klangwelt · \(soundscapeSettings.mode.label)"
         }
     }
 
@@ -199,6 +237,14 @@ final class FocusMusic {
         radio.onChange = { [weak self] playing, title, problem in
             guard let self, self.source == .radio else { return }
             self.update(playing: playing, title: title ?? self.radioStation?.name, subtitle: title == nil ? "Internetradio" : self.radioStation?.name, problem: problem)
+        }
+        soundscape.moodProvider = { [weak self] in
+            guard let self else { return Soundscape.mood(mode: .focus, hour: 14, activity: 0.5, settings: SoundscapeSettings()) }
+            let mood = self.currentMood()
+            if self.source == .soundscape, self.state == .playing {
+                self.trackArtist = mood.description
+            }
+            return mood
         }
         youtube.onChange = { [weak self] playing, title, problem in
             guard let self, self.source == .youtube else { return }
@@ -250,6 +296,7 @@ final class FocusMusic {
         case .appleMusic: selectedPlaylist = nil
         case .radio: radioStation = nil
         case .youtube: youtubeLinkText = ""
+        case .soundscape: source = .appleMusic
         }
         state = .stopped
         trackTitle = nil
@@ -267,6 +314,8 @@ final class FocusMusic {
             radio.stop()
         case .youtube:
             youtube.pause()
+        case .soundscape:
+            soundscape.pause()
         }
     }
 
@@ -317,6 +366,10 @@ final class FocusMusic {
             startedByTagwerk = true
             youtubeHistory = YouTubeHistory.adding(youtubeLinkText, at: Date(), to: youtubeHistory)
             youtube.play(link)
+        case .soundscape:
+            startedByTagwerk = true
+            soundscape.start()
+            update(playing: soundscape.isPlaying, title: selectionName, subtitle: currentMood().description, problem: soundscape.isPlaying ? nil : "Die Klangwelt konnte nicht starten.")
         }
     }
 
@@ -366,7 +419,7 @@ final class FocusMusic {
     }
 
     /// Nächster Titel; beim Radio nicht möglich, bei YouTube das nächste Video der Playlist.
-    var canSkip: Bool { source != .radio }
+    var canSkip: Bool { source == .appleMusic || source == .youtube }
 
     func nextTrack() {
         guard !isDemo else { return }
@@ -394,6 +447,10 @@ final class FocusMusic {
             return
         case .youtube:
             youtube.pause()
+            return
+        case .soundscape:
+            soundscape.pause()
+            update(playing: false, title: selectionName, subtitle: trackArtist, problem: nil)
             return
         case .appleMusic:
             // Ohne gewählte Playlist nicht in fremde Musik eingreifen

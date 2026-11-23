@@ -8,6 +8,8 @@ public enum MusicSource: String, Codable, CaseIterable, Sendable, Identifiable {
     case radio
     /// YouTube-Video, -Playlist oder -Livestream mit kleinem Player im Fokus
     case youtube
+    /// Klangwelt, die Tagwerk selbst erzeugt und an Tageszeit und Tippen anpasst
+    case soundscape
 
     public var id: String { rawValue }
 
@@ -16,6 +18,7 @@ public enum MusicSource: String, Codable, CaseIterable, Sendable, Identifiable {
         case .appleMusic: return "Apple Music"
         case .radio: return "Internetradio"
         case .youtube: return "YouTube"
+        case .soundscape: return "Klangwelt"
         }
     }
 }

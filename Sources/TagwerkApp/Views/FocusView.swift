@@ -346,6 +346,19 @@ struct FocusMusicBar: View {
             Spacer(minLength: 8)
 
             Menu {
+                Section("Klangwelt · erzeugt von Tagwerk") {
+                    ForEach(SoundscapeMode.allCases) { mode in
+                        Button {
+                            music.chooseSoundscape(mode)
+                        } label: {
+                            if music.source == .soundscape, music.soundscapeSettings.mode == mode {
+                                Label("\(mode.label) · \(mode.detail)", systemImage: "checkmark")
+                            } else {
+                                Text("\(mode.label) · \(mode.detail)")
+                            }
+                        }
+                    }
+                }
                 Section("Apple Music") {
                     if music.playlists.isEmpty {
                         Button(music.isLoadingPlaylists ? "Lädt …" : "Playlists laden") { music.loadPlaylists() }
@@ -484,6 +497,7 @@ struct FocusMusicBar: View {
         case .appleMusic: return "music.note"
         case .radio: return "antenna.radiowaves.left.and.right"
         case .youtube: return "play.rectangle"
+        case .soundscape: return "waveform"
         }
     }
 

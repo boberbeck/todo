@@ -104,3 +104,45 @@ final class FocusToneTests: XCTestCase {
         XCTAssertEqual(decoded.summary, "Gamma 40 Hz")
     }
 }
+
+final class SoundscapeTests: XCTestCase {
+    private let settings = SoundscapeSettings()
+
+    func testFollowsTheTimeOfDay() {
+        let morning = Soundscape.mood(mode: .focus, hour: 8, activity: 0.5, settings: settings)
+        let night = Soundscape.mood(mode: .focus, hour: 23, activity: 0.5, settings: settings)
+        XCTAssertEqual(morning.scale, Soundscape.majorPentatonic)
+        XCTAssertEqual(night.scale, Soundscape.minorPentatonic)
+        XCTAssertGreaterThan(morning.brightness, night.brightness)
+        XCTAssertGreaterThan(morning.bellsPerMinute, night.bellsPerMinute)
+        XCTAssertTrue(morning.description.hasPrefix("Morgen"))
+    }
+
+    func testModesAndActivity() {
+        let focus = Soundscape.mood(mode: .focus, hour: 14, activity: 0.5, settings: settings)
+        let deep = Soundscape.mood(mode: .deep, hour: 14, activity: 0.5, settings: settings)
+        XCTAssertLessThan(deep.bellsPerMinute, focus.bellsPerMinute)
+        let typing = Soundscape.mood(mode: .focus, hour: 14, activity: 1, settings: settings)
+        let reading = Soundscape.mood(mode: .focus, hour: 14, activity: 0, settings: settings)
+        XCTAssertGreaterThan(typing.bellsPerMinute, reading.bellsPerMinute)
+
+        var fixed = settings
+        fixed.adaptToTime = false
+        fixed.adaptToActivity = false
+        XCTAssertEqual(
+            Soundscape.mood(mode: .focus, hour: 7, activity: 1, settings: fixed),
+            Soundscape.mood(mode: .focus, hour: 22, activity: 0, settings: fixed)
+        )
+    }
+
+    func testFrequenciesStayInTheScale() {
+        XCTAssertEqual(Soundscape.frequency(root: 110, scale: Soundscape.majorPentatonic, degree: 5), 220, accuracy: 0.001)
+        XCTAssertEqual(Soundscape.frequency(root: 110, scale: Soundscape.majorPentatonic, degree: 0, octave: -1), 55, accuracy: 0.001)
+        let mood = Soundscape.mood(mode: .focus, hour: 14, activity: 0.5, settings: settings)
+        let chord = Soundscape.chord(mood: mood, step: 0)
+        XCTAssertEqual(chord.count, 4)
+        XCTAssertEqual(chord, chord.sorted())
+        XCTAssertEqual(Soundscape.bellNotes(mood: mood).count, 10)
+        XCTAssertGreaterThan(Soundscape.bellNotes(mood: mood).min() ?? 0, chord.max() ?? 0)
+    }
+}
