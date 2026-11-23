@@ -630,20 +630,11 @@ struct BookingSummary: View {
     private enum ChipState { case ok, missing }
 
     private func chip(icon: String, label: String, text: String, state: ChipState) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 9, weight: .semibold))
-            Text(label)
-                .fontWeight(.semibold)
-            Text(text)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-        .font(.caption)
-        .foregroundStyle(state == .ok ? Theme.secondary : Theme.accent)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
-        .background(Capsule().fill(state == .ok ? Color.white.opacity(0.05) : Theme.accentSoft))
-        .contentShape(Capsule())
+        Chip(
+            icon: icon,
+            label: label,
+            text: text,
+            tone: state == .missing ? .warning : (icon == "ticket" ? .info : .neutral)
+        )
     }
 }

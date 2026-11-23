@@ -76,7 +76,7 @@ struct PlanningView: View {
                 ) {
                     if overplanned {
                         Label("Mehr geplant, als Zeit da ist. Schieb etwas auf morgen.", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Theme.accent)
                     }
                     HStack(spacing: 12) {
                         Button("In freie Lücken legen") {
@@ -113,7 +113,7 @@ struct PlanningView: View {
                         Text("Los geht’s")
                             .frame(minWidth: 120)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(GhostButtonStyle(prominent: true))
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
                 }

@@ -16,7 +16,7 @@ struct RootView: View {
             page
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(Theme.background)
+        .background(AppBackground())
         .foregroundStyle(Theme.text)
         .tint(Theme.accent)
         .preferredColorScheme(.dark)
@@ -38,36 +38,41 @@ struct RootView: View {
         }
         .sheet(item: $model.idlePrompt) { prompt in
             IdlePromptView(prompt: prompt)
+                .tagwerkSheet()
         }
         .sheet(isPresented: $model.showsSAPSync, onDismiss: { model.sapSyncRows = nil }) {
             SAPSyncSheet(initialRows: model.sapSyncRows)
+                .tagwerkSheet()
         }
         .sheet(isPresented: Binding(
             get: { model.updater.showsPrompt },
             set: { if !$0 { model.updater.postpone() } }
         )) {
             UpdatePromptView()
+                .tagwerkSheet()
         }
         .sheet(isPresented: Binding(
             get: { model.showsBugReport },
             set: { if !$0 { model.showsBugReport = false; model.pendingCrash = nil } }
         )) {
             BugReportView()
+                .tagwerkSheet()
         }
         .overlay {
             // Aufgabenfenster über dem Hauptfenster; ein Klick daneben schließt es.
             if let id = model.detailTaskID {
                 GeometryReader { geometry in
                     ZStack {
-                        Color.black.opacity(0.45)
+                        Color.black.opacity(0.55)
                             .contentShape(Rectangle())
                             .onTapGesture { model.detailTaskID = nil }
                         TaskDetailView(taskID: id, height: max(420, min(780, geometry.size.height - 40)))
                             .id(id)
-                            .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.borderStrong))
-                            .shadow(color: .black.opacity(0.5), radius: 30, y: 10)
+                            .background(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous).fill(Theme.surfaceFloating))
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
+                            .surface(radius: Theme.Radius.panel, elevation: .floating, fill: .clear)
+                            .tint(Theme.accent)
+                            .buttonStyle(GhostButtonStyle())
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                 }
@@ -77,9 +82,11 @@ struct RootView: View {
         .animation(.easeOut(duration: 0.15), value: model.detailTaskID)
         .sheet(item: $model.timeEntryDraft) { draft in
             AddTimeSheet(draft: draft)
+                .tagwerkSheet()
         }
         .sheet(item: $model.editingEntry) { entry in
             EditEntrySheet(entry: entry)
+                .tagwerkSheet()
         }
         .sheet(isPresented: Binding(
             get: { model.ticketPickerTaskID != nil },
@@ -87,6 +94,7 @@ struct RootView: View {
         )) {
             if let id = model.ticketPickerTaskID {
                 TicketPicker(taskID: id) { model.ticketPickerTaskID = nil }
+                    .tagwerkSheet()
             }
         }
         .alert(
@@ -100,6 +108,7 @@ struct RootView: View {
         } message: {
             Text(model.lastError ?? "")
         }
+        .tint(Theme.accent)
     }
 
     @ViewBuilder
@@ -161,13 +170,7 @@ struct TopBar: View {
                 Button {
                     model.selection = tab.item
                 } label: {
-                    Text(tab.title)
-                        .font(.system(size: 14, weight: selected ? .medium : .regular))
-                        .foregroundStyle(selected ? Theme.text : Theme.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(selected ? Color.white.opacity(0.08) : Color.clear))
-                        .contentShape(Rectangle())
+                    TopBarTabLabel(title: tab.title, selected: selected)
                 }
                 .buttonStyle(.plain)
                 .help("\(tab.title) (⌘\(tab.shortcut))")
@@ -177,19 +180,19 @@ struct TopBar: View {
             RunningTimerPill()
             SettingsLink {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.secondary)
-                    .frame(width: 32, height: 32)
-                    .background(Circle().strokeBorder(Theme.borderStrong))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IconButtonStyle(size: 32))
             .help("Einstellungen (⌘,)")
         }
         .padding(.horizontal, 20)
-        .frame(height: 56)
-        .background(Theme.bar)
+        .frame(height: 58)
+        .background {
+            LinearGradient(colors: [Theme.bar, Theme.bar.opacity(0.85)], startPoint: .top, endPoint: .bottom)
+        }
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Theme.border).frame(height: 1)
+            // Haarlinie, in der Mitte leicht warm
+            LinearGradient(colors: [Theme.border, Theme.accent.opacity(0.18), Theme.border], startPoint: .leading, endPoint: .trailing)
+                .frame(height: 1)
         }
     }
 
@@ -199,6 +202,41 @@ struct TopBar: View {
         case (.planning, .today), (.close, .today): return true
         default: return model.selection == item
         }
+    }
+}
+
+/// Reiter oben: gewählt als gehobene Fläche mit leuchtendem Strich darunter.
+struct TopBarTabLabel: View {
+    let title: String
+    let selected: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 14, weight: selected ? .semibold : .regular, design: .rounded))
+            .foregroundStyle(selected ? Theme.text : (hovering ? Theme.text.opacity(0.85) : Theme.secondary))
+            .padding(.horizontal, 13)
+            .padding(.vertical, 7)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                        .fill(Color.white.opacity(0.07))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous).strokeBorder(Theme.highlight, lineWidth: 1))
+                } else if hovering {
+                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous).fill(Color.white.opacity(0.035))
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if selected {
+                    Capsule()
+                        .fill(Theme.accentGradient)
+                        .frame(width: 18, height: 2.5)
+                        .shadow(color: Theme.accent.opacity(0.8), radius: 4)
+                        .offset(y: 7)
+                }
+            }
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
     }
 }
 
@@ -215,7 +253,9 @@ struct RunningTimerPill: View {
                     Circle()
                         .fill(Theme.accent)
                         .frame(width: 7, height: 7)
+                        .shadow(color: Theme.accent, radius: 4)
                     Text(TimeMath.format(model.tracked(taskID: task.id, now: model.now), showSeconds: true))
+                        .font(.system(.callout, design: .rounded).weight(.semibold))
                         .monospacedDigit()
                         .foregroundStyle(Theme.text)
                     Text(task.title)
@@ -232,8 +272,9 @@ struct RunningTimerPill: View {
                 .font(.callout)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(Capsule().fill(Theme.accentSoft))
-                .overlay(Capsule().strokeBorder(Theme.accent.opacity(0.4)))
+                .background(Capsule().fill(LinearGradient(colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.10)], startPoint: .top, endPoint: .bottom)))
+                .overlay(Capsule().strokeBorder(LinearGradient(colors: [Theme.accent.opacity(0.7), Theme.accent.opacity(0.3)], startPoint: .top, endPoint: .bottom)))
+                .shadow(color: Theme.accent.opacity(0.25), radius: 10)
             }
             .buttonStyle(.plain)
             .padding(.trailing, 8)
@@ -293,15 +334,28 @@ struct IdlePromptView: View {
     var body: some View {
         let task = model.task(prompt.taskID)
         let others = model.todayTasks.filter { $0.id != prompt.taskID && !$0.isDone }
-        VStack(alignment: .leading, spacing: 14) {
-            Label("Du warst \(prompt.minutes) Minuten weg", systemImage: "cup.and.saucer")
-                .font(.title2.weight(.semibold))
-            Text("Von \(prompt.start.formatted(date: .omitted, time: .shortened)) bis \(prompt.end.formatted(date: .omitted, time: .shortened)) gab es keine Eingabe, der Timer für „\(task?.title ?? "die Aufgabe")“ lief weiter.")
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 14) {
+                Image(systemName: "cup.and.saucer.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Theme.onAccent)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Theme.accentGradient))
+                    .shadow(color: Theme.accent.opacity(0.45), radius: 10)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Du warst \(prompt.minutes) Minuten weg")
+                        .font(Theme.title)
+                    Text("\(prompt.start.formatted(date: .omitted, time: .shortened))–\(prompt.end.formatted(date: .omitted, time: .shortened)) ohne Eingabe")
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(Theme.secondary)
+                }
+            }
+            Text("Der Timer für „\(task?.title ?? "die Aufgabe")“ lief weiter. Soll die Zeit zählen?")
+                .foregroundStyle(Theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
                 Button("Zeit behalten") { model.resolveIdle(.keep) }
-                Menu("Anderer Aufgabe geben") {
+                Menu("Einer anderen Aufgabe geben") {
                     ForEach(others) { other in
                         Button(other.title) { model.resolveIdle(.assign(to: other.id)) }
                     }
@@ -310,12 +364,12 @@ struct IdlePromptView: View {
                 .disabled(others.isEmpty)
                 Spacer()
                 Button("Pause abziehen") { model.resolveIdle(.discard) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(GhostButtonStyle(prominent: true))
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(24)
-        .frame(width: 520)
+        .padding(26)
+        .frame(width: 540)
     }
 }
 
@@ -401,7 +455,7 @@ struct UpdatePromptView: View {
                     if updater.isInstalling { ProgressView().controlSize(.small) }
                     Text(status)
                         .font(.callout)
-                        .foregroundStyle(status.contains("fehlgeschlagen") ? Color.red : Color.secondary)
+                        .foregroundStyle(status.contains("fehlgeschlagen") ? Theme.danger : Color.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -413,7 +467,7 @@ struct UpdatePromptView: View {
                 Button("Jetzt aktualisieren") {
                     Task { await updater.install() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GhostButtonStyle(prominent: true))
                 .keyboardShortcut(.defaultAction)
                 .disabled(updater.isInstalling || updater.available == nil)
             }

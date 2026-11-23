@@ -276,7 +276,7 @@ struct GoalRow: View {
                 model.toggleGoal(goal.id)
             } label: {
                 Image(systemName: goal.isDone ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(goal.isDone ? Color.green : Color.secondary)
+                    .foregroundStyle(goal.isDone ? Theme.done : Color.secondary)
                     .font(.title3)
             }
             .buttonStyle(.plain)

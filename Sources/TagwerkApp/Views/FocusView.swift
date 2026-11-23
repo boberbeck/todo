@@ -105,7 +105,7 @@ struct FocusTaskPane: View {
                     .foregroundStyle(Theme.secondary)
                 }
                 Text(task.title)
-                    .font(.system(size: 36, weight: .regular))
+                    .font(.system(size: 38, weight: .semibold, design: .rounded))
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
                     .frame(maxWidth: 760)
@@ -130,7 +130,7 @@ struct FocusTaskPane: View {
                 if let pomodoro = model.pomodoro, pomodoro.phase == .work {
                     let settings = model.pomodoroSettings
                     Text(PomodoroText.clock(model.pomodoroRemaining))
-                        .font(.system(size: 76, weight: .light))
+                        .font(Theme.timerNumber)
                         .monospacedDigit()
                         .foregroundStyle(running ? Theme.text : Theme.secondary)
                     ProgressLine(value: Pomodoro.progress(pomodoro, settings: settings, now: model.now), height: 3)
@@ -140,7 +140,7 @@ struct FocusTaskPane: View {
                         .foregroundStyle(Theme.tertiary)
                 } else {
                     Text(TimeMath.format(tracked, showSeconds: true))
-                        .font(.system(size: 76, weight: .light))
+                        .font(Theme.timerNumber)
                         .monospacedDigit()
                         .foregroundStyle(running ? Theme.text : Theme.secondary)
                     if let estimate = task.estimateMinutes {
@@ -163,12 +163,15 @@ struct FocusTaskPane: View {
                     model.toggleTimer(for: task.id)
                 } label: {
                     Image(systemName: running ? "pause.fill" : "play.fill")
-                        .font(.system(size: 24))
-                        .frame(width: 68, height: 68)
-                        .background(Circle().fill(Theme.accent))
-                        .foregroundStyle(Color.black.opacity(0.85))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IconButtonStyle(size: 72, prominent: true))
+                .background {
+                    // Schein hinter dem großen Knopf, kräftiger solange die Zeit läuft
+                    Circle()
+                        .fill(RadialGradient(colors: [Theme.accent.opacity(running ? 0.35 : 0.18), .clear], center: .center, startRadius: 20, endRadius: 80))
+                        .frame(width: 170, height: 170)
+                        .allowsHitTesting(false)
+                }
                 .help(running ? "Pause (⌘T)" : "Start (⌘T)")
 
                 Button {
@@ -459,7 +462,7 @@ struct PomodoroBreakPane: View {
             if !isReady {
                 VStack(spacing: 6) {
                     Text(PomodoroText.clock(model.pomodoroRemaining))
-                        .font(.system(size: 76, weight: .light))
+                        .font(Theme.timerNumber)
                         .monospacedDigit()
                         .foregroundStyle(Theme.done)
                     ProgressLine(value: Pomodoro.progress(state, settings: settings, now: model.now), height: 3, color: Theme.done)

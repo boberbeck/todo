@@ -129,7 +129,7 @@ struct DayCloseView: View {
                     Label(model.isSendingBookings ? "Wird gebucht …" : "Buchen", systemImage: "paperplane")
                         .frame(minWidth: 90)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GhostButtonStyle(prominent: true))
                 .disabled(!hasLines || model.isSendingBookings)
                 .help("Worklogs an ManageEngine senden und SAP-Zeilen vorbereiten")
             }
@@ -210,21 +210,21 @@ struct CloseLineRow: View {
                 if line.changedAfterBooking {
                     Label("Zeit nach dem Buchen geändert", systemImage: "exclamationmark.triangle")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.accent)
                 }
             }
 
             if line.status(for: .manageEngine) == .failed, let error = line.bookings[.manageEngine]?.lastError {
                 Label("Worklog abgelehnt: \(error)", systemImage: "xmark.octagon.fill")
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Theme.danger)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(line.openIssues, id: \.self) { issue in
                 Label(issue.message, systemImage: "exclamationmark.circle")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Theme.accent)
             }
         }
         .padding(.vertical, 6)
@@ -251,7 +251,7 @@ struct TargetStatusView: View {
             } else {
                 if status == .failed, let error = line.bookings[target]?.lastError {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.accent)
                         .help(error)
                     Button("Erneut senden") {
                         Task { _ = await model.retryManageEngine() }

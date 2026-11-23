@@ -99,8 +99,10 @@ struct SettingsFootnote: View {
 
 private extension View {
     func settingsPage(height: CGFloat) -> some View {
-        formStyle(.grouped)
+        tagwerkForm()
+            .buttonStyle(GhostButtonStyle())
             .frame(width: 620, height: height)
+            .background(AppBackground())
     }
 }
 
@@ -249,7 +251,7 @@ struct FocusSettings: View {
                 Toggle("Zufällige Reihenfolge", isOn: $shuffle)
                 if let problem = music.problem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.accent)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } header: {
@@ -499,7 +501,7 @@ struct ManageEngineSettings: View {
                     HStack(spacing: 8) {
                         if !technician.isEmpty, !config.technicianIDIsNumeric {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(Theme.accent)
                                 .help("Die API braucht die Nummer des Technikers. „Verbindung testen“ findet sie.")
                         }
                         SettingsTextField(prompt: "z. B. 1234", text: $technician, width: 140, monospaced: true)
@@ -567,7 +569,7 @@ struct ManageEngineSettings: View {
                 }
                 if let check {
                     Label(check.message, systemImage: check.ok ? "checkmark.circle.fill" : "xmark.octagon.fill")
-                        .foregroundStyle(check.ok ? Color.green : Color.red)
+                        .foregroundStyle(check.ok ? Theme.done : Theme.danger)
                         .fixedSize(horizontal: false, vertical: true)
                     ForEach(check.suggestions) { suggestion in
                         LabeledContent {
@@ -617,7 +619,7 @@ struct ManageEngineSettings: View {
             LabeledContent("API-Schlüssel") {
                 HStack(spacing: 10) {
                     Label("im Schlüsselbund", systemImage: "checkmark.seal.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Theme.done)
                     Button("Ändern …") { editingToken = true }
                     Button("Entfernen", role: .destructive) {
                         model.setManageEngineToken("")
@@ -671,14 +673,14 @@ struct ClaudeSettings: View {
             if let warning = ClaudeIntegration.locationWarning {
                 Section {
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.accent)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             if let other = ClaudeIntegration.otherConfiguredCommand {
                 Section {
                     Label("Claude Desktop startet tagwerk-mcp aus einer anderen Kopie: \(other). Die kennt neuere Werkzeuge (z. B. Unteraufgaben) womöglich nicht. „Auf diese Kopie umstellen“ trägt die Kopie ein, die gerade läuft; danach Claude Desktop mit ⌘Q beenden und neu öffnen.", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.accent)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -701,7 +703,7 @@ struct ClaudeSettings: View {
                         Text("MCP-Server prüfen")
                         Text(testResult?.message ?? "Startet tagwerk-mcp so, wie Claude Desktop es tut (dieselbe Kopie), und fragt die Werkzeuge ab.")
                             .font(.caption)
-                            .foregroundStyle(testResult.map { $0.ok ? Color.green : Color.red } ?? Color.secondary)
+                            .foregroundStyle(testResult.map { $0.ok ? Theme.done : Theme.danger } ?? Color.secondary)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -725,7 +727,7 @@ struct ClaudeSettings: View {
                 LabeledContent {
                     if installed {
                         Label("eingetragen", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(Theme.done)
                     } else {
                         Button(ClaudeIntegration.otherConfiguredCommand == nil ? "In Claude Desktop eintragen" : "Auf diese Kopie umstellen") { installDesktop() }
                             .disabled(ClaudeIntegration.serverURL == nil)
@@ -740,7 +742,7 @@ struct ClaudeSettings: View {
                 }
                 if let status {
                     Label(status, systemImage: statusIsError ? "xmark.octagon.fill" : "checkmark.circle.fill")
-                        .foregroundStyle(statusIsError ? Color.red : Color.green)
+                        .foregroundStyle(statusIsError ? Theme.danger : Theme.done)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 copyRow(title: "Eintrag von Hand", detail: "für claude_desktop_config.json", value: ClaudeIntegration.desktopSnippet, key: "desktop")
@@ -769,7 +771,7 @@ struct ClaudeSettings: View {
                     }
                 } else {
                     Label("tagwerk-mcp fehlt neben der App. Baue sie mit scripts/make-app.sh.", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.accent)
                 }
             } header: {
                 Text("Technik")
@@ -1105,7 +1107,7 @@ struct RemoteAccessSection: View {
                 if case .failed(let message) = remote.tunnelState {
                     Text("Tunnel: \(message)")
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Theme.danger)
                         .textSelection(.enabled)
                 }
             }
@@ -1214,7 +1216,7 @@ struct SigningSection: View {
         Section {
             LabeledContent("Diese Fassung") {
                 Text(SigningSetup.currentSignature)
-                    .foregroundStyle(SigningSetup.isFixed ? Color.green : Color.orange)
+                    .foregroundStyle(SigningSetup.isFixed ? Theme.done : Theme.accent)
             }
             if !SigningSetup.isFixed {
                 if let bundle {
@@ -1248,7 +1250,7 @@ struct SigningSection: View {
                 if let error {
                     Text(error)
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Theme.danger)
                         .textSelection(.enabled)
                 }
             }
@@ -1344,7 +1346,7 @@ struct UpdateSection: View {
                 LabeledContent("GitHub-Schlüssel") {
                     HStack(spacing: 8) {
                         Label("im Schlüsselbund", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(Theme.done)
                         Button("Entfernen") { updater.setToken("") }
                     }
                 }

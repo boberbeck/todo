@@ -50,7 +50,7 @@ struct BugReportView: View {
                     .frame(height: 180)
                 }
             }
-            .formStyle(.grouped)
+            .tagwerkForm()
             Text("Das Protokoll enthält keine Passwörter oder Schlüssel, aber Ticketnummern und Meldungen aus SAP und ManageEngine. Bitte kurz ansehen, bevor du es weitergibst.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -73,7 +73,7 @@ struct BugReportView: View {
                 Button("Als Datei sichern") { saveFile(reveal: true) }
                     .disabled(!canSend)
                 Button("Bei GitHub melden") { openIssue() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(GhostButtonStyle(prominent: true))
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canSend)
             }

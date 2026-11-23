@@ -98,7 +98,7 @@ struct NewGoalCard: View {
                 .frame(width: 160)
                 Spacer()
                 Button("Anlegen", action: add)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(GhostButtonStyle(prominent: true))
                     .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .font(.callout)
@@ -232,6 +232,7 @@ struct GoalCard: View {
         }
         .sheet(isPresented: $showsEditor) {
             GoalEditor(goal: goal)
+                .tagwerkSheet()
         }
     }
 
@@ -275,7 +276,7 @@ struct GoalEditor: View {
                 TextField("Notizen", text: $notes, axis: .vertical)
                     .lineLimit(3...6)
             }
-            .formStyle(.grouped)
+            .tagwerkForm()
             HStack {
                 Button("Löschen", role: .destructive) {
                     model.deleteLongGoal(goal.id)
@@ -294,7 +295,7 @@ struct GoalEditor: View {
                     model.update(changed)
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GhostButtonStyle(prominent: true))
                 .keyboardShortcut(.defaultAction)
             }
         }

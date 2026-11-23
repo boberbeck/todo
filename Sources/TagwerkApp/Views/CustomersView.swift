@@ -128,7 +128,7 @@ struct StatCard: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionLabel(text: title)
             Text(value)
-                .font(.system(size: 34, weight: .regular).monospacedDigit())
+                .font(Theme.statNumber)
                 .foregroundStyle(accent ? Theme.accent : Theme.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -179,7 +179,7 @@ struct CustomerCard: View {
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(TimeMath.format(week))
-                            .font(.system(size: 34, weight: .regular).monospacedDigit())
+                            .font(Theme.statNumber)
                         SectionLabel(text: "Diese Woche")
                     }
                     Spacer()
@@ -393,7 +393,7 @@ struct CustomerTaskRow: View {
                     model.toggleDone(task.id)
                 } label: {
                     Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(task.isDone ? Color.green : Color.secondary)
+                        .foregroundStyle(task.isDone ? Theme.done : Color.secondary)
                 }
                 .buttonStyle(.plain)
 

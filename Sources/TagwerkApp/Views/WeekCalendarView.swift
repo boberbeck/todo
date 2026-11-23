@@ -108,6 +108,7 @@ struct WeekCalendarView: View {
         }
         .sheet(item: $draft) { draft in
             AddTimeSheet(draft: draft)
+                .tagwerkSheet()
         }
     }
 
@@ -499,14 +500,14 @@ struct AddTimeSheet: View {
                         .monospacedDigit()
                 }
             }
-            .formStyle(.grouped)
+            .tagwerkForm()
 
             HStack {
                 Spacer()
                 Button("Abbrechen") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Erfassen") { save(start: start, end: end) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(GhostButtonStyle(prominent: true))
                     .keyboardShortcut(.defaultAction)
                     .disabled(minutes <= 0 || (taskID == nil && newTitle.trimmingCharacters(in: .whitespaces).isEmpty))
             }

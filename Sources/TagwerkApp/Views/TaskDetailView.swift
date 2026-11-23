@@ -247,7 +247,7 @@ struct TaskDetailView: View {
                     Text("Zeiten · \(TimeMath.format(model.trackedIncludingSubtasks(taskID: task.id, now: running ? model.now : Date()))) h")
                 }
             }
-            .formStyle(.grouped)
+            .tagwerkForm()
 
             Divider()
             footer(task, running: running)
@@ -265,6 +265,7 @@ struct TaskDetailView: View {
         .onDisappear { model.setTitle(title, for: taskID) }
         .sheet(item: $timeDraft) { draft in
             AddTimeSheet(draft: draft)
+                .tagwerkSheet()
         }
         .confirmationDialog("„\(task.title)“ löschen?", isPresented: $confirmsDelete) {
             Button("Löschen", role: .destructive) {
@@ -345,7 +346,7 @@ struct TaskDetailView: View {
                 model.setTitle(title, for: taskID)
                 close()
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(GhostButtonStyle(prominent: true))
             .keyboardShortcut(.defaultAction)
         }
     }

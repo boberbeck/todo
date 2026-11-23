@@ -64,7 +64,7 @@ struct EditEntrySheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .formStyle(.grouped)
+            .tagwerkForm()
 
             if wasBooked {
                 Text("Für diesen Tag ist schon gebucht. Nach der Änderung im Tagesabschluss prüfen und neu senden.")
@@ -83,7 +83,7 @@ struct EditEntrySheet: View {
                     model.updateEntry(entry.id, start: start, end: end, taskID: taskID)
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GhostButtonStyle(prominent: true))
                 .keyboardShortcut(.defaultAction)
                 .disabled(problem != nil)
             }

@@ -274,7 +274,7 @@ struct ByDesignBrowserView: View {
                     Text(count == 0 ? "Aufgaben übernehmen" : "\(count) Aufgaben übernehmen")
                         .frame(minWidth: 180)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GhostButtonStyle(prominent: true))
                 .controlSize(.large)
                 .disabled(count == 0)
             }
@@ -383,7 +383,7 @@ struct ByDesignBrowserView: View {
     private func step(_ number: Int, _ title: String, done: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: done ? "checkmark.circle.fill" : "\(number).circle")
-                .foregroundStyle(done ? Color.green : Color.secondary)
+                .foregroundStyle(done ? Theme.done : Color.secondary)
             Text(title)
                 .foregroundStyle(done ? Color.primary : Color.secondary)
         }

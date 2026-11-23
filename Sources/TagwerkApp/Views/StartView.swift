@@ -55,7 +55,7 @@ struct StartView: View {
         return HStack(alignment: .center, spacing: 24) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(model.today.startDate().formatted(.dateTime.weekday(.wide).day().month(.wide)))
-                    .font(.system(size: 34, weight: .medium))
+                    .font(Theme.pageTitle)
                     .lineLimit(1)
                 Text(daySummary)
                     .foregroundStyle(Theme.secondary)

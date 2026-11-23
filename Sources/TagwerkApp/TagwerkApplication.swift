@@ -35,6 +35,8 @@ struct TagwerkApplication: App {
         Settings {
             SettingsView()
                 .environment(model)
+                .tint(Theme.accent)
+                .preferredColorScheme(.dark)
         }
     }
 }

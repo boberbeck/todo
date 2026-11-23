@@ -163,7 +163,7 @@ struct SAPSyncSheet: View {
             HStack {
                 if let problem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.accent)
                         .lineLimit(2)
                 } else if let plan, result == nil {
                     Text(summary(plan))
@@ -184,7 +184,7 @@ struct SAPSyncSheet: View {
                         .keyboardShortcut(.cancelAction)
                     if let plan {
                         Button("Übernehmen") { apply(plan) }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(GhostButtonStyle(prominent: true))
                             .keyboardShortcut(.defaultAction)
                             .disabled(changeCount(plan) == 0)
                     }
@@ -221,7 +221,7 @@ struct SAPSyncSheet: View {
                     dismiss()
                     openWindow(id: "bydesign")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GhostButtonStyle(prominent: true))
             }
             .padding(16)
             .background(RoundedRectangle(cornerRadius: 12).fill(Theme.accentSoft))
@@ -394,7 +394,7 @@ struct SAPSyncSheet: View {
             }
             .menuStyle(.button)
             .fixedSize()
-            .foregroundStyle(choice == .skip ? Color.orange : Color.primary)
+            .foregroundStyle(choice == .skip ? Theme.accent : Color.primary)
             .popover(isPresented: Binding(
                 get: { namingProject == group.project },
                 set: { if !$0 { namingProject = nil } }
@@ -483,7 +483,7 @@ struct SAPSyncSheet: View {
         VStack(spacing: 12) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 44))
-                .foregroundStyle(.green)
+                .foregroundStyle(Theme.done)
             Text(text)
                 .font(.headline)
                 .multilineTextAlignment(.center)

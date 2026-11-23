@@ -279,7 +279,7 @@ struct EventBlock: View {
                 if logged {
                     Image(systemName: "checkmark")
                         .font(.caption2)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Theme.done)
                 }
             }
             if height > 30 {
@@ -311,6 +311,7 @@ struct EventBlock: View {
         }
         .sheet(isPresented: $showsLogSheet) {
             LogEventSheet(event: event)
+                .tagwerkSheet()
         }
         .help("\(event.displayTitle) · \(timeRange)")
     }
@@ -443,7 +444,7 @@ struct LogEventSheet: View {
                     }
                 }
             }
-            .formStyle(.grouped)
+            .tagwerkForm()
             Text("Tagwerk merkt sich die Auswahl für Termine mit demselben Titel.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -455,7 +456,7 @@ struct LogEventSheet: View {
                     model.logEvent(event, title: title, assignment: .init(customerID: customerID, pspElement: pspElement, workType: workType, activity: activity))
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GhostButtonStyle(prominent: true))
                 .keyboardShortcut(.defaultAction)
             }
         }
