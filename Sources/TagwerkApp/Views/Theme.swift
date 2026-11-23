@@ -168,13 +168,14 @@ struct WeekSwitcher: View {
 struct ProgressLine: View {
     let value: Double
     var height: CGFloat = 4
+    var color: Color = Theme.accent
 
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.white.opacity(0.08))
                 Capsule()
-                    .fill(Theme.accent)
+                    .fill(color)
                     .frame(width: max(0, min(1, value)) * geometry.size.width)
             }
         }

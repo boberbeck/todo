@@ -450,9 +450,8 @@ struct PomodoroBreakPane: View {
                         .font(.system(size: 76, weight: .light))
                         .monospacedDigit()
                         .foregroundStyle(Theme.done)
-                    ProgressLine(value: Pomodoro.progress(state, settings: settings, now: model.now), height: 3)
+                    ProgressLine(value: Pomodoro.progress(state, settings: settings, now: model.now), height: 3, color: Theme.done)
                         .frame(width: 220)
-                        .tint(Theme.done)
                 }
             }
             Text("\(state.completedInSet == 0 && isReady ? settings.roundsUntilLongBreak : state.completedInSet) von \(settings.roundsUntilLongBreak) Pomodoros\(model.pomodorosToday > 0 ? " · heute \(model.pomodorosToday)" : "")")
