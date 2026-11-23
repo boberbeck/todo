@@ -181,5 +181,6 @@ jobs:
             echo "Keine neuen Screenshots"
           else
             git commit -m "Screenshots aktualisieren [skip ci]"
-            git push || echo "Push nicht möglich, der Branch hat sich inzwischen geändert"
+            # Kam während des Builds ein neuer Commit dazu, die Screenshots obendrauf setzen
+            git push || { git pull --rebase origin "${GITHUB_REF_NAME}" && git push; } || echo "Push nicht möglich, der Branch hat sich inzwischen geändert"
           fi
