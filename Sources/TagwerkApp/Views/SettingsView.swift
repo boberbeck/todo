@@ -346,10 +346,51 @@ struct FocusSettings: View {
                 case .appleMusic:
                     SettingsFootnote("Tagwerk steuert die Musik-App von macOS (Apple Music). Beim ersten Mal fragt macOS, ob Tagwerk die Musik-App steuern darf. Die Playlist wählst du auch direkt im Fokus über das Notensymbol.")
                 case .radio:
-                    SettingsFootnote("Die Sender kommen von SomaFM, werbefrei und von den Hörern finanziert. Eigene Adressen: direkte MP3- oder AAC-Streams. Die Pomodoro-Pause hält das Radio an, danach geht es live weiter.")
+                    SettingsFootnote("Die Sender kommen von SomaFM (hörerfinanziert) und Radio Swiss Classic, werbefrei und überwiegend ohne Gesang. Eigene Adressen: direkte MP3- oder AAC-Streams. Die Pomodoro-Pause hält das Radio an, danach geht es live weiter.")
                 case .youtube:
                     SettingsFootnote("YouTube spielt mit dem offiziellen Player im Fokus. Das Bild bleibt klein sichtbar, ohne YouTube-Bedienleiste; nur Ton erlaubt YouTube bei eingebetteten Videos nicht. Verlässt du den Fokus, hält das Video an. Werbung ist möglich, und manche Kanäle erlauben kein Abspielen außerhalb von YouTube. Nur Ton: Internetradio oder Apple Music.")
                 }
+            }
+
+            Section {
+                Toggle("Unter die Musik legen (oder allein abspielen)", isOn: Binding(
+                    get: { music.toneSettings.isEnabled },
+                    set: { music.toneSettings.isEnabled = $0 }
+                ))
+                Picker("Frequenz", selection: Binding(
+                    get: { music.toneSettings.tone },
+                    set: { music.toneSettings.tone = $0 }
+                )) {
+                    ForEach(FocusTone.allCases) { tone in
+                        Text("\(tone.label) · \(tone.detail)").tag(tone)
+                    }
+                }
+                Toggle("Mit Kopfhörern (binaural)", isOn: Binding(
+                    get: { music.toneSettings.binaural },
+                    set: { music.toneSettings.binaural = $0 }
+                ))
+                .disabled(music.toneSettings.tone == .noise)
+                Toggle("Leises Rauschen darunter", isOn: Binding(
+                    get: { music.toneSettings.withNoise },
+                    set: { music.toneSettings.withNoise = $0 }
+                ))
+                .disabled(music.toneSettings.tone == .noise)
+                LabeledContent("Lautstärke") {
+                    HStack(spacing: 8) {
+                        Slider(value: Binding(
+                            get: { music.toneSettings.volume },
+                            set: { music.toneSettings.volume = $0 }
+                        ), in: 0.05...1)
+                        .frame(maxWidth: 200)
+                        Button(music.tonePlaying ? "Stopp" : "Probehören") {
+                            music.toggleTonePreview()
+                        }
+                    }
+                }
+            } header: {
+                Text("Fokus-Frequenz")
+            } footer: {
+                SettingsFootnote("Tagwerk erzeugt den Ton selbst, auch offline. Mit Kopfhörern hört jedes Ohr einen leicht anderen Ton, das Gehirn nimmt die Differenz als Schwebung wahr (binauraler Beat). Ohne Kopfhörer pulsiert der Ton stattdessen. Startet mit dem Timer, pausiert mit dem Pomodoro. Ob solche Frequenzen beim Fokussieren helfen, ist wissenschaftlich nicht eindeutig belegt; viele empfinden sie als angenehm. Leise einstellen.")
             }
         }
         .settingsPage(height: 700)

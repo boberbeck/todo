@@ -36,7 +36,7 @@ final class FocusSourcesTests: XCTestCase {
         XCTAssertEqual(station?.url.absoluteString, "https://stream.example.org/lofi.mp3")
         XCTAssertNil(RadioStation.custom("kein link"))
         XCTAssertNil(RadioStation.custom("ftp://example.org/a.mp3"))
-        XCTAssertEqual(RadioStation.builtIn.count, 14)
+        XCTAssertEqual(RadioStation.builtIn.count, 9)
         // jede Richtung hat Sender, keine Adresse doppelt
         for genre in RadioStation.genres {
             XCTAssertFalse(RadioStation.stations(in: genre).isEmpty, genre)
@@ -78,5 +78,29 @@ final class YouTubeHistoryTests: XCTestCase {
         }
         XCTAssertEqual(history.count, YouTubeHistory.limit)
         XCTAssertEqual(history.first?.displayTitle, "youtu.be/video000014")
+    }
+}
+
+final class FocusToneTests: XCTestCase {
+    func testEarFrequencies() {
+        let alpha = FocusTone.alpha.earFrequencies(binaural: true)
+        XCTAssertEqual(alpha.right - alpha.left, 10)
+        XCTAssertEqual(FocusTone.gamma.earFrequencies(binaural: true).right, 240)
+        let speakers = FocusTone.beta.earFrequencies(binaural: false)
+        XCTAssertEqual(speakers.left, speakers.right)
+        XCTAssertEqual(FocusTone.noise.earFrequencies(binaural: true).left, 0)
+    }
+
+    func testSettingsRoundTripAndDefaults() throws {
+        var settings = FocusToneSettings()
+        XCTAssertFalse(settings.isEnabled)
+        XCTAssertEqual(settings.tone, .alpha)
+        XCTAssertLessThanOrEqual(settings.volume, 0.3)
+        settings.isEnabled = true
+        settings.tone = .gamma
+        settings.binaural = false
+        let decoded = try JSONDecoder().decode(FocusToneSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(decoded, settings)
+        XCTAssertEqual(decoded.summary, "Gamma 40 Hz")
     }
 }

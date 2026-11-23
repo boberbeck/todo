@@ -22,9 +22,72 @@ final class FocusMusic {
     static let radioStationKey = "focusMusicRadioStation"
     static let youtubeLinkKey = "focusMusicYouTubeLink"
     static let youtubeHistoryKey = "focusMusicYouTubeHistory"
+    static let toneKey = "focusToneSettings"
 
     let radio = RadioPlayer()
     let youtube = YouTubePlayer()
+    let tones = ToneGenerator()
+
+    /// Fokus-Frequenz unter der Musik (oder allein).
+    var toneSettings: FocusToneSettings = FocusMusic.storedToneSettings() {
+        didSet {
+            let data = try? JSONEncoder().encode(toneSettings)
+            UserDefaults.standard.set(data, forKey: Self.toneKey)
+            if oldValue.isEnabled, !toneSettings.isEnabled {
+                pauseTones()
+            } else if tonePlaying {
+                tones.update(toneSettings)
+            }
+        }
+    }
+
+    /// Klingt die Fokus-Frequenz gerade?
+    private(set) var tonePlaying = false
+
+    private static func storedToneSettings() -> FocusToneSettings {
+        guard let data = UserDefaults.standard.data(forKey: toneKey),
+              let settings = try? JSONDecoder().decode(FocusToneSettings.self, from: data) else { return FocusToneSettings() }
+        return settings
+    }
+
+    /// Lässt sich etwas abspielen: Musik gewählt oder Fokus-Frequenz an?
+    var canPlay: Bool { hasSelection || toneSettings.isEnabled }
+
+    func chooseTone(_ tone: FocusTone) {
+        toneSettings.tone = tone
+        toneSettings.isEnabled = true
+        if state == .playing || !hasSelection && tonePlaying {
+            startTones()
+        }
+    }
+
+    /// Probehören in den Einstellungen, unabhängig vom Timer.
+    func toggleTonePreview() {
+        if tonePlaying {
+            pauseTones()
+        } else {
+            startTones()
+        }
+    }
+
+    private func startTones() {
+        guard !isDemo else { return }
+        tones.start(toneSettings)
+        tonePlaying = tones.isPlaying
+    }
+
+    private func pauseTones() {
+        tones.pause()
+        tonePlaying = false
+    }
+
+    /// Nur die Frequenz läuft (keine Musik gewählt): Anzeige selbst setzen.
+    private func showToneOnly(playing: Bool) {
+        guard !hasSelection else { return }
+        state = playing ? .playing : .paused
+        trackTitle = toneSettings.tone.label
+        trackArtist = "Fokus-Frequenz"
+    }
 
     private(set) var playlists: [String] = []
     private(set) var state: State = .stopped
@@ -237,6 +300,11 @@ final class FocusMusic {
             state = .playing
             return
         }
+        if toneSettings.isEnabled {
+            startedByTagwerk = true
+            startTones()
+            showToneOnly(playing: true)
+        }
         switch source {
         case .appleMusic:
             playPlaylist()
@@ -272,7 +340,7 @@ final class FocusMusic {
             state = state == .playing ? .paused : .playing
             return
         }
-        guard source == .appleMusic else {
+        guard source == .appleMusic, hasSelection else {
             if state == .playing {
                 pause()
             } else {
@@ -282,9 +350,14 @@ final class FocusMusic {
         }
         switch state {
         case .stopped:
-            playPlaylist()
+            startMusic()
         case .playing, .paused:
             startedByTagwerk = true
+            if state == .playing {
+                pauseTones()
+            } else if toneSettings.isEnabled {
+                startTones()
+            }
             Task {
                 _ = try? await AppleMusicScript.run(AppleMusicScript.playPause)
                 await refresh()
@@ -313,6 +386,8 @@ final class FocusMusic {
             state = .paused
             return
         }
+        pauseTones()
+        showToneOnly(playing: false)
         switch source {
         case .radio:
             radio.pause()
@@ -321,7 +396,8 @@ final class FocusMusic {
             youtube.pause()
             return
         case .appleMusic:
-            break
+            // Ohne gewählte Playlist nicht in fremde Musik eingreifen
+            guard selectedPlaylist != nil else { return }
         }
         Task {
             _ = try? await AppleMusicScript.run(AppleMusicScript.pause)
@@ -332,7 +408,7 @@ final class FocusMusic {
     // MARK: Timer
 
     func timerStarted(inFocus: Bool) {
-        guard inFocus, autoPlay, hasSelection else { return }
+        guard inFocus, autoPlay, canPlay else { return }
         if state == .paused, startedByTagwerk {
             togglePlayPause()
         } else if state != .playing {

@@ -313,10 +313,16 @@ struct FocusMusicBar: View {
                 if let title = music.trackTitle, music.state != .stopped {
                     Text(title)
                         .lineLimit(1)
-                    Text([music.trackArtist, music.source == .appleMusic ? music.selectedPlaylist : nil].compactMap { $0 }.joined(separator: " · "))
+                    Text([music.trackArtist, music.source == .appleMusic ? music.selectedPlaylist : nil, music.hasSelection && music.toneSettings.isEnabled ? music.toneSettings.tone.label : nil].compactMap { $0 }.joined(separator: " · "))
                         .font(.caption)
                         .foregroundStyle(Theme.tertiary)
                         .lineLimit(1)
+                } else if music.selectionName == nil, music.toneSettings.isEnabled {
+                    Text(music.toneSettings.tone.label)
+                        .lineLimit(1)
+                    Text("Fokus-Frequenz · startet mit dem Timer")
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiary)
                 } else if let name = music.selectionName {
                     Text(name)
                         .lineLimit(1)
@@ -405,6 +411,26 @@ struct FocusMusicBar: View {
                         Button("Verlauf leeren") { music.clearHistory() }
                     }
                 }
+                Section("Fokus-Frequenz") {
+                    ForEach(FocusTone.allCases) { tone in
+                        Button {
+                            music.chooseTone(tone)
+                        } label: {
+                            if music.toneSettings.isEnabled, music.toneSettings.tone == tone {
+                                Label("\(tone.label) · \(tone.detail)", systemImage: "checkmark")
+                            } else {
+                                Text("\(tone.label) · \(tone.detail)")
+                            }
+                        }
+                    }
+                    Toggle("Mit Kopfhörern (binaural)", isOn: Binding(
+                        get: { music.toneSettings.binaural },
+                        set: { music.toneSettings.binaural = $0 }
+                    ))
+                    if music.toneSettings.isEnabled {
+                        Button("Frequenz aus") { music.toneSettings.isEnabled = false }
+                    }
+                }
                 if music.hasSelection {
                     Divider()
                     Button("Keine Musik") { music.clearSelection() }
@@ -431,7 +457,7 @@ struct FocusMusicBar: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Theme.text)
-            .disabled(!music.hasSelection && music.state == .stopped)
+            .disabled(!music.canPlay && music.state == .stopped)
             .help(music.state == .playing ? "Musik anhalten" : "Musik abspielen")
 
             if music.canSkip {

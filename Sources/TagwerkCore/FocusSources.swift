@@ -38,29 +38,25 @@ public struct RadioStation: Codable, Hashable, Sendable, Identifiable {
     }
 
     public static let ambient = "Ambient & Chill"
-    public static let jazz = "Jazz & Piano"
-    public static let electronic = "Elektro & Synthwave"
+    public static let jazz = "Klassik & Jazz"
+    public static let electronic = "Elektronik"
 
     /// Richtungen in der Reihenfolge fürs Menü.
     public static let genres = [ambient, jazz, electronic]
 
-    /// Werbefreie Sender zum Arbeiten: SomaFM (hörerfinanziert, San Francisco) und Radio Swiss (öffentlich-rechtlich).
+    /// Werbefreie Sender zum Arbeiten, überwiegend ohne Gesang: SomaFM (hörerfinanziert, San Francisco)
+    /// und Radio Swiss Classic (öffentlich-rechtlich, ohne Moderation). Ganz ohne Gesang kann ein Sender nicht versprechen.
     public static let builtIn: [RadioStation] = [
-        soma("groovesalad", "Groove Salad", "Downtempo, entspannte Elektronik", ambient),
         soma("dronezone", "Drone Zone", "Ambient ohne Takt, sehr ruhig", ambient),
         soma("deepspaceone", "Deep Space One", "Tiefer Ambient, Weltraumklänge", ambient),
         soma("spacestation", "Space Station Soma", "Ambient mit sanftem Takt", ambient),
         soma("fluid", "Fluid", "Instrumentaler Hip-Hop, Lo-Fi", ambient),
 
-        RadioStation(name: "Radio Swiss Jazz", detail: "Jazz und Soul, ohne Moderation", url: URL(string: "https://stream.srg-ssr.ch/m/rsj/mp3_128")!, genre: jazz),
         RadioStation(name: "Radio Swiss Classic", detail: "Klassik, viel Klavier, ohne Moderation", url: URL(string: "https://stream.srg-ssr.ch/m/rsc_de/mp3_128")!, genre: jazz),
-        soma("sonicuniverse", "Sonic Universe", "Moderner Jazz, Nu-Jazz", jazz),
-        soma("secretagent", "Secret Agent", "Lounge, Jazz mit Spannung", jazz),
+        soma("sonicuniverse", "Sonic Universe", "Moderner Jazz, meist instrumental", jazz),
 
-        soma("beatblender", "Beat Blender", "Deep House, Downtempo für den späten Abend", electronic),
-        soma("thetrip", "The Trip", "Progressive House, Trance", electronic),
-        soma("vaporwaves", "Vaporwaves", "Vaporwave, Retro-Synthesizer", electronic),
         soma("synphaera", "Synphaera", "Moderne Elektronik, Synth-Ambient", electronic),
+        soma("cliqhop", "cliqhop idm", "Verspielte Elektronik (IDM)", electronic),
         soma("defcon", "DEF CON Radio", "Elektronik zum Konzentrieren", electronic),
     ]
 
