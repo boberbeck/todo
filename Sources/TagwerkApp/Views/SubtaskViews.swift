@@ -190,7 +190,9 @@ struct AddSubtaskField: View {
                 .foregroundStyle(Theme.tertiary)
                 .frame(width: 13)
             TextField("Unteraufgabe hinzufügen", text: $text)
+                .labelsHidden()
                 .textFieldStyle(.plain)
+                .multilineTextAlignment(.leading)
                 .font(.callout)
                 .focused($focused)
                 .onSubmit {

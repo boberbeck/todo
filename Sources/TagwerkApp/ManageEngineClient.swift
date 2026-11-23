@@ -88,6 +88,7 @@ enum Keychain {
             let vault = (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
             cache = vault
             cachedNames = Set(vault.keys)
+            adoptForFixedSignature(vault)
             return vault
         case errSecItemNotFound:
             // Umzug der einzelnen Einträge in den gemeinsamen
@@ -107,6 +108,20 @@ enum Keychain {
         default:
             AppLog.warning("Schlüsselbund", "Zugriff nicht möglich (Status \(status))")
             return nil
+        }
+    }
+
+    /// Legt den Eintrag einmal neu an, sobald Tagwerk fest signiert ist. Dann gehört er der signierten App,
+    /// und macOS fragt auch nach Updates (gleiches Zertifikat) nicht mehr. Vorher gehörte er einer
+    /// ad hoc signierten Fassung, die macOS bei jeder neuen Fassung für eine andere App hält.
+    private static func adoptForFixedSignature(_ vault: [String: String]) {
+        let flag = "keychainAdoptedForFixedSignature"
+        guard SigningSetup.isFixed, !UserDefaults.standard.bool(forKey: flag) else { return }
+        SecItemDelete(baseQuery(vaultAccount) as CFDictionary)
+        save(vault)
+        if cache != nil {
+            UserDefaults.standard.set(true, forKey: flag)
+            AppLog.info("Schlüsselbund", "Eintrag für die feste Signatur neu angelegt")
         }
     }
 

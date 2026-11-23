@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TagwerkCore
 
@@ -17,6 +18,13 @@ struct TaskDetailView: View {
     @State private var confirmsDelete = false
 
     private static let estimates = [15, 30, 45, 60, 90, 120, 180, 240, 360, 480]
+
+    /// So hoch, dass das Fenster samt Knöpfen ins Hauptfenster passt.
+    private static var fittingHeight: CGFloat {
+        let window = NSApp.mainWindow ?? NSApp.keyWindow
+        let available = (window?.contentLayoutRect.height ?? 800) - 40
+        return max(420, min(760, available))
+    }
 
     var body: some View {
         if let task = model.task(taskID) {
@@ -251,7 +259,7 @@ struct TaskDetailView: View {
                 .padding(.horizontal, 22)
                 .padding(.vertical, 12)
         }
-        .frame(width: 640, height: 760)
+        .frame(width: 640, height: Self.fittingHeight)
         .onAppear {
             title = task.title
             notes = task.notes
@@ -373,7 +381,9 @@ struct SubtaskEditRow: View {
             }
             .buttonStyle(.plain)
             TextField("Unteraufgabe", text: $title)
+                .labelsHidden()
                 .textFieldStyle(.plain)
+                .multilineTextAlignment(.leading)
                 .strikethrough(task.isDone, color: Theme.tertiary)
                 .focused($focused)
                 .onSubmit { model.setTitle(title, for: task.id) }
