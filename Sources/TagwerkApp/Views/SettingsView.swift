@@ -153,6 +153,8 @@ struct GeneralSettings: View {
                 SettingsFootnote("Die Nummer in Klammern steht auch beim Release „aktuell“ auf GitHub. Stimmt sie nicht, ist hier noch eine ältere Fassung installiert.")
             }
 
+            UpdateSection()
+
             SigningSection()
 
             Section {
@@ -169,7 +171,7 @@ struct GeneralSettings: View {
                 SettingsFootnote("Funktioniert in jeder App. Mails ziehst du aus Outlook einfach in den Eingang; sie werden zur Aufgabe mit Betreff und Absender.")
             }
         }
-        .settingsPage(height: 700)
+        .settingsPage(height: 760)
         .onChange(of: workdayStart) { model.settingsChanged() }
         .onChange(of: workdayEnd) { model.settingsChanged() }
     }
@@ -1317,6 +1319,66 @@ struct PomodoroSettingsSection: View {
                 Stepper(title, value: value, in: range, step: step)
                     .labelsHidden()
             }
+        }
+    }
+}
+
+/// Updates aus GitHub: Schlüssel (nur lesen), automatisch prüfen, jetzt prüfen.
+struct UpdateSection: View {
+    @Environment(AppModel.self) private var model
+    @AppStorage(Preferences.updateAutoCheckKey) private var autoCheck = true
+    @State private var token = ""
+
+    var body: some View {
+        let updater = model.updater
+        Section {
+            if updater.hasToken {
+                LabeledContent("GitHub-Schlüssel") {
+                    HStack(spacing: 8) {
+                        Label("im Schlüsselbund", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Button("Entfernen") { updater.setToken("") }
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        SecureField("GitHub-Schlüssel (nur lesen)", text: $token)
+                        Button("Sichern") {
+                            updater.setToken(token)
+                            token = ""
+                            Task { await updater.check(userInitiated: true) }
+                        }
+                        .disabled(token.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    HStack {
+                        Button("Schlüssel bei GitHub anlegen") { NSWorkspace.shared.open(Updater.tokenPage) }
+                        Spacer()
+                    }
+                    Text("Bei GitHub: „Fine-grained token“, Repository access „Only select repositories“ › \(Updater.repository), Permissions › Contents: Read-only. Ablaufdatum nach Wunsch (z. B. 1 Jahr). Den Schlüssel hier einfügen.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Toggle("Automatisch nach Updates suchen", isOn: $autoCheck)
+            HStack {
+                Button(updater.isChecking ? "Prüft …" : "Jetzt prüfen") {
+                    Task { await updater.check(userInitiated: true) }
+                }
+                .disabled(updater.isChecking || !updater.hasToken)
+                if let status = updater.status {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+            }
+        } header: {
+            Text("Updates")
+        } footer: {
+            SettingsFootnote("Tagwerk schaut beim Start und alle sechs Stunden im Release „aktuell“ nach. Gibt es eine neue Fassung, fragt es; nach „Jetzt aktualisieren“ ersetzt es sich selbst und startet neu. Der Schlüssel liegt im Schlüsselbund und geht nur an GitHub.")
         }
     }
 }

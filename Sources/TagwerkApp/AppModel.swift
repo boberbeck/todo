@@ -56,6 +56,8 @@ final class AppModel {
     let music = FocusMusic()
     /// Fernzugriff für Claude im Browser und auf dem Handy
     let remote = RemoteAccess()
+    /// Updates aus dem Release „aktuell“
+    let updater = Updater()
     /// Aufgabe, die im Fokus-Modus gezeigt wird. Ohne Auswahl: die laufende oder die nächste offene.
     var focusedTaskID: UUID?
     /// Wird hochgezählt, wenn per ⌘N eine neue Aufgabe angelegt werden soll.
@@ -120,6 +122,10 @@ final class AppModel {
             backupIfDue()
             remote.startIfEnabled()
             if isPomodoroEnabled { PomodoroNotifier.requestPermission() }
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(20))
+                self?.updater.checkIfDue()
+            }
         }
     }
 
@@ -1960,6 +1966,7 @@ final class AppModel {
         autoSyncTicketsIfDue()
         reloadIfChangedElsewhere()
         checkPomodoro()
+        if tickCount % 600 == 0 { updater.checkIfDue() }
         tickCount += 1
         if tickCount == 5 { autoFetchSAPIfDue() }
         if tickCount % 5 == 0 {

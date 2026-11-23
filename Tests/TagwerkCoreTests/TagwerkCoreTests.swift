@@ -1427,3 +1427,43 @@ final class PomodoroTests: XCTestCase {
         XCTAssertNil(skipped.flatMap { Pomodoro.advance($0, settings: settings, now: minutes(99)) }, "bereit wartet auf Weiter")
     }
 }
+
+/// Update-Suche: Release „aktuell“ lesen und mit der laufenden Fassung vergleichen.
+final class ReleaseCheckTests: XCTestCase {
+    func testParsesReleaseAndComparesBuild() throws {
+        let json = """
+        {"tag_name":"aktuell","target_commitish":"c8cd2c176c003b44cfe336274e9943416e24cbec","published_at":"2026-11-23T07:27:00Z",
+         "assets":[{"name":"Tagwerk.zip","url":"https://api.github.com/repos/o/r/releases/assets/1","size":3},
+                   {"name":"Tagwerk.dmg","url":"https://api.github.com/repos/o/r/releases/assets/2","size":4300000}]}
+        """
+        let release = try ReleaseCheck.parseRelease(Data(json.utf8))
+        XCTAssertEqual(release.shortCommit, "c8cd2c1")
+        XCTAssertEqual(release.dmgURL?.absoluteString, "https://api.github.com/repos/o/r/releases/assets/2")
+        XCTAssertEqual(release.dmgSize, 4_300_000)
+        XCTAssertNotNil(release.publishedAt)
+        XCTAssertFalse(release.isNewer(thanBuild: "c8cd2c1"), "gleiche Fassung")
+        XCTAssertTrue(release.isNewer(thanBuild: "767b604"))
+        XCTAssertFalse(release.isNewer(thanBuild: "lokal"), "selbst gebaut: nicht überschreiben")
+        XCTAssertFalse(release.isNewer(thanBuild: nil))
+
+        XCTAssertThrowsError(try ReleaseCheck.parseRelease(Data(#"{"message":"Bad credentials"}"#.utf8))) { error in
+            XCTAssertEqual(error as? ReleaseCheck.ReleaseError, .server("Bad credentials"))
+        }
+    }
+
+    func testRequestsAndChanges() {
+        let request = ReleaseCheck.releaseRequest(repository: "o/r", tag: "aktuell", token: "T")
+        XCTAssertEqual(request.url?.absoluteString, "https://api.github.com/repos/o/r/releases/tags/aktuell")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer T")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "Tagwerk")
+
+        let compare = """
+        {"commits":[
+          {"commit":{"message":"Pomodoro im Fokus: Arbeiten, Pause [screenshots]\\n\\n- Details"}},
+          {"commit":{"message":"Screenshots aktualisieren [skip ci]"}},
+          {"commit":{"message":"Pomodoro-Pause: Fortschrittsbalken grün"}}
+        ]}
+        """
+        XCTAssertEqual(ReleaseCheck.parseChanges(Data(compare.utf8)), ["Pomodoro-Pause: Fortschrittsbalken grün", "Pomodoro im Fokus: Arbeiten, Pause"])
+    }
+}

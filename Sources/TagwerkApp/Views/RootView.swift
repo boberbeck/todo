@@ -42,6 +42,12 @@ struct RootView: View {
         .sheet(isPresented: $model.showsSAPSync, onDismiss: { model.sapSyncRows = nil }) {
             SAPSyncSheet(initialRows: model.sapSyncRows)
         }
+        .sheet(isPresented: Binding(
+            get: { model.updater.showsPrompt },
+            set: { if !$0 { model.updater.postpone() } }
+        )) {
+            UpdatePromptView()
+        }
         .sheet(item: $model.timeEntryDraft) { draft in
             AddTimeSheet(draft: draft)
         }
@@ -137,6 +143,7 @@ struct TopBar: View {
                 .help("\(tab.title) (⌘\(tab.shortcut))")
             }
             Spacer(minLength: 16)
+            UpdatePill()
             RunningTimerPill()
             SettingsLink {
                 Image(systemName: "gearshape")
@@ -279,5 +286,109 @@ struct IdlePromptView: View {
         }
         .padding(24)
         .frame(width: 520)
+    }
+}
+
+/// Hinweis oben, wenn eine neue Fassung bereitliegt.
+struct UpdatePill: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let updater = model.updater
+        if updater.available != nil || updater.isInstalling {
+            Button {
+                updater.showsPrompt = true
+            } label: {
+                HStack(spacing: 6) {
+                    if updater.isInstalling {
+                        ProgressView().controlSize(.small)
+                        Text("Aktualisiert …")
+                    } else {
+                        Image(systemName: "arrow.down.circle.fill")
+                        Text("Update")
+                    }
+                }
+                .font(.callout)
+                .foregroundStyle(Theme.done)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Capsule().fill(Theme.done.opacity(0.14)))
+            }
+            .buttonStyle(.plain)
+            .disabled(updater.isInstalling)
+            .padding(.trailing, 8)
+            .help(updater.status ?? "Neue Fassung verfügbar")
+        }
+    }
+}
+
+/// Nachfrage: neue Fassung, was neu ist, jetzt aktualisieren.
+struct UpdatePromptView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let updater = model.updater
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.down.app.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(Theme.done)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Neue Fassung von Tagwerk")
+                        .font(.title2.weight(.semibold))
+                    if let release = updater.available?.release {
+                        Text("Stand \(release.shortCommit)\(release.publishedAt.map { " vom \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "") · jetzt \(updater.currentBuild ?? "?")")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if let changes = updater.available?.changes, !changes.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Was ist neu")
+                        .font(.headline)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 5) {
+                            ForEach(Array(changes.prefix(15).enumerated()), id: \.offset) { _, change in
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text("•")
+                                    Text(change)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 200)
+                }
+            }
+            Text("Tagwerk lädt die neue Fassung, ersetzt sich in „Programme“ und startet neu. Deine Daten bleiben, ein laufender Timer läuft weiter.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let status = updater.status, updater.isInstalling || status.contains("fehlgeschlagen") || status.contains("nicht") {
+                HStack(spacing: 8) {
+                    if updater.isInstalling { ProgressView().controlSize(.small) }
+                    Text(status)
+                        .font(.callout)
+                        .foregroundStyle(status.contains("fehlgeschlagen") ? Color.red : Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Später") { updater.postpone() }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(updater.isInstalling)
+                Button("Jetzt aktualisieren") {
+                    Task { await updater.install() }
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(updater.isInstalling || updater.available == nil)
+            }
+        }
+        .padding(24)
+        .frame(width: 480)
     }
 }

@@ -119,6 +119,8 @@ enum Preferences {
     static let bydesignUserKey = "bydesignUser"
     static let bydesignTaskListURLKey = "bydesignTaskListURL"
     static let bydesignAutoFetchKey = "bydesignAutoFetch"
+    /// Updates aus GitHub
+    static let updateAutoCheckKey = "updateAutoCheck"
     /// Pomodoro im Fokus
     static let pomodoroEnabledKey = "pomodoroEnabled"
     static let pomodoroWorkKey = "pomodoroWorkMinutes"
