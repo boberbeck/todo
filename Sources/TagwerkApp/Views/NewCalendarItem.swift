@@ -23,7 +23,7 @@ struct NewCalendarItem: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                TextField(isPast ? "Was hast du gemacht?" : "Was steht an?", text: $title)
+                TextField(isPast ? "Was gemacht?" : "Was steht an?", text: $title)
                     .textFieldStyle(.plain)
                     .font(.caption.weight(.semibold))
                     .focused($focused)
@@ -38,7 +38,7 @@ struct NewCalendarItem: View {
                 .foregroundStyle(Theme.secondary)
                 .help("Bestehende Aufgabe wählen, Kunde oder genaue Zeit …")
             }
-            Text("\(clock(slot.start))–\(clock(slot.end)) · \(isPast ? "als erledigt erfassen" : "einplanen") · ↩")
+            Text("\(clock(slot.start))–\(clock(slot.end)) · ↩ \(isPast ? "erfassen" : "einplanen")")
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(Theme.secondary)
                 .lineLimit(1)
