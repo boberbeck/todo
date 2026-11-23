@@ -1382,3 +1382,48 @@ final class LongGoalTests: XCTestCase {
         XCTAssertEqual(parsed.first?.number, "4711")
     }
 }
+
+/// Pomodoro: Arbeit, kurze Pause, nach vier Runden lange Pause.
+final class PomodoroTests: XCTestCase {
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+    private func minutes(_ value: Double) -> Date { start.addingTimeInterval(value * 60) }
+
+    func testCycleWithLongBreakAfterFourRounds() {
+        let settings = PomodoroSettings()
+        let task = UUID()
+        var state = Pomodoro.startWork(previous: nil, taskID: task, now: start)
+        XCTAssertEqual(state.round(settings: settings), 1)
+        XCTAssertEqual(Pomodoro.remaining(state, settings: settings, now: minutes(10)), 15 * 60)
+        XCTAssertNil(Pomodoro.advance(state, settings: settings, now: minutes(24)), "noch nicht vorbei")
+
+        var clock = 0.0
+        for round in 1...4 {
+            clock += 25
+            guard let rest = Pomodoro.advance(state, settings: settings, now: minutes(clock)) else { return XCTFail("Runde \(round)") }
+            XCTAssertEqual(rest.phase, round < 4 ? .shortBreak : .longBreak)
+            XCTAssertEqual(rest.completedInSet, round)
+            XCTAssertEqual(rest.phaseStart, minutes(clock), "Pause beginnt, wo die Arbeit endet")
+            clock += round < 4 ? 5 : 15
+            guard let ready = Pomodoro.advance(rest, settings: settings, now: minutes(clock)) else { return XCTFail("Pause \(round)") }
+            XCTAssertEqual(ready.phase, .ready)
+            XCTAssertEqual(ready.taskID, task)
+            state = Pomodoro.startWork(previous: ready, taskID: nil, now: minutes(clock))
+            XCTAssertEqual(state.taskID, task, "nach der Pause geht es mit derselben Aufgabe weiter")
+        }
+        XCTAssertEqual(state.completedInSet, 0, "nach der langen Pause beginnt ein neuer Satz")
+        XCTAssertEqual(state.round(settings: settings), 1)
+    }
+
+    func testOwnTimesAndSkippingBreak() {
+        let settings = PomodoroSettings(workMinutes: 20, shortBreakMinutes: 5, longBreakMinutes: 20, roundsUntilLongBreak: 3)
+        let work = Pomodoro.startWork(previous: nil, taskID: UUID(), now: start)
+        let rest = Pomodoro.advance(work, settings: settings, now: minutes(21))
+        XCTAssertEqual(rest?.phase, .shortBreak)
+        XCTAssertEqual(rest.map { Pomodoro.remaining($0, settings: settings, now: minutes(22)) }, 3 * 60)
+        XCTAssertEqual(rest.map { Pomodoro.progress($0, settings: settings, now: minutes(22.5)) } ?? 0, 0.5, accuracy: 0.001)
+        let skipped = rest.map { Pomodoro.skipBreak($0, now: minutes(22)) }
+        XCTAssertEqual(skipped?.phase, .ready)
+        XCTAssertEqual(skipped?.completedInSet, 1)
+        XCTAssertNil(skipped.flatMap { Pomodoro.advance($0, settings: settings, now: minutes(99)) }, "bereit wartet auf Weiter")
+    }
+}

@@ -119,6 +119,7 @@ final class AppModel {
             showPlanningIfDue()
             backupIfDue()
             remote.startIfEnabled()
+            if isPomodoroEnabled { PomodoroNotifier.requestPermission() }
         }
     }
 
@@ -288,7 +289,7 @@ final class AppModel {
     /// Erledigt die Aufgabe, stoppt ihren Timer und holt im Fokus die nächste.
     func complete(_ id: UUID) {
         guard var task = self.task(id), !task.isDone else { return }
-        if isRunning(id) { stopTimer() }
+        if isRunning(id) { stopTracking() }
         let parent = task.parentID.flatMap { self.task($0) }
         let next = parent.flatMap { $0.isDone ? nil : $0 } ?? DayPlan.nextOpenTask(after: id, in: todayTasks)
         task.status = .done
@@ -578,10 +579,123 @@ final class AppModel {
     func startTimer(_ taskID: UUID) {
         apply(TimerLogic.start(taskID: taskID, entries: entries, at: Date()))
         focusedTaskID = taskID
+        pomodoroTimerStarted(taskID)
     }
 
+    /// Stoppen durch dich: beendet auch eine laufende Pomodoro-Runde.
     func stopTimer() {
+        stopTracking()
+        if pomodoro?.phase == .work { pomodoro = nil }
+    }
+
+    /// Zeit anhalten, ohne die Pomodoro-Runde zu beenden (z. B. beim Erledigen oder zur Pause).
+    private func stopTracking() {
         apply(TimerLogic.stop(entries: entries, at: Date()))
+    }
+
+    // MARK: Pomodoro
+
+    /// Laufender Pomodoro (Arbeit, Pause oder „bereit“); `nil` = keiner.
+    var pomodoro: PomodoroState?
+    /// Abgeschlossene Pomodoros heute
+    private(set) var pomodorosToday = 0
+    @ObservationIgnored private var pomodoroCountDay: LocalDate?
+
+    var isPomodoroEnabled: Bool {
+        _ = settingsVersion
+        return UserDefaults.standard.bool(forKey: Preferences.pomodoroEnabledKey)
+    }
+
+    func setPomodoroEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: Preferences.pomodoroEnabledKey)
+        settingsVersion += 1
+        if enabled {
+            PomodoroNotifier.requestPermission()
+            if let running = runningEntry, let taskID = running.taskID, pomodoro == nil {
+                pomodoro = Pomodoro.startWork(previous: nil, taskID: taskID, now: Date())
+            }
+        } else {
+            pomodoro = nil
+        }
+    }
+
+    var pomodoroSettings: PomodoroSettings {
+        _ = settingsVersion
+        let defaults = UserDefaults.standard
+        return PomodoroSettings(
+            workMinutes: defaults.integer(forKey: Preferences.pomodoroWorkKey),
+            shortBreakMinutes: defaults.integer(forKey: Preferences.pomodoroShortBreakKey),
+            longBreakMinutes: defaults.integer(forKey: Preferences.pomodoroLongBreakKey),
+            roundsUntilLongBreak: defaults.integer(forKey: Preferences.pomodoroRoundsKey)
+        )
+    }
+
+    var pomodoroRemaining: TimeInterval {
+        guard let pomodoro else { return 0 }
+        return Pomodoro.remaining(pomodoro, settings: pomodoroSettings, now: now)
+    }
+
+    private func pomodoroTimerStarted(_ taskID: UUID) {
+        guard isPomodoroEnabled else { return }
+        if var current = pomodoro, current.phase == .work {
+            current.taskID = taskID
+            pomodoro = current
+        } else if pomodoro != nil || selection == .focus {
+            // Neu im Fokus gestartet oder nach (oder statt) der Pause weiter
+            pomodoro = Pomodoro.startWork(previous: pomodoro, taskID: taskID, now: Date())
+        }
+    }
+
+    /// Pause vorzeitig beenden; danach „Weiter“.
+    func skipPomodoroBreak() {
+        guard let current = pomodoro else { return }
+        pomodoro = Pomodoro.skipBreak(current, now: Date())
+    }
+
+    /// Nach der Pause mit derselben Aufgabe weiter (oder der Fokus-Aufgabe).
+    func continuePomodoro() {
+        let taskID = pomodoro?.taskID.flatMap { task($0)?.isDone == false ? $0 : nil } ?? focusTask?.id
+        guard let taskID else { return }
+        if pomodoro?.phase.isBreak == true { skipPomodoroBreak() }
+        startTimer(taskID)
+    }
+
+    func endPomodoro() {
+        pomodoro = nil
+    }
+
+    /// Jede Sekunde: Ist die Phase um, geht es weiter (Arbeit → Pause → bereit) mit Ton und Mitteilung.
+    private func checkPomodoro() {
+        guard let current = pomodoro,
+              let next = Pomodoro.advance(current, settings: pomodoroSettings, now: Date()) else { return }
+        let settings = pomodoroSettings
+        switch next.phase {
+        case .shortBreak, .longBreak:
+            if runningEntry != nil { stopTracking() }
+            music.pauseForBreak()
+            if pomodoroCountDay != today { pomodorosToday = 0; pomodoroCountDay = today }
+            pomodorosToday += 1
+            pomodoro = next
+            let minutes = next.phase == .longBreak ? settings.longBreakMinutes : settings.shortBreakMinutes
+            PomodoroNotifier.signal(
+                title: next.phase == .longBreak ? "Lange Pause" : "Pause",
+                body: "\(next.completedInSet). Pomodoro geschafft. \(minutes) Minuten Pause, die Zeit läuft nicht mit.",
+                sound: "Glass"
+            )
+        case .ready:
+            pomodoro = next
+            let title = task(next.taskID)?.title
+            PomodoroNotifier.signal(
+                title: "Pause vorbei",
+                body: title.map { "Weiter mit „\($0)“." } ?? "Weiter geht's.",
+                sound: "Hero"
+            )
+            if UserDefaults.standard.bool(forKey: Preferences.pomodoroAutoContinueKey) {
+                continuePomodoro()
+            }
+        case .work:
+            break
+        }
     }
 
     /// Vergessen zu starten: Timer läuft rückwirkend seit `since` (frühestens ab dem Ende des letzten Eintrags).
@@ -1845,6 +1959,7 @@ final class AppModel {
         }
         autoSyncTicketsIfDue()
         reloadIfChangedElsewhere()
+        checkPomodoro()
         tickCount += 1
         if tickCount == 5 { autoFetchSAPIfDue() }
         if tickCount % 5 == 0 {

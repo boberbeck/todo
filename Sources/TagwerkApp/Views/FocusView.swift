@@ -22,6 +22,8 @@ struct FocusView: View {
                 .keyboardShortcut(.cancelAction)
                 .help("Zurück (Esc)")
                 Spacer()
+                PomodoroToggle()
+                    .padding(.trailing, 14)
                 HStack(spacing: 8) {
                     Circle()
                         .fill(running ? Theme.accent : Theme.tertiary)
@@ -36,7 +38,9 @@ struct FocusView: View {
             .padding(.top, 20)
 
             Group {
-                if let task = model.focusTask {
+                if let pomodoro = model.pomodoro, pomodoro.phase.isBreak || pomodoro.phase == .ready {
+                    PomodoroBreakPane(state: pomodoro)
+                } else if let task = model.focusTask {
                     FocusTaskPane(task: task)
                         .id(task.id)
                 } else {
@@ -122,13 +126,27 @@ struct FocusTaskPane: View {
             }
 
             VStack(spacing: 4) {
-                Text(TimeMath.format(model.trackedIncludingSubtasks(taskID: task.id, now: model.runningEntry != nil ? model.now : Date()), showSeconds: true))
-                    .font(.system(size: 76, weight: .light))
-                    .monospacedDigit()
-                    .foregroundStyle(running ? Theme.text : Theme.secondary)
-                if let estimate = task.estimateMinutes {
-                    Text("von \(TimeMath.format(minutes: estimate)) h geplant")
+                let tracked = model.trackedIncludingSubtasks(taskID: task.id, now: model.runningEntry != nil ? model.now : Date())
+                if let pomodoro = model.pomodoro, pomodoro.phase == .work {
+                    let settings = model.pomodoroSettings
+                    Text(PomodoroText.clock(model.pomodoroRemaining))
+                        .font(.system(size: 76, weight: .light))
+                        .monospacedDigit()
+                        .foregroundStyle(running ? Theme.text : Theme.secondary)
+                    ProgressLine(value: Pomodoro.progress(pomodoro, settings: settings, now: model.now), height: 3)
+                        .frame(width: 220)
+                        .padding(.vertical, 4)
+                    Text("Pomodoro \(pomodoro.round(settings: settings)) von \(settings.roundsUntilLongBreak) · \(TimeMath.format(tracked)) h erfasst\(task.estimateMinutes.map { " von \(TimeMath.format(minutes: $0)) h" } ?? "")")
                         .foregroundStyle(Theme.tertiary)
+                } else {
+                    Text(TimeMath.format(tracked, showSeconds: true))
+                        .font(.system(size: 76, weight: .light))
+                        .monospacedDigit()
+                        .foregroundStyle(running ? Theme.text : Theme.secondary)
+                    if let estimate = task.estimateMinutes {
+                        Text("von \(TimeMath.format(minutes: estimate)) h geplant")
+                            .foregroundStyle(Theme.tertiary)
+                    }
                 }
             }
 
@@ -378,5 +396,105 @@ struct FocusMusicBar: View {
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.border))
+    }
+}
+
+/// Pomodoro an oder aus, mit den eingestellten Zeiten.
+struct PomodoroToggle: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let enabled = model.isPomodoroEnabled
+        let settings = model.pomodoroSettings
+        Button {
+            model.setPomodoroEnabled(!enabled)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: enabled ? "timer.circle.fill" : "timer")
+                Text(enabled ? "Pomodoro \(settings.workMinutes)/\(settings.shortBreakMinutes)" : "Pomodoro")
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(enabled ? Theme.accent : Theme.tertiary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(enabled ? Theme.accentSoft : Color.white.opacity(0.04)))
+        }
+        .buttonStyle(.plain)
+        .help(enabled
+              ? "Pomodoro aus. Zeiten in Einstellungen › Fokus."
+              : "Pomodoro an: \(settings.workMinutes) Minuten arbeiten, \(settings.shortBreakMinutes) Minuten Pause, nach \(settings.roundsUntilLongBreak) Runden \(settings.longBreakMinutes) Minuten")
+    }
+}
+
+/// Pause im Pomodoro: zählt herunter, Musik ist aus, danach „Weiter“.
+struct PomodoroBreakPane: View {
+    @Environment(AppModel.self) private var model
+    let state: PomodoroState
+
+    var body: some View {
+        let settings = model.pomodoroSettings
+        let isReady = state.phase == .ready
+        let next = model.task(state.taskID).flatMap { $0.isDone ? nil : $0 } ?? model.focusTask
+        VStack(spacing: 22) {
+            VStack(spacing: 10) {
+                Text(isReady ? "PAUSE VORBEI" : (state.phase == .longBreak ? "LANGE PAUSE" : "PAUSE"))
+                    .font(.system(size: 13, weight: .semibold))
+                    .tracking(2.4)
+                    .foregroundStyle(isReady ? Theme.accent : Theme.done)
+                Text(isReady ? "Weiter geht's" : "Kurz raus, Augen weg vom Bildschirm")
+                    .font(.system(size: 30, weight: .regular))
+            }
+            if !isReady {
+                VStack(spacing: 6) {
+                    Text(PomodoroText.clock(model.pomodoroRemaining))
+                        .font(.system(size: 76, weight: .light))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.done)
+                    ProgressLine(value: Pomodoro.progress(state, settings: settings, now: model.now), height: 3)
+                        .frame(width: 220)
+                        .tint(Theme.done)
+                }
+            }
+            Text("\(state.completedInSet == 0 && isReady ? settings.roundsUntilLongBreak : state.completedInSet) von \(settings.roundsUntilLongBreak) Pomodoros\(model.pomodorosToday > 0 ? " · heute \(model.pomodorosToday)" : "")")
+                .foregroundStyle(Theme.tertiary)
+            if let next {
+                Text("Danach: \(next.title)")
+                    .foregroundStyle(Theme.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            HStack(spacing: 14) {
+                if isReady {
+                    Button {
+                        model.continuePomodoro()
+                    } label: {
+                        Label("Weiter", systemImage: "play.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .padding(.horizontal, 22)
+                            .padding(.vertical, 12)
+                            .background(Capsule().fill(Theme.accent))
+                            .foregroundStyle(Color.black.opacity(0.85))
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(next == nil)
+                } else {
+                    Button("Pause überspringen") { model.continuePomodoro() }
+                        .buttonStyle(GhostButtonStyle())
+                        .disabled(next == nil)
+                }
+                Button("Pomodoro beenden") { model.endPomodoro() }
+                    .buttonStyle(GhostButtonStyle())
+            }
+        }
+        .padding(.horizontal, 40)
+    }
+}
+
+enum PomodoroText {
+    /// „24:59“
+    static func clock(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded(.up))
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 }

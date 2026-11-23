@@ -185,6 +185,12 @@ struct RunningTimerPill: View {
                         .lineLimit(1)
                         .foregroundStyle(Theme.secondary)
                         .frame(maxWidth: 200, alignment: .leading)
+                    if let pomodoro = model.pomodoro, pomodoro.phase == .work {
+                        Label(PomodoroText.clock(model.pomodoroRemaining), systemImage: "timer")
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.accent)
+                            .help("Pomodoro: so lange bis zur Pause")
+                    }
                 }
                 .font(.callout)
                 .padding(.horizontal, 12)
@@ -195,6 +201,24 @@ struct RunningTimerPill: View {
             .buttonStyle(.plain)
             .padding(.trailing, 8)
             .help("Läuft – im Fokus öffnen")
+        } else if let pomodoro = model.pomodoro, pomodoro.phase.isBreak || pomodoro.phase == .ready {
+            Button {
+                model.selection = .focus
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: pomodoro.phase == .ready ? "play.circle.fill" : "cup.and.saucer.fill")
+                    Text(pomodoro.phase == .ready ? "Pause vorbei – weiter" : "Pause \(PomodoroText.clock(model.pomodoroRemaining))")
+                        .monospacedDigit()
+                }
+                .font(.callout)
+                .foregroundStyle(pomodoro.phase == .ready ? Theme.accent : Theme.done)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Capsule().fill((pomodoro.phase == .ready ? Theme.accent : Theme.done).opacity(0.14)))
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 8)
+            .help("Pomodoro – im Fokus öffnen")
         }
     }
 }

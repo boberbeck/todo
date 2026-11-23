@@ -75,11 +75,22 @@ enum SnapshotMode {
             screens.insert(("kunde", .customer(customer.id)), at: 5)
         }
 
+        // Pomodoro: zweite Runde läuft, noch gut zwölf Minuten
+        UserDefaults.standard.register(defaults: [Preferences.pomodoroEnabledKey: true])
+        model.pomodoro = PomodoroState(phase: .work, phaseStart: Date().addingTimeInterval(-12.5 * 60), completedInSet: 1, taskID: model.runningTask?.id)
+
         for screen in screens {
             model.selection = screen.item
             try? await Task.sleep(for: .seconds(1.5))
             await capture(window, name: screen.name, in: directory)
         }
+
+        // Pomodoro-Pause im Fokus
+        model.pomodoro = PomodoroState(phase: .shortBreak, phaseStart: Date().addingTimeInterval(-88), completedInSet: 2, taskID: model.runningTask?.id)
+        model.selection = .focus
+        try? await Task.sleep(for: .seconds(1.5))
+        await capture(window, name: "fokus-pause", in: directory)
+        model.pomodoro = nil
 
         // ganzer Bildschirm mit Menüleisten-Uhr
         model.selection = .today

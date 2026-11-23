@@ -22,6 +22,7 @@ Aufbau: dunkel und ruhig, oben die Leiste mit Start, Plan, Kalender, Fokus, Kund
 | Tag planen | Geführte Planung beim ersten Öffnen am Tag: Übriges von gestern, Eingang, schätzen, in freie Lücken legen. |
 | Tag abschließen | Zeiten je Aufgabe gerundet prüfen und anpassen. Worklogs gehen an ManageEngine. SAP-Zeilen überträgst du mit Kopier-Knöpfen oder als Excel-Liste und hakst sie ab; nichts wird doppelt gebucht. |
 | ManageEngine | Eigene offene Tickets landen im Eingang (Konto → Kunde). Zugang in den Einstellungen, der API-Schlüssel liegt im Schlüsselbund. |
+| Pomodoro | Im Fokus oben „Pomodoro“ einschalten: 25 Minuten arbeiten (die große Uhr zählt herunter), dann 5 Minuten Pause, nach vier Runden 15 Minuten. In der Pause stoppen Zeit und Musik, die Pause zählt herunter; Ton und Mitteilung bei Pause und danach, „Weiter“ startet die nächste Runde mit derselben Aufgabe. Zeiten in Einstellungen › Fokus. |
 | Fokus | Vollbild mit einer Aufgabe, großem Timer, Erledigt und Nächste. Arbeitsart, PSP-Element und Bearbeitung klappen unten auf. Dazu Musik: eine Playlist aus der Musik-App startet mit dem Timer und hält mit ihm an. |
 | Kunden | Kennzahlen und eine Karte je Kunde mit Stunden dieser Woche und im Monat. Im Kunden: lokale Todos, PSP-Elemente, ManageEngine-Konto. |
 | Rückblick | Stunden gegen das Wochenziel, Tagesdurchschnitt, Anteil Kundenarbeit, Stunden je Tag und je Kunde, Verlauf der letzten Wochen, Wochenziele, Export als CSV. |

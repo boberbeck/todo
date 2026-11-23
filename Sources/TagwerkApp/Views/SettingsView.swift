@@ -209,6 +209,8 @@ struct FocusSettings: View {
                 SettingsFootnote("Das Wochenziel im Kalender und im Rückblick ist das Fünffache.")
             }
 
+            PomodoroSettingsSection()
+
             Section {
                 LabeledContent("Playlist") {
                     HStack(spacing: 8) {
@@ -246,7 +248,7 @@ struct FocusSettings: View {
                 SettingsFootnote("Tagwerk steuert die Musik-App von macOS (Apple Music). Beim ersten Mal fragt macOS, ob Tagwerk die Musik-App steuern darf. Die Playlist wählst du auch direkt im Fokus über das Notensymbol.")
             }
         }
-        .settingsPage(height: 520)
+        .settingsPage(height: 700)
         .onChange(of: focusGoalMinutes) { model.settingsChanged() }
     }
 }
@@ -1264,5 +1266,57 @@ struct SigningSection: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         copied = key
+    }
+}
+
+/// Pomodoro-Zeiten: Arbeit, kurze und lange Pause, Runden bis zur langen Pause.
+struct PomodoroSettingsSection: View {
+    @Environment(AppModel.self) private var model
+    @AppStorage(Preferences.pomodoroWorkKey) private var work = 25
+    @AppStorage(Preferences.pomodoroShortBreakKey) private var shortBreak = 5
+    @AppStorage(Preferences.pomodoroLongBreakKey) private var longBreak = 15
+    @AppStorage(Preferences.pomodoroRoundsKey) private var rounds = 4
+    @AppStorage(Preferences.pomodoroAutoContinueKey) private var autoContinue = false
+    @AppStorage(Preferences.pomodoroSoundKey) private var sound = true
+
+    var body: some View {
+        Section {
+            Toggle("Pomodoro im Fokus", isOn: Binding(
+                get: { model.isPomodoroEnabled },
+                set: { model.setPomodoroEnabled($0) }
+            ))
+            minutesRow("Arbeiten", value: $work, range: 5...90, step: 5)
+            minutesRow("Kurze Pause", value: $shortBreak, range: 1...30, step: 1)
+            minutesRow("Lange Pause", value: $longBreak, range: 5...60, step: 5)
+            LabeledContent("Lange Pause nach") {
+                HStack(spacing: 6) {
+                    Text("\(rounds) Runden")
+                        .monospacedDigit()
+                    Stepper("Runden", value: $rounds, in: 2...8)
+                        .labelsHidden()
+                }
+            }
+            Toggle("Nach der Pause automatisch weiter", isOn: $autoContinue)
+            Toggle("Ton bei Pause und Weiter", isOn: $sound)
+        } header: {
+            Text("Pomodoro")
+        } footer: {
+            SettingsFootnote("Klassisch nach Francesco Cirillo: 25 Minuten arbeiten, 5 Minuten Pause, nach vier Runden 15 bis 30 Minuten. In der Pause stoppt die Zeit und die Musik; sie zählt herunter, danach kommt ein Signal. Ohne „automatisch weiter“ geht es mit „Weiter“ los.")
+        }
+        .onChange(of: work) { model.settingsChanged() }
+        .onChange(of: shortBreak) { model.settingsChanged() }
+        .onChange(of: longBreak) { model.settingsChanged() }
+        .onChange(of: rounds) { model.settingsChanged() }
+    }
+
+    private func minutesRow(_ title: String, value: Binding<Int>, range: ClosedRange<Int>, step: Int) -> some View {
+        LabeledContent(title) {
+            HStack(spacing: 6) {
+                Text("\(value.wrappedValue) Min.")
+                    .monospacedDigit()
+                Stepper(title, value: value, in: range, step: step)
+                    .labelsHidden()
+            }
+        }
     }
 }

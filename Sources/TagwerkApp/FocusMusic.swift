@@ -130,6 +130,13 @@ final class FocusMusic {
         }
     }
 
+    /// Pomodoro-Pause: Musik anhalten; mit dem nächsten Start des Timers spielt sie weiter.
+    func pauseForBreak() {
+        guard state == .playing else { return }
+        startedByTagwerk = true
+        pause()
+    }
+
     func timerStopped() {
         guard pauseWithTimer, startedByTagwerk, state == .playing else { return }
         pause()

@@ -119,6 +119,14 @@ enum Preferences {
     static let bydesignUserKey = "bydesignUser"
     static let bydesignTaskListURLKey = "bydesignTaskListURL"
     static let bydesignAutoFetchKey = "bydesignAutoFetch"
+    /// Pomodoro im Fokus
+    static let pomodoroEnabledKey = "pomodoroEnabled"
+    static let pomodoroWorkKey = "pomodoroWorkMinutes"
+    static let pomodoroShortBreakKey = "pomodoroShortBreakMinutes"
+    static let pomodoroLongBreakKey = "pomodoroLongBreakMinutes"
+    static let pomodoroRoundsKey = "pomodoroRounds"
+    static let pomodoroAutoContinueKey = "pomodoroAutoContinue"
+    static let pomodoroSoundKey = "pomodoroSound"
     /// Fernzugriff für Claude im Browser und auf dem Handy
     static let remoteEnabledKey = "remoteMCPEnabled"
     static let remotePortKey = "remoteMCPPort"
@@ -166,6 +174,11 @@ enum Preferences {
             roundingModeKey: RoundingMode.nearest.rawValue,
             meAutoFetchKey: true,
             idleMinutesKey: 10,
+            pomodoroWorkKey: 25,
+            pomodoroShortBreakKey: 5,
+            pomodoroLongBreakKey: 15,
+            pomodoroRoundsKey: 4,
+            pomodoroSoundKey: true,
         ])
     }
 }
