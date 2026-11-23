@@ -25,22 +25,52 @@ public struct RadioStation: Codable, Hashable, Sendable, Identifiable {
     public var name: String
     public var detail: String
     public var url: URL
+    /// Musikrichtung für die Gruppierung im Menü (eigene Adressen haben keine)
+    public var genre: String?
 
     public var id: String { url.absoluteString }
 
-    public init(name: String, detail: String, url: URL) {
+    public init(name: String, detail: String, url: URL, genre: String? = nil) {
         self.name = name
         self.detail = detail
         self.url = url
+        self.genre = genre
     }
 
-    /// Ruhige Sender zum Arbeiten, werbefrei und hörerfinanziert (SomaFM).
+    public static let ambient = "Ambient & Chill"
+    public static let jazz = "Jazz & Piano"
+    public static let electronic = "Elektro & Synthwave"
+
+    /// Richtungen in der Reihenfolge fürs Menü.
+    public static let genres = [ambient, jazz, electronic]
+
+    /// Werbefreie Sender zum Arbeiten: SomaFM (hörerfinanziert, San Francisco) und Radio Swiss (öffentlich-rechtlich).
     public static let builtIn: [RadioStation] = [
-        RadioStation(name: "Groove Salad", detail: "Entspannte Elektronik, Downtempo", url: URL(string: "https://ice2.somafm.com/groovesalad-128-mp3")!),
-        RadioStation(name: "Fluid", detail: "Instrumentaler Hip-Hop, Lo-Fi", url: URL(string: "https://ice2.somafm.com/fluid-128-mp3")!),
-        RadioStation(name: "Drone Zone", detail: "Ambient ohne Takt", url: URL(string: "https://ice2.somafm.com/dronezone-128-mp3")!),
-        RadioStation(name: "Deep Space One", detail: "Tiefer Ambient, Space", url: URL(string: "https://ice2.somafm.com/deepspaceone-128-mp3")!),
+        soma("groovesalad", "Groove Salad", "Downtempo, entspannte Elektronik", ambient),
+        soma("dronezone", "Drone Zone", "Ambient ohne Takt, sehr ruhig", ambient),
+        soma("deepspaceone", "Deep Space One", "Tiefer Ambient, Weltraumklänge", ambient),
+        soma("spacestation", "Space Station Soma", "Ambient mit sanftem Takt", ambient),
+        soma("fluid", "Fluid", "Instrumentaler Hip-Hop, Lo-Fi", ambient),
+
+        RadioStation(name: "Radio Swiss Jazz", detail: "Jazz und Soul, ohne Moderation", url: URL(string: "https://stream.srg-ssr.ch/m/rsj/mp3_128")!, genre: jazz),
+        RadioStation(name: "Radio Swiss Classic", detail: "Klassik, viel Klavier, ohne Moderation", url: URL(string: "https://stream.srg-ssr.ch/m/rsc_de/mp3_128")!, genre: jazz),
+        soma("sonicuniverse", "Sonic Universe", "Moderner Jazz, Nu-Jazz", jazz),
+        soma("secretagent", "Secret Agent", "Lounge, Jazz mit Spannung", jazz),
+
+        soma("beatblender", "Beat Blender", "Deep House, Downtempo für den späten Abend", electronic),
+        soma("thetrip", "The Trip", "Progressive House, Trance", electronic),
+        soma("vaporwaves", "Vaporwaves", "Vaporwave, Retro-Synthesizer", electronic),
+        soma("synphaera", "Synphaera", "Moderne Elektronik, Synth-Ambient", electronic),
+        soma("defcon", "DEF CON Radio", "Elektronik zum Konzentrieren", electronic),
     ]
+
+    public static func stations(in genre: String) -> [RadioStation] {
+        builtIn.filter { $0.genre == genre }
+    }
+
+    private static func soma(_ channel: String, _ name: String, _ detail: String, _ genre: String) -> RadioStation {
+        RadioStation(name: name, detail: detail, url: URL(string: "https://ice2.somafm.com/\(channel)-128-mp3")!, genre: genre)
+    }
 
     /// Eigene Adresse aus einem Eingabefeld; nur http(s) mit Host.
     public static func custom(_ text: String) -> RadioStation? {

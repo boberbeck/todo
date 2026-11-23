@@ -266,10 +266,14 @@ struct FocusSettings: View {
                         set: { music.radioStation = $0 }
                     )) {
                         Text("Keiner").tag(RadioStation?.none)
-                        ForEach(RadioStation.builtIn) { station in
-                            Text("\(station.name) · \(station.detail)").tag(RadioStation?.some(station))
+                        ForEach(RadioStation.genres, id: \.self) { genre in
+                            Section(genre) {
+                                ForEach(RadioStation.stations(in: genre)) { station in
+                                    Text("\(station.name) · \(station.detail)").tag(RadioStation?.some(station))
+                                }
+                            }
                         }
-                        if let custom = music.radioStation, !RadioStation.builtIn.contains(custom) {
+                        if let custom = music.radioStation, !RadioStation.builtIn.contains(where: { $0.id == custom.id }) {
                             Text("\(custom.name) · eigene Adresse").tag(RadioStation?.some(custom))
                         }
                     }

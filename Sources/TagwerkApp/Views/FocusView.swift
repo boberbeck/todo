@@ -359,19 +359,24 @@ struct FocusMusicBar: View {
                         Button("Liste neu laden") { music.loadPlaylists() }
                     }
                 }
-                Section("Internetradio") {
-                    ForEach(RadioStation.builtIn) { station in
-                        Button {
-                            music.chooseStation(station)
-                        } label: {
-                            if music.source == .radio, station == music.radioStation {
-                                Label("\(station.name) · \(station.detail)", systemImage: "checkmark")
-                            } else {
-                                Text("\(station.name) · \(station.detail)")
+                // Internetradio nach Richtung
+                ForEach(RadioStation.genres, id: \.self) { genre in
+                    Section("Radio · \(genre)") {
+                        ForEach(RadioStation.stations(in: genre)) { station in
+                            Button {
+                                music.chooseStation(station)
+                            } label: {
+                                if music.source == .radio, station.id == music.radioStation?.id {
+                                    Label("\(station.name) · \(station.detail)", systemImage: "checkmark")
+                                } else {
+                                    Text("\(station.name) · \(station.detail)")
+                                }
                             }
                         }
                     }
-                    if let custom = music.radioStation, !RadioStation.builtIn.contains(custom) {
+                }
+                if let custom = music.radioStation, !RadioStation.builtIn.contains(where: { $0.id == custom.id }) {
+                    Section("Radio · eigene Adresse") {
                         Button {
                             music.chooseStation(custom)
                         } label: {

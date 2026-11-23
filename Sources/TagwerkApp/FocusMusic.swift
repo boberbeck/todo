@@ -71,8 +71,9 @@ final class FocusMusic {
     }
 
     private static func storedStation() -> RadioStation? {
-        guard let data = UserDefaults.standard.data(forKey: radioStationKey) else { return nil }
-        return try? JSONDecoder().decode(RadioStation.self, from: data)
+        guard let data = UserDefaults.standard.data(forKey: radioStationKey),
+              let stored = try? JSONDecoder().decode(RadioStation.self, from: data) else { return nil }
+        return RadioStation.builtIn.first { $0.id == stored.id } ?? stored
     }
 
     /// YouTube-Link, wie eingefügt.
