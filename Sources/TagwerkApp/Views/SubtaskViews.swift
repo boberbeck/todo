@@ -392,8 +392,7 @@ struct TicketPicker: View {
 
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(.caption2.weight(.semibold))
-            .tracking(1.2)
+            .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
             .padding(.top, 6)

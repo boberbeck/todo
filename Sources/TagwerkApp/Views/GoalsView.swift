@@ -11,7 +11,7 @@ struct GoalsView: View {
         let done = model.sortedLongGoals.filter(\.isDone)
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                PageHeader(title: "Ziele", subtitle: "Große Vorhaben über Wochen. Aufgaben zahlen darauf ein, ihre Zeit zählt mit.") {
+                PageHeader(title: "Ziele") {
                     EmptyView()
                 }
 

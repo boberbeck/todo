@@ -185,14 +185,10 @@ struct TopBar: View {
             .help("Einstellungen (⌘,)")
         }
         .padding(.horizontal, 20)
-        .frame(height: 58)
-        .background {
-            LinearGradient(colors: [Theme.bar, Theme.bar.opacity(0.85)], startPoint: .top, endPoint: .bottom)
-        }
+        .frame(height: 56)
+        .background(Theme.bar)
         .overlay(alignment: .bottom) {
-            // Haarlinie, in der Mitte leicht warm
-            LinearGradient(colors: [Theme.border, Theme.accent.opacity(0.18), Theme.border], startPoint: .leading, endPoint: .trailing)
-                .frame(height: 1)
+            Rectangle().fill(Theme.border).frame(height: 1)
         }
     }
 
@@ -205,7 +201,7 @@ struct TopBar: View {
     }
 }
 
-/// Reiter oben: gewählt als gehobene Fläche mit leuchtendem Strich darunter.
+/// Reiter oben: gewählt als helle Fläche, sonst nur Text.
 struct TopBarTabLabel: View {
     let title: String
     let selected: Bool
@@ -213,26 +209,14 @@ struct TopBarTabLabel: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 14, weight: selected ? .semibold : .regular, design: .rounded))
+            .font(.system(size: 14, weight: selected ? .medium : .regular))
             .foregroundStyle(selected ? Theme.text : (hovering ? Theme.text.opacity(0.85) : Theme.secondary))
             .padding(.horizontal, 13)
             .padding(.vertical, 7)
             .background {
-                if selected {
+                if selected || hovering {
                     RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                        .fill(Color.white.opacity(0.07))
-                        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous).strokeBorder(Theme.highlight, lineWidth: 1))
-                } else if hovering {
-                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous).fill(Color.white.opacity(0.035))
-                }
-            }
-            .overlay(alignment: .bottom) {
-                if selected {
-                    Capsule()
-                        .fill(Theme.accentGradient)
-                        .frame(width: 18, height: 2.5)
-                        .shadow(color: Theme.accent.opacity(0.8), radius: 4)
-                        .offset(y: 7)
+                        .fill(Color.white.opacity(selected ? 0.08 : 0.04))
                 }
             }
             .contentShape(Rectangle())
@@ -253,7 +237,6 @@ struct RunningTimerPill: View {
                     Circle()
                         .fill(Theme.accent)
                         .frame(width: 7, height: 7)
-                        .shadow(color: Theme.accent, radius: 4)
                     Text(TimeMath.format(model.tracked(taskID: task.id, now: model.now), showSeconds: true))
                         .font(.system(.callout, design: .rounded).weight(.semibold))
                         .monospacedDigit()
@@ -272,9 +255,8 @@ struct RunningTimerPill: View {
                 .font(.callout)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(Capsule().fill(LinearGradient(colors: [Theme.accent.opacity(0.22), Theme.accent.opacity(0.10)], startPoint: .top, endPoint: .bottom)))
-                .overlay(Capsule().strokeBorder(LinearGradient(colors: [Theme.accent.opacity(0.7), Theme.accent.opacity(0.3)], startPoint: .top, endPoint: .bottom)))
-                .shadow(color: Theme.accent.opacity(0.25), radius: 10)
+                .background(Capsule().fill(Theme.accent.opacity(0.12)))
+                .overlay(Capsule().strokeBorder(Theme.accent.opacity(0.35)))
             }
             .buttonStyle(.plain)
             .padding(.trailing, 8)
@@ -340,8 +322,7 @@ struct IdlePromptView: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(Theme.onAccent)
                     .frame(width: 40, height: 40)
-                    .background(Circle().fill(Theme.accentGradient))
-                    .shadow(color: Theme.accent.opacity(0.45), radius: 10)
+                    .background(Circle().fill(Theme.accent))
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Du warst \(prompt.minutes) Minuten weg")
                         .font(Theme.title)

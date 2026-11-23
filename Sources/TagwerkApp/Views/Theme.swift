@@ -2,9 +2,14 @@ import AppKit
 import SwiftUI
 import TagwerkCore
 
-/// Das Erscheinungsbild von Tagwerk: dunkel und warm, mit Tiefe.
-/// Flächen liegen in Ebenen übereinander (Grund › Fläche › gehoben › schwebend), Licht kommt von oben
-/// (heller Rand oben, Schatten unten), der Akzent ist das Orange der Sonne aus dem Logo und leuchtet leicht.
+/// Das Erscheinungsbild von Tagwerk: dunkel, warm, ruhig.
+///
+/// Regeln:
+/// - Orange heißt „läuft jetzt“ oder „Hauptaktion“. Sonst nirgends.
+/// - Tiefe entsteht durch Ebenen (Grund › Fläche › gehoben), nicht durch Leuchten oder Verläufe.
+///   Schatten nur für das, was wirklich schwebt (Fenster).
+/// - Zahlen und Zeiten in gerundeter Schrift, Text in normaler.
+/// - Überschriften in normaler Schreibweise, keine Großbuchstaben-Etiketten.
 ///
 /// Feste Werte statt freier Zahlen: Abstände `Theme.Space`, Rundungen `Theme.Radius`, Schrift `Theme.font…`.
 enum Theme {
@@ -86,42 +91,32 @@ enum Theme {
     // MARK: Schrift
     // Überschriften und Zahlen gerundet (freundlicher, wie das Logo), Fließtext normal.
 
-    static let pageTitle = Font.system(size: 32, weight: .semibold, design: .rounded)
-    static let title = Font.system(size: 21, weight: .semibold, design: .rounded)
+    static let pageTitle = Font.system(size: 28, weight: .semibold)
+    static let title = Font.system(size: 19, weight: .semibold)
     static let cardTitle = Font.system(size: 14, weight: .medium)
     static let bigNumber = Font.system(size: 30, weight: .medium, design: .rounded).monospacedDigit()
     static let statNumber = Font.system(size: 34, weight: .medium, design: .rounded).monospacedDigit()
     static let timerNumber = Font.system(size: 80, weight: .light, design: .rounded).monospacedDigit()
-    static let label = Font.system(size: 10.5, weight: .bold)
+    static let label = Font.system(size: 13, weight: .semibold)
 }
 
-/// Grund des Fensters: warmes Dunkel mit einem leichten Schein von oben, wie Licht über dem Horizont.
+/// Grund des Fensters: einfarbig warmes Dunkel.
 struct AppBackground: View {
     var body: some View {
-        ZStack {
-            Theme.background
-            RadialGradient(
-                colors: [Theme.accent.opacity(0.10), Theme.accentDeep.opacity(0.03), .clear],
-                center: UnitPoint(x: 0.5, y: -0.15),
-                startRadius: 0,
-                endRadius: 900
-            )
-            LinearGradient(colors: [.clear, Color.black.opacity(0.25)], startPoint: .center, endPoint: .bottom)
-        }
-        .ignoresSafeArea()
+        Theme.background
+            .ignoresSafeArea()
     }
 }
 
-/// Kleine Überschrift in Großbuchstaben, wie „HEUTE“ oder „EINGANG“.
+/// Abschnittsüberschrift, z. B. „Heute“ oder „Eingang“, mit optionaler Zahl daneben.
 struct SectionLabel: View {
     let text: String
     var detail: String?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(text.uppercased())
+            Text(text)
                 .font(Theme.label)
-                .tracking(1.8)
                 .foregroundStyle(Theme.secondary)
             if let detail {
                 Text(detail)
@@ -143,8 +138,8 @@ enum Elevation {
     case floating
 }
 
-/// Fläche mit Tiefe: leichter Verlauf, heller Rand oben, weicher Schatten. Mit `tint` leuchtet sie in einer Farbe
-/// (z. B. die laufende Aufgabe in Orange).
+/// Fläche: einfarbig mit Haarlinie; Schatten nur, wenn sie schwebt. Mit `tint` bekommt sie links eine Kante
+/// in der Farbe und einen Hauch davon in der Fläche (die laufende Aufgabe in Orange).
 struct SurfaceStyle: ViewModifier {
     var radius: CGFloat = Theme.Radius.card
     var elevation: Elevation = .raised
@@ -155,46 +150,39 @@ struct SurfaceStyle: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         content
             .background {
-                ZStack {
+                ZStack(alignment: .leading) {
                     shape.fill(fill)
-                    shape.fill(LinearGradient(colors: [Color.white.opacity(0.035), .clear], startPoint: .top, endPoint: .bottom))
                     if let tint {
-                        shape.fill(LinearGradient(colors: [tint.opacity(0.20), tint.opacity(0.07)], startPoint: .top, endPoint: .bottom))
+                        shape.fill(tint.opacity(0.08))
+                        Rectangle().fill(tint).frame(width: 3)
                     }
                 }
+                .clipShape(shape)
                 .shadow(color: shadowColor, radius: shadowRadius, y: shadowY)
-                .shadow(color: (tint ?? .clear).opacity(tint == nil ? 0 : 0.22), radius: 18, y: 4)
             }
             .overlay {
-                if let tint {
-                    shape.strokeBorder(LinearGradient(colors: [tint.opacity(0.85), tint.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1)
-                } else {
-                    shape.strokeBorder(Theme.highlight, lineWidth: 1)
-                }
+                shape.strokeBorder(tint.map { $0.opacity(0.35) } ?? Theme.border, lineWidth: 1)
             }
     }
 
     private var shadowColor: Color {
         switch elevation {
-        case .flat: return .clear
-        case .raised: return .black.opacity(0.32)
-        case .floating: return .black.opacity(0.55)
+        case .flat, .raised: return .clear
+        case .floating: return .black.opacity(0.5)
         }
     }
 
     private var shadowRadius: CGFloat {
         switch elevation {
-        case .flat: return 0
-        case .raised: return 10
-        case .floating: return 34
+        case .flat, .raised: return 0
+        case .floating: return 30
         }
     }
 
     private var shadowY: CGFloat {
         switch elevation {
-        case .flat: return 0
-        case .raised: return 4
-        case .floating: return 14
+        case .flat, .raised: return 0
+        case .floating: return 12
         }
     }
 }
@@ -228,12 +216,7 @@ extension View {
             .tint(Theme.accent)
             .buttonStyle(GhostButtonStyle())
             .foregroundStyle(Theme.text)
-            .presentationBackground {
-                ZStack {
-                    Theme.surfaceFloating
-                    LinearGradient(colors: [Theme.accent.opacity(0.06), .clear], startPoint: .top, endPoint: .center)
-                }
-            }
+            .presentationBackground(Theme.surfaceFloating)
     }
 
     /// Formulare in Tagwerk-Fenstern: ohne grauen System-Hintergrund.
@@ -245,8 +228,8 @@ extension View {
     }
 }
 
-/// Knopf von Tagwerk. Normal: gehobene Fläche mit hellem Rand oben. `prominent`: leuchtendes Orange mit Verlauf
-/// (die eine Hauptaktion eines Bereichs, z. B. „Sichern“ oder „Buchen“).
+/// Knopf von Tagwerk. Normal: gehobene Fläche mit Haarlinie. `prominent`: Orange, für die eine Hauptaktion
+/// eines Bereichs (z. B. „Sichern“ oder „Buchen“).
 struct GhostButtonStyle: ButtonStyle {
     var prominent = false
     var destructive = false
@@ -275,18 +258,15 @@ private struct GhostButtonBody: View {
             .foregroundStyle(prominent ? Theme.onAccent : (destructive ? Theme.danger : Theme.text))
             .background {
                 if prominent {
-                    shape.fill(Theme.accentGradient)
-                        .brightness(pressed ? -0.08 : (hovering ? 0.04 : 0))
-                        .shadow(color: Theme.accent.opacity(isEnabled ? (hovering ? 0.55 : 0.35) : 0), radius: hovering ? 14 : 9, y: 2)
+                    shape.fill(Theme.accent)
+                        .brightness(pressed ? -0.08 : (hovering ? 0.05 : 0))
                 } else {
                     shape.fill(Color.white.opacity(pressed ? 0.10 : (hovering ? 0.08 : 0.05)))
                 }
             }
             .overlay {
-                if prominent {
-                    shape.strokeBorder(LinearGradient(colors: [Color.white.opacity(0.45), Color.white.opacity(0.0)], startPoint: .top, endPoint: .center), lineWidth: 1)
-                } else {
-                    shape.strokeBorder(Theme.highlight, lineWidth: 1)
+                if !prominent {
+                    shape.strokeBorder(Theme.border, lineWidth: 1)
                 }
             }
             .opacity(isEnabled ? 1 : 0.45)
@@ -320,13 +300,13 @@ private struct IconButtonBody: View {
             .frame(width: size, height: size)
             .background {
                 if prominent {
-                    Circle().fill(Theme.accentGradient)
-                        .shadow(color: Theme.accent.opacity(hovering ? 0.6 : 0.4), radius: hovering ? 12 : 8)
+                    Circle().fill(Theme.accent)
+                        .brightness(hovering ? 0.05 : 0)
                 } else {
                     Circle().fill(Color.white.opacity(hovering ? 0.09 : 0.05))
                 }
             }
-            .overlay(Circle().strokeBorder(prominent ? AnyShapeStyle(Color.white.opacity(0.3)) : AnyShapeStyle(Theme.highlight), lineWidth: 1))
+            .overlay(Circle().strokeBorder(prominent ? Color.clear : Theme.border, lineWidth: 1))
             .scaleEffect(configuration.isPressed ? 0.94 : 1)
             .contentShape(Circle())
             .onHover { hovering = $0 }
@@ -377,8 +357,7 @@ struct Chip: View {
         .foregroundStyle(tone == .neutral ? Theme.text.opacity(0.8) : tone.color)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(Capsule().fill(tone == .neutral ? Color.white.opacity(0.06) : tone.color.opacity(0.13)))
-        .overlay(Capsule().strokeBorder(tone == .neutral ? Color.white.opacity(0.06) : tone.color.opacity(0.22), lineWidth: 1))
+        .background(Capsule().fill(tone == .neutral ? Color.white.opacity(0.06) : tone.color.opacity(0.12)))
         .contentShape(Capsule())
     }
 }
@@ -471,9 +450,8 @@ struct ProgressLine: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.white.opacity(0.07))
                 Capsule()
-                    .fill(LinearGradient(colors: [color.opacity(0.75), color], startPoint: .leading, endPoint: .trailing))
+                    .fill(color)
                     .frame(width: max(0, min(1, value)) * geometry.size.width)
-                    .shadow(color: color.opacity(0.45), radius: 5)
             }
         }
         .frame(height: height)
@@ -597,7 +575,6 @@ struct TaskCard: View {
                 Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(task.isDone ? Theme.done : (running ? Theme.accent : Theme.tertiary))
-                    .shadow(color: task.isDone ? Theme.done.opacity(0.5) : .clear, radius: 4)
             }
             .buttonStyle(.plain)
             .help(task.isDone ? "Wieder öffnen" : "Erledigt")
@@ -629,7 +606,7 @@ struct TaskCard: View {
                     if !compact {
                         Text(model.timeLabel(for: task, now: running ? model.now : Date()))
                             .font(.system(.callout, design: .rounded).weight(running ? .semibold : .regular).monospacedDigit())
-                            .foregroundStyle(running ? Theme.accentBright : Theme.secondary)
+                            .foregroundStyle(running ? Theme.accent : Theme.secondary)
                     }
                     if !task.isDone, running || hovering {
                         HStack(spacing: 6) {

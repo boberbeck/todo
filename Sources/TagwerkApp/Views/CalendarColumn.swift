@@ -20,9 +20,11 @@ struct CalendarColumn: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Kalender")
                         .font(.headline)
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer(minLength: 4)
                 HStack(spacing: 6) {
@@ -80,7 +82,7 @@ struct CalendarColumn: View {
 
     private var subtitle: String {
         switch model.calendarAccess {
-        case .granted: return "Termine und Zeitblöcke"
+        case .granted: return ""
         case .notDetermined: return "Noch nicht verbunden"
         case .denied: return "Kein Zugriff"
         case .unavailable: return "Nur in Tagwerk.app"

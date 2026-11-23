@@ -27,7 +27,7 @@ struct ReviewView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                PageHeader(title: "Wochenrückblick", subtitle: "Wie viel Zeit deine Woche wohin gegangen ist.") {
+                PageHeader(title: "Wochenrückblick") {
                     HStack(spacing: 12) {
                         WeekSwitcher(weekStart: Binding(get: { monday }, set: { weekStart = $0 }), currentWeek: model.currentWeekStart)
                         Button {

@@ -18,7 +18,10 @@ struct CustomersView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                PageHeader(title: "Kunden", subtitle: "Wer deine Zeit bekommt. Kunden-Todos bleiben nur in Tagwerk.") {
+                PageHeader(
+                    title: "Kunden",
+                    subtitle: "\(TimeMath.format(monthTotal)) h diesen Monat · \(openCount) offene Aufgaben · \(pspCount) PSP-Elemente"
+                ) {
                     HStack(spacing: 10) {
                         Button {
                             model.showsSAPSync = true
@@ -39,13 +42,6 @@ struct CustomersView: View {
                     }
                 }
 
-                HStack(alignment: .top, spacing: 16) {
-                    StatCard(title: "Stunden · dieser Monat", value: "\(TimeMath.format(monthTotal)) h")
-                    StatCard(title: "Offene Aufgaben", value: "\(openCount)")
-                    StatCard(title: "PSP-Elemente", value: "\(pspCount)", detail: "aktiv, aus SAP oder von Hand")
-                }
-                .fixedSize(horizontal: false, vertical: true)
-
                 HStack {
                     Picker("Anzeigen", selection: $showsArchived) {
                         Text("Aktiv · \(active.count)").tag(false)
@@ -55,9 +51,6 @@ struct CustomersView: View {
                     .labelsHidden()
                     .fixedSize()
                     Spacer()
-                    Text("Klick auf einen Kunden für Todos, PSP-Elemente und ManageEngine-Konto.")
-                        .font(.callout)
-                        .foregroundStyle(Theme.tertiary)
                 }
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16)], spacing: 16) {
@@ -192,7 +185,6 @@ struct CustomerCard: View {
                     Label("\(model.openTaskCount(for: customer.id)) offen", systemImage: "circle")
                     Label("\(model.psps(for: customer.id).count) PSP", systemImage: "number")
                     Spacer()
-                    Circle().fill(color).frame(width: 7, height: 7)
                 }
                 .font(.caption)
                 .foregroundStyle(Theme.tertiary)

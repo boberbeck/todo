@@ -24,15 +24,6 @@ struct FocusView: View {
                 Spacer()
                 PomodoroToggle()
                     .padding(.trailing, 14)
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(running ? Theme.accent : Theme.tertiary)
-                        .frame(width: 7, height: 7)
-                    Text("FOKUS")
-                        .font(.system(size: 12, weight: .semibold))
-                        .tracking(2)
-                        .foregroundStyle(Theme.secondary)
-                }
             }
             .padding(.horizontal, 28)
             .padding(.top, 20)
@@ -98,14 +89,13 @@ struct FocusTaskPane: View {
                 if let customer = model.customer(task.customerID) {
                     HStack(spacing: 6) {
                         CustomerDot(colorIndex: customer.colorIndex, size: 7)
-                        Text(customer.name.uppercased())
-                            .font(.system(size: 12, weight: .semibold))
-                            .tracking(1.6)
+                        Text(customer.name)
+                            .font(.system(size: 13, weight: .medium))
                     }
                     .foregroundStyle(Theme.secondary)
                 }
                 Text(task.title)
-                    .font(.system(size: 38, weight: .semibold, design: .rounded))
+                    .font(.system(size: 34, weight: .semibold))
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
                     .frame(maxWidth: 760)
@@ -165,13 +155,7 @@ struct FocusTaskPane: View {
                     Image(systemName: running ? "pause.fill" : "play.fill")
                 }
                 .buttonStyle(IconButtonStyle(size: 72, prominent: true))
-                .background {
-                    // Schein hinter dem großen Knopf, kräftiger solange die Zeit läuft
-                    Circle()
-                        .fill(RadialGradient(colors: [Theme.accent.opacity(running ? 0.35 : 0.18), .clear], center: .center, startRadius: 20, endRadius: 80))
-                        .frame(width: 170, height: 170)
-                        .allowsHitTesting(false)
-                }
+
                 .help(running ? "Pause (⌘T)" : "Start (⌘T)")
 
                 Button {
@@ -452,9 +436,8 @@ struct PomodoroBreakPane: View {
         let next = model.task(state.taskID).flatMap { $0.isDone ? nil : $0 } ?? model.focusTask
         VStack(spacing: 22) {
             VStack(spacing: 10) {
-                Text(isReady ? "PAUSE VORBEI" : (state.phase == .longBreak ? "LANGE PAUSE" : "PAUSE"))
-                    .font(.system(size: 13, weight: .semibold))
-                    .tracking(2.4)
+                Text(isReady ? "Pause vorbei" : (state.phase == .longBreak ? "Lange Pause" : "Pause"))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(isReady ? Theme.accent : Theme.done)
                 Text(isReady ? "Weiter geht's" : "Kurz raus, Augen weg vom Bildschirm")
                     .font(.system(size: 30, weight: .regular))
