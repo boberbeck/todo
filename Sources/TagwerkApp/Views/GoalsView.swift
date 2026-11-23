@@ -67,7 +67,7 @@ struct NewGoalCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: "flag.checkered")
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.tertiary)
                 TextField("Neues Ziel, z. B. „AZ-305 bestehen“", text: $title)
                     .textFieldStyle(.plain)
                     .font(.system(size: 16))
@@ -150,7 +150,7 @@ struct GoalCard: View {
                         .strikethrough(goal.isDone, color: Theme.tertiary)
                     Text(GoalText.summary(goal, progress: progress, customer: model.customer(goal.customerID)?.name))
                         .font(.callout)
-                        .foregroundStyle(progress.isBehind ? Theme.accent : Theme.secondary)
+                        .foregroundStyle(progress.isBehind ? Theme.warning : Theme.secondary)
                 }
                 Spacer()
                 Button {
@@ -171,7 +171,7 @@ struct GoalCard: View {
                     Spacer()
                     if let pace = GoalText.pace(progress) {
                         Text(pace)
-                            .foregroundStyle(progress.isBehind ? Theme.accent : Theme.tertiary)
+                            .foregroundStyle(progress.isBehind ? Theme.warning : Theme.tertiary)
                     }
                 }
                 .font(.caption)
@@ -348,7 +348,7 @@ struct GoalStrip: View {
                             ProgressLine(value: progress.fraction ?? 0)
                             Text(GoalText.summary(goal, progress: progress, customer: nil, compact: true))
                                 .font(.caption)
-                                .foregroundStyle(progress.isBehind ? Theme.accent : Theme.tertiary)
+                                .foregroundStyle(progress.isBehind ? Theme.warning : Theme.tertiary)
                                 .lineLimit(1)
                         }
                         .padding(12)

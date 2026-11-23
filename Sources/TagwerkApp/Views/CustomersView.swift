@@ -382,7 +382,7 @@ struct CustomerTaskRow: View {
                     Button("Heute") {
                         model.plan(task.id, for: model.today)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(GhostButtonStyle(small: true))
                     .controlSize(.small)
                 }
 

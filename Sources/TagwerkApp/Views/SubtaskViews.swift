@@ -236,7 +236,7 @@ struct TicketMenu: View {
                 Text(label)
                     .lineLimit(1)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(GhostButtonStyle(small: true))
             .controlSize(.small)
             .fixedSize()
             .popover(isPresented: $showsPicker, arrowEdge: .bottom) {

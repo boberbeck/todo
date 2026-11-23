@@ -78,6 +78,7 @@ struct DayCloseView: View {
             } label: {
                 Image(systemName: "chevron.left")
             }
+            .buttonStyle(IconButtonStyle(size: 28))
             .help("Vortag")
             Text(day.startDate().formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
                 .font(.headline)
@@ -87,6 +88,7 @@ struct DayCloseView: View {
             } label: {
                 Image(systemName: "chevron.right")
             }
+            .buttonStyle(IconButtonStyle(size: 28))
             .disabled(day >= model.today)
             .help("Nächster Tag")
         }
@@ -156,6 +158,12 @@ struct CloseLineRow: View {
     @Binding var minutes: Int
 
     var body: some View {
+        rowContent
+            // Knöpfe in der Zeile (Kopieren, Rückgängig …) neutral; Orange bleibt „Buchen“ vorbehalten
+            .buttonStyle(GhostButtonStyle(small: true))
+    }
+
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -210,7 +218,7 @@ struct CloseLineRow: View {
                 if line.changedAfterBooking {
                     Label("Zeit nach dem Buchen geändert", systemImage: "exclamationmark.triangle")
                         .font(.caption)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.warning)
                 }
             }
 
@@ -224,7 +232,7 @@ struct CloseLineRow: View {
             ForEach(line.openIssues, id: \.self) { issue in
                 Label(issue.message, systemImage: "exclamationmark.circle")
                     .font(.caption)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.warning)
             }
         }
         .padding(.vertical, 6)
@@ -251,7 +259,7 @@ struct TargetStatusView: View {
             } else {
                 if status == .failed, let error = line.bookings[target]?.lastError {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.danger)
                         .help(error)
                     Button("Erneut senden") {
                         Task { _ = await model.retryManageEngine() }
@@ -271,7 +279,7 @@ struct TargetStatusView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(Capsule().fill(Color.primary.opacity(0.05)))
+        .background(Capsule().fill(Color.white.opacity(0.04)))
     }
 
     @ViewBuilder
@@ -310,10 +318,10 @@ struct TargetStatusView: View {
 
     private func color(for status: BookingStatus?) -> Color {
         switch status {
-        case .confirmed, .entered: return .green
-        case .skipped: return .gray
-        case .failed: return .orange
-        default: return .secondary
+        case .confirmed, .entered: return Theme.done
+        case .skipped: return Theme.tertiary
+        case .failed: return Theme.danger
+        default: return Theme.tertiary
         }
     }
 }

@@ -27,7 +27,12 @@ struct ReviewView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                PageHeader(title: "Wochenrückblick") {
+                PageHeader(
+                    title: "Wochenrückblick",
+                    subtitle: total > 0
+                        ? "\(TimeMath.format(total)) von \(TimeMath.format(minutes: model.weeklyGoalMinutes)) h (\(Int((total / goal * 100).rounded())) %) · Ø \(TimeMath.format(workedDays > 0 ? total / Double(workedDays) : 0)) h an \(workedDays == 1 ? "1 Arbeitstag" : "\(workedDays) Arbeitstagen") · \(Int((customerTime / total * 100).rounded())) % für Kunden"
+                        : "Noch keine Zeit erfasst"
+                ) {
                     HStack(spacing: 12) {
                         WeekSwitcher(weekStart: Binding(get: { monday }, set: { weekStart = $0 }), currentWeek: model.currentWeekStart)
                         Button {
@@ -49,26 +54,6 @@ struct ReviewView: View {
                 }
 
                 HStack(alignment: .top, spacing: 16) {
-                    StatCard(
-                        title: "Stunden",
-                        value: "\(TimeMath.format(total)) / \(TimeMath.format(minutes: model.weeklyGoalMinutes)) h",
-                        detail: "\(Int((total / goal * 100).rounded())) % des Wochenziels",
-                        accent: true
-                    )
-                    StatCard(
-                        title: "Tagesdurchschnitt",
-                        value: "\(TimeMath.format(workedDays > 0 ? total / Double(workedDays) : 0)) h",
-                        detail: workedDays == 1 ? "an 1 Arbeitstag" : "an \(workedDays) Arbeitstagen"
-                    )
-                    StatCard(
-                        title: "Kundenarbeit",
-                        value: total > 0 ? "\(Int((customerTime / total * 100).rounded())) %" : "–",
-                        detail: "\(TimeMath.format(customerTime)) h für Kunden, \(TimeMath.format(total - customerTime)) h Sonstiges"
-                    )
-                }
-                .fixedSize(horizontal: false, vertical: true)
-
-                HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 16) {
                         SectionLabel(text: "Stunden pro Tag")
                         if total == 0 {
@@ -79,11 +64,11 @@ struct ReviewView: View {
                                     x: .value("Tag", day.startDate().formatted(.dateTime.weekday(.abbreviated))),
                                     y: .value("Stunden", model.tracked(on: day) / 3600)
                                 )
-                                .foregroundStyle(day == model.today ? Theme.accent : Theme.accent.opacity(0.55))
+                                .foregroundStyle(day == model.today ? Theme.text.opacity(0.7) : Theme.text.opacity(0.35))
                                 .cornerRadius(4)
                             }
                             .chartYAxis {
-                                AxisMarks(position: .leading) { value in
+                                AxisMarks(position: .leading, values: .stride(by: 1)) { value in
                                     AxisGridLine().foregroundStyle(Theme.border)
                                     AxisValueLabel {
                                         if let hours = value.as(Double.self) {
@@ -114,7 +99,7 @@ struct ReviewView: View {
                         GeometryReader { geometry in
                             HStack(spacing: 2) {
                                 Rectangle()
-                                    .fill(Theme.accent)
+                                    .fill(Theme.text.opacity(0.55))
                                     .frame(width: total > 0 ? geometry.size.width * customerTime / total : 0)
                                 Rectangle()
                                     .fill(Color.white.opacity(0.1))
@@ -123,7 +108,7 @@ struct ReviewView: View {
                         }
                         .frame(height: 12)
                         HStack(spacing: 16) {
-                            legend(color: Theme.accent, text: "Kunden · \(TimeMath.format(customerTime)) h")
+                            legend(color: Theme.text.opacity(0.55), text: "Kunden · \(TimeMath.format(customerTime)) h")
                             legend(color: Color.white.opacity(0.25), text: "Sonstiges · \(TimeMath.format(total - customerTime)) h")
                         }
                     }
@@ -139,11 +124,11 @@ struct ReviewView: View {
                             x: .value("Woche", WeekSwitcher.label(for: week)),
                             y: .value("Stunden", model.trackedInWeek(starting: week) / 3600)
                         )
-                        .foregroundStyle(week == monday ? Theme.accent : Color.white.opacity(0.22))
+                        .foregroundStyle(week == monday ? Theme.text.opacity(0.7) : Theme.text.opacity(0.22))
                         .cornerRadius(4)
                     }
                     .chartYAxis {
-                        AxisMarks(position: .leading) { value in
+                        AxisMarks(position: .leading, values: .stride(by: 1)) { value in
                             AxisGridLine().foregroundStyle(Theme.border)
                             AxisValueLabel {
                                 if let hours = value.as(Double.self) {
@@ -172,7 +157,7 @@ struct ReviewView: View {
                                 ProgressLine(value: progress.fraction ?? 0, height: 6)
                                 Text([GoalText.summary(goal, progress: progress, customer: model.customer(goal.customerID)?.name), GoalText.pace(progress)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                                     .font(.caption)
-                                    .foregroundStyle(progress.isBehind ? Theme.accent : Theme.tertiary)
+                                    .foregroundStyle(progress.isBehind ? Theme.warning : Theme.tertiary)
                             }
                             .padding(.vertical, 4)
                         }

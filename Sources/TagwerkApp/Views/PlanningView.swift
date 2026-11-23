@@ -166,7 +166,7 @@ struct PlanningRow<Actions: View>: View {
             HStack(spacing: 6) {
                 actions
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(GhostButtonStyle(small: true))
             .controlSize(.small)
         }
         .padding(10)

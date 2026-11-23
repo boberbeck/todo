@@ -233,9 +233,11 @@ extension View {
 struct GhostButtonStyle: ButtonStyle {
     var prominent = false
     var destructive = false
+    /// klein, für Knöpfe in Zeilen (Kopieren, Zuordnen, Rückgängig)
+    var small = false
 
     func makeBody(configuration: Configuration) -> some View {
-        GhostButtonBody(configuration: configuration, prominent: prominent, destructive: destructive)
+        GhostButtonBody(configuration: configuration, prominent: prominent, destructive: destructive, small: small)
     }
 }
 
@@ -243,18 +245,19 @@ private struct GhostButtonBody: View {
     let configuration: ButtonStyleConfiguration
     let prominent: Bool
     let destructive: Bool
+    let small: Bool
     @Environment(\.isEnabled) private var isEnabled
     @State private var hovering = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: small ? 7 : Theme.Radius.control, style: .continuous)
         let pressed = configuration.isPressed
         configuration.label
             .lineLimit(1)
             .fixedSize()
-            .font(.system(size: 13, weight: prominent ? .semibold : .medium))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
+            .font(.system(size: small ? 12 : 13, weight: prominent ? .semibold : .medium))
+            .padding(.horizontal, small ? 9 : 14)
+            .padding(.vertical, small ? 4 : 7)
             .foregroundStyle(prominent ? Theme.onAccent : (destructive ? Theme.danger : Theme.text))
             .background {
                 if prominent {
