@@ -72,6 +72,8 @@ final class AppModel {
     var timeEntryDraft: TimeEntryDraft?
     /// Erfasster Eintrag, der gerade im Fenster „Zeit bearbeiten“ offen ist (Doppelklick im Kalender).
     var editingEntry: TimeEntry?
+    /// Neue Aufgabe, die gerade im Kalender beschriftet wird (Doppelklick in eine freie Stelle).
+    var calendarNewSlot: DateInterval?
     /// Fenster „Fehler melden“
     var showsBugReport = false
     /// Aufgabe, die im Aufgabenfenster offen ist (Doppelklick)
@@ -1127,6 +1129,41 @@ final class AppModel {
         } catch {
             report(error)
         }
+    }
+
+    /// Zeitraum für eine neue Aufgabe nach Doppelklick in den Kalender (Viertelstunde, ohne andere Einträge zu überdecken).
+    func proposedSlot(near click: Date) -> DateInterval {
+        EntryEditing.newSlot(near: click, entries: dayEntries(LocalDate(click)), now: Date())
+    }
+
+    /// Schließt das Eingabefeld im Kalender, aber nur, wenn inzwischen kein anderes geöffnet wurde.
+    func closeCalendarSlot(_ slot: DateInterval) {
+        if calendarNewSlot == slot { calendarNewSlot = nil }
+    }
+
+    /// Neue Aufgabe direkt aus dem Kalender, für Arbeit, die weder als Aufgabe noch als Ticket da war.
+    /// Was schon vorbei ist, wird als erfasste Zeit eingetragen und die Aufgabe gilt als erledigt
+    /// (noch laufend bis jetzt: bleibt offen); was noch kommt, wird als Zeitblock geplant.
+    @discardableResult
+    func addTaskFromCalendar(title: String, slot: DateInterval) -> TaskItem? {
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, slot.duration > 0 else { return nil }
+        let now = Date()
+        guard var task = addTask(title: clean, customerID: nil, plannedDate: LocalDate(slot.start)) else { return nil }
+        if slot.start < now {
+            addEntry(taskID: task.id, start: slot.start, end: min(slot.end, now))
+            if slot.end < now.addingTimeInterval(-60) {
+                task.status = .done
+                task.completedAt = slot.end
+                persist(task)
+            }
+            AppLog.info("Kalender", "Aufgabe mit erfasster Zeit angelegt (\(Int(min(slot.end, now).timeIntervalSince(slot.start) / 60)) Min)")
+        } else {
+            task.estimateMinutes = Int(slot.duration / 60)
+            persist(task)
+            schedule(task.id, at: slot.start)
+        }
+        return self.task(task.id)
     }
 
     /// Andere erfasste Einträge rund um den Tag eines Eintrags (für Überschneidungen beim Ziehen).

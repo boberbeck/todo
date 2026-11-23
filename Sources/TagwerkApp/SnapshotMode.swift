@@ -102,6 +102,14 @@ enum SnapshotMode {
             try? await Task.sleep(for: .seconds(0.8))
         }
 
+        // Neue Aufgabe direkt im Kalender beschriften
+        model.selection = .calendar
+        model.calendarNewSlot = model.proposedSlot(near: Date().addingTimeInterval(-50 * 60))
+        try? await Task.sleep(for: .seconds(1.5))
+        await capture(window, name: "kalender-neu", in: directory)
+        model.calendarNewSlot = nil
+        try? await Task.sleep(for: .seconds(0.5))
+
         // Erfasste Zeit im Kalender bearbeiten
         if let entry = model.entriesToday.first(where: { $0.end != nil }) {
             model.selection = .calendar

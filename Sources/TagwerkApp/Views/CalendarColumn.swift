@@ -222,9 +222,33 @@ struct CalendarColumn: View {
                 .offset(y: nowY - 3.5)
                 .allowsHitTesting(false)
             }
+
+            if let slot = model.calendarNewSlot, LocalDate(slot.start) == model.today {
+                NewCalendarItem(
+                    slot: slot,
+                    top: max(0, y(slot.start)),
+                    height: y(slot.end) - y(slot.start),
+                    commit: { title in
+                        model.addTaskFromCalendar(title: title, slot: slot)
+                        model.closeCalendarSlot(slot)
+                    },
+                    cancel: { model.closeCalendarSlot(slot) },
+                    more: { title in
+                        model.closeCalendarSlot(slot)
+                        model.timeEntryDraft = TimeEntryDraft(start: slot.start, minutes: max(5, Int(slot.duration / 60)), title: title)
+                    }
+                )
+                .id(slot.start)
+                .padding(.leading, labelWidth + 2)
+                .padding(.trailing, 4)
+            }
         }
         .frame(maxWidth: .infinity, minHeight: total, maxHeight: total, alignment: .topLeading)
         .contentShape(Rectangle())
+        .onTapGesture(count: 2, coordinateSpace: .local) { location in
+            let minutes = Double(location.y / height) * 60 + Double(first * 60)
+            model.calendarNewSlot = model.proposedSlot(near: dayStart.addingTimeInterval(max(0, minutes) * 60))
+        }
         .dropDestination(for: String.self) { items, location in
             let minutes = Double(location.y / height) * 60 + Double(first * 60)
             let start = dayStart.addingTimeInterval(minutes * 60)

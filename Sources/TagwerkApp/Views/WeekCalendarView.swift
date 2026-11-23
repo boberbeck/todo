@@ -48,7 +48,7 @@ struct WeekCalendarView: View {
                         Label("Zeit nachtragen", systemImage: "plus")
                     }
                     .buttonStyle(GhostButtonStyle())
-                    .help("Arbeit nachträglich erfassen (oder Doppelklick in den Kalender)")
+                    .help("Arbeit nachträglich erfassen (oder Doppelklick in eine freie Stelle im Kalender und gleich beschriften)")
                     Spacer(minLength: 16)
                     HStack(spacing: 6) {
                         Button {
@@ -87,8 +87,8 @@ struct WeekCalendarView: View {
                         HStack(alignment: .top, spacing: 0) {
                             hourLabels
                             ForEach(days, id: \.self) { day in
-                                DayTimeline(day: day, hourHeight: hourHeight) { start in
-                                    draft = TimeEntryDraft(start: start, minutes: 60)
+                                DayTimeline(day: day, hourHeight: hourHeight) { newDraft in
+                                    draft = newDraft
                                 }
                             }
                         }
@@ -156,12 +156,13 @@ struct WeekCalendarView: View {
     }
 }
 
-/// Ein Tag im Wochenkalender.
+/// Ein Tag im Wochenkalender. Doppelklick in eine freie Stelle legt dort eine neue Aufgabe an.
 struct DayTimeline: View {
     @Environment(AppModel.self) private var model
     let day: LocalDate
     let hourHeight: CGFloat
-    let onCreate: (Date) -> Void
+    /// „…“ im neuen Eintrag: öffnet „Zeit nachtragen“ mit allen Feldern
+    let onMore: (TimeEntryDraft) -> Void
 
     var body: some View {
         let isToday = day == model.today
@@ -220,6 +221,26 @@ struct DayTimeline: View {
                 .offset(x: -3.5, y: nowY - 3.5)
                 .allowsHitTesting(false)
             }
+
+            if let slot = model.calendarNewSlot, LocalDate(slot.start) == day {
+                NewCalendarItem(
+                    slot: slot,
+                    top: max(0, y(slot.start)),
+                    height: y(slot.end) - y(slot.start),
+                    commit: { title in
+                        model.addTaskFromCalendar(title: title, slot: slot)
+                        model.closeCalendarSlot(slot)
+                    },
+                    cancel: { model.closeCalendarSlot(slot) },
+                    more: { title in
+                        model.closeCalendarSlot(slot)
+                        onMore(TimeEntryDraft(start: slot.start, minutes: max(5, Int(slot.duration / 60)), title: title))
+                    }
+                )
+                .id(slot.start)
+                .padding(.leading, 4)
+                .padding(.trailing, 3)
+            }
         }
         .frame(maxWidth: .infinity)
         .frame(height: total, alignment: .top)
@@ -228,9 +249,8 @@ struct DayTimeline: View {
         }
         .contentShape(Rectangle())
         .onTapGesture(count: 2, coordinateSpace: .local) { location in
-            let minutes = Double(location.y / height) * 60
-            let start = FreeTime.snapNearest(dayStart.addingTimeInterval(max(0, minutes - 30) * 60), stepMinutes: 15)
-            onCreate(start)
+            let click = dayStart.addingTimeInterval(max(0, Double(location.y / height)) * 3600)
+            model.calendarNewSlot = model.proposedSlot(near: click)
         }
         .dropDestination(for: String.self) { items, location in
             let minutes = Double(location.y / height) * 60
@@ -404,6 +424,8 @@ struct TimeEntryDraft: Identifiable {
     var minutes: Int
     /// Aufgabe, für die nachgetragen wird; sonst wählt man im Fenster.
     var taskID: UUID? = nil
+    /// Titel einer neuen Aufgabe (z. B. schon im Kalender eingetippt)
+    var title: String = ""
 }
 
 /// Zeit nachträglich erfassen: Aufgabe wählen oder neu anlegen, Tag und Uhrzeit.
@@ -496,7 +518,13 @@ struct AddTimeSheet: View {
             from = draft.start
             to = draft.start.addingTimeInterval(TimeInterval(draft.minutes * 60))
             let sameDay = LocalDate(draft.start)
-            taskID = draft.taskID ?? model.dayTasks(sameDay).first { !$0.isDone }?.id ?? model.todayTasks.first?.id
+            if !draft.title.isEmpty, draft.taskID == nil {
+                // Im Kalender schon beschriftet: neue Aufgabe mit diesem Titel
+                taskID = nil
+                newTitle = draft.title
+            } else {
+                taskID = draft.taskID ?? model.dayTasks(sameDay).first { !$0.isDone }?.id ?? model.todayTasks.first?.id
+            }
         }
     }
 

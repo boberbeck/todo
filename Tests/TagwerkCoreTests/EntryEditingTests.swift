@@ -95,4 +95,27 @@ final class EntryEditingTests: XCTestCase {
         XCTAssertEqual(EntryEditing.keepingSeconds(at(9, 4), of: exact), at(9, 4))
         XCTAssertEqual(EntryEditing.keepingSeconds(at(9, 4), of: nil), at(9, 4))
     }
+
+    func testNewSlotStartsAtQuarterHour() {
+        let slot = EntryEditing.newSlot(near: at(14, 40), entries: [before, edited, after], now: at(17), calendar: calendar)
+        XCTAssertEqual(slot.start, at(14, 30))
+        XCTAssertEqual(slot.end, at(15, 30))
+    }
+
+    func testNewSlotFitsBetweenEntriesAndEndsNow() {
+        // zwischen „edited“ (bis 11:00) und „after“ (ab 12:00)
+        let between = EntryEditing.newSlot(near: at(11, 40), entries: [before, edited, after], now: at(17), calendar: calendar)
+        XCTAssertEqual(between.start, at(11, 30))
+        XCTAssertEqual(between.end, at(12, 0))
+        let rightAfter = EntryEditing.newSlot(near: at(11, 5), entries: [before, edited, after], now: at(17), calendar: calendar)
+        XCTAssertEqual(rightAfter.start, at(11, 0))
+        // gerade eben: endet jetzt
+        let recent = EntryEditing.newSlot(near: at(16, 50), entries: [before, edited, after], now: at(17, 5), calendar: calendar)
+        XCTAssertEqual(recent.start, at(16, 45))
+        XCTAssertEqual(recent.end, at(17, 5))
+        // Zukunft: volle Stunde
+        let later = EntryEditing.newSlot(near: at(19, 10), entries: [before, edited, after], now: at(17), calendar: calendar)
+        XCTAssertEqual(later.start, at(19, 0))
+        XCTAssertEqual(later.end, at(20, 0))
+    }
 }

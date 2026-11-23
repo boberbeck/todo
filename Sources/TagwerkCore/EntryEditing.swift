@@ -77,6 +77,33 @@ public enum EntryEditing {
         return (lower, upper)
     }
 
+    /// Vorschlag für einen neuen Eintrag nach Doppelklick in eine freie Stelle des Kalenders:
+    /// ab der Viertelstunde, in die geklickt wurde, `minutes` lang. Was schon vorbei ist, endet spätestens jetzt;
+    /// vorhandene Einträge werden nicht überdeckt.
+    public static func newSlot(
+        near click: Date,
+        minutes: Int = 60,
+        entries: [TimeEntry],
+        now: Date,
+        calendar: Calendar = .current
+    ) -> DateInterval {
+        let day = LocalDate(click, calendar: calendar).interval(calendar: calendar)
+        let quarter: TimeInterval = 15 * 60
+        var start = day.start.addingTimeInterval((click.timeIntervalSince(day.start) / quarter).rounded(.down) * quarter)
+        let previousEnd = entries
+            .filter { $0.start <= click }
+            .map { $0.end ?? now }
+            .filter { $0 <= click }
+            .max()
+        if let previousEnd, previousEnd > start { start = previousEnd }
+        var end = start.addingTimeInterval(TimeInterval(max(5, minutes) * 60))
+        if start < now { end = min(end, now) }
+        if let nextStart = entries.map(\.start).filter({ $0 > click }).min() { end = min(end, nextStart) }
+        end = min(end, day.end)
+        if end <= start { end = start.addingTimeInterval(minimum) }
+        return DateInterval(start: start, end: end)
+    }
+
     /// Einträge, mit denen sich die Zeit von `start` bis `end` überschneiden würde.
     /// Sekunden zählen nicht: Im Fenster gibt man Minuten ein, der Timer endet aber auf die Sekunde.
     public static func conflicts(start: Date, end: Date, excluding id: UUID?, in entries: [TimeEntry], now: Date) -> [TimeEntry] {
