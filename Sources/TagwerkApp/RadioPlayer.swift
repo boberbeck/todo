@@ -94,7 +94,13 @@ private final class RadioMetadataReceiver: NSObject, AVPlayerItemMetadataOutputP
 
     func metadataOutput(_ output: AVPlayerItemMetadataOutput, didOutputTimedMetadataGroups groups: [AVTimedMetadataGroup], from track: AVPlayerItemTrack?) {
         let items = groups.flatMap(\.items)
-        let item = items.first { $0.identifier == .icyMetadataStreamTitle } ?? items.first { $0.commonKey == .commonKeyTitle }
-        handler(item?.stringValue)
+        guard let item = items.first(where: { $0.identifier == .icyMetadataStreamTitle }) ?? items.first(where: { $0.commonKey == .commonKeyTitle }) else {
+            handler(nil)
+            return
+        }
+        let handler = self.handler
+        Task {
+            handler(try? await item.load(.stringValue))
+        }
     }
 }

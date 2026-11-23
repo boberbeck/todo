@@ -7,7 +7,6 @@ struct FocusView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let running = model.runningEntry != nil
         VStack(spacing: 0) {
             Color.clear.frame(height: 8)
 

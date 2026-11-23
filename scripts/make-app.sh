@@ -45,6 +45,9 @@ else
   SIGN="-"
   echo "Signiere ad hoc (ohne Zertifikat „${IDENTITY}“)."
 fi
+# Finder- und iCloud-Zusatzinfos (z. B. in einem synchronisierten „Dokumente“-Ordner) mag codesign nicht:
+# „resource fork, Finder information, or similar detritus not allowed“. Vor dem Signieren entfernen.
+xattr -cr "$APP"
 codesign --force --sign "${SIGN}" --identifier local.tagwerk.mcp "$APP/Contents/MacOS/tagwerk-mcp"
 if [ "${SIGN}" = "-" ]; then
   # Ad hoc ändert sich die Signatur bei jedem Neubau. Damit macOS die Freigaben für Schlüsselbund,

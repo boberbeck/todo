@@ -142,9 +142,9 @@ final class Updater {
             try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
             try Self.run("/usr/bin/hdiutil", ["attach", "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mount.path, dmg.path])
             let staged = work.appendingPathComponent("Tagwerk.app")
-            defer { try? Self.run("/usr/bin/hdiutil", ["detach", "-quiet", "-force", mount.path]) }
+            defer { _ = try? Self.run("/usr/bin/hdiutil", ["detach", "-quiet", "-force", mount.path]) }
             try Self.run("/usr/bin/ditto", [mount.appendingPathComponent("Tagwerk.app").path, staged.path])
-            try? Self.run("/usr/bin/hdiutil", ["detach", "-quiet", mount.path])
+            _ = try? Self.run("/usr/bin/hdiutil", ["detach", "-quiet", mount.path])
 
             // Nur eine echte, unversehrte Tagwerk-App einsetzen
             guard Bundle(url: staged)?.bundleIdentifier == Bundle.main.bundleIdentifier else {
