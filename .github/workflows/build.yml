@@ -1,9 +1,21 @@
 name: Build und Tests
 
+# macOS-Minuten zählen in privaten Repositories zehnfach, deshalb sparsam:
+# - Änderungen nur an Doku, Screenshots oder Claude-Skills lösen keinen Build aus
+# - ein neuer Push bricht den noch laufenden Build desselben Branches ab (nur der neueste zählt)
+# - kein zusätzlicher Lauf für Pull Requests (der Push auf den Branch baut schon)
 on:
   push:
-  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '.claude/**'
+      - '**/*.md'
+      - 'LICENSE'
   workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -12,7 +24,7 @@ jobs:
   macos:
     name: macOS
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
@@ -22,9 +34,7 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Bauen
-        run: swift build
-
+      # Kein eigener Debug-Build: „swift test“ baut, was die Tests brauchen, die App baut make-app.sh.
       - name: Testen
         run: swift test
 
