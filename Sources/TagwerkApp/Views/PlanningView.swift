@@ -133,15 +133,15 @@ struct PlanningStep<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .top, spacing: 16) {
             Text("\(number)")
-                .font(.headline)
+                .font(.system(size: 14, weight: .medium))
                 .frame(width: 30, height: 30)
                 .background(Circle().fill(Color.accentColor.opacity(0.15)))
             VStack(alignment: .leading, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.title3.weight(.semibold))
+                        .font(.title3.weight(.medium))
                     Text(subtitle)
                         .foregroundStyle(.secondary)
                 }

@@ -19,7 +19,7 @@ struct CalendarColumn: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Kalender")
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .medium))
                     if !subtitle.isEmpty {
                         Text(subtitle)
                             .font(.caption)
@@ -46,7 +46,7 @@ struct CalendarColumn: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.top, 16)
             .padding(.bottom, 8)
 
@@ -64,7 +64,7 @@ struct CalendarColumn: View {
                             .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.06)))
                     }
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 16)
                 .padding(.bottom, 6)
             }
 
@@ -98,7 +98,7 @@ struct CalendarColumn: View {
             Button("Kalender verbinden") {
                 Task { await model.requestCalendarAccess() }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.bottom, 8)
         case .denied:
             VStack(alignment: .leading, spacing: 6) {
@@ -112,13 +112,13 @@ struct CalendarColumn: View {
                 }
                 .controlSize(.small)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.bottom, 8)
         case .unavailable:
             Text("Starte Tagwerk als App (scripts/make-app.sh), damit es nach dem Kalender fragen darf.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 16)
                 .padding(.bottom, 8)
         }
     }
@@ -182,7 +182,7 @@ struct CalendarColumn: View {
             ForEach(model.entriesToday) { entry in
                 let top = max(0, y(entry.start))
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Theme.accent.opacity(0.75))
+                    .fill(entryColor(entry))
                     .frame(width: 4, height: max(3, y(entry.end ?? model.now) - top))
                     // breiter treffbar als sichtbar
                     .frame(width: 12)
@@ -212,16 +212,15 @@ struct CalendarColumn: View {
             }
 
             if nowY >= 0 && nowY <= total {
-                HStack(spacing: 0) {
-                    Circle()
-                        .fill(Theme.accent)
-                        .frame(width: 7, height: 7)
+                // Sonnenstand auf der Jetzt-Linie
+                HStack(alignment: .bottom, spacing: 0) {
+                    SunMark(size: 10)
                     Rectangle()
                         .fill(Theme.accent)
                         .frame(height: 1.5)
                 }
-                .padding(.leading, labelWidth - 4)
-                .offset(y: nowY - 3.5)
+                .padding(.leading, labelWidth - 5)
+                .offset(y: nowY - 5)
                 .allowsHitTesting(false)
             }
 
@@ -265,6 +264,14 @@ struct CalendarColumn: View {
     }
 }
 
+extension CalendarColumn {
+    /// Erfasste Zeit in der Farbe des Kunden (wie im Tagesband).
+    func entryColor(_ entry: TimeEntry) -> Color {
+        let customerID = model.task(entry.taskID).map { model.resolved($0) }?.customerID
+        return model.customer(customerID).map { CustomerPalette.color($0.colorIndex) } ?? Theme.secondary
+    }
+}
+
 struct EventBlock: View {
     @Environment(AppModel.self) private var model
     let event: CalendarEvent
@@ -276,7 +283,7 @@ struct EventBlock: View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
                 Text(event.displayTitle)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.medium))
                     .lineLimit(1)
                 if logged {
                     Image(systemName: "checkmark")
@@ -291,7 +298,7 @@ struct EventBlock: View {
             }
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(height: height, alignment: .topLeading)
         .background(
@@ -337,7 +344,7 @@ struct TaskBlock: View {
         let running = model.isRunning(task.id)
         VStack(alignment: .leading, spacing: 1) {
             Text(task.title)
-                .font(.caption.weight(.semibold))
+                .font(.caption.weight(.medium))
                 .lineLimit(height > 34 ? 2 : 1)
             if height > 30, let start = task.scheduledStart {
                 Text(start.formatted(date: .omitted, time: .shortened))
@@ -346,16 +353,23 @@ struct TaskBlock: View {
             }
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(height: height, alignment: .topLeading)
+        // Geplant: neutraler Umriss; läuft die Aufgabe, eine orangene Kante (wie auf der Karte)
         .background(
-            RoundedRectangle(cornerRadius: 5)
-                .fill(Theme.accent.opacity(running ? 0.22 : 0.12))
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Theme.surfaceRaised.opacity(0.6))
+                if running {
+                    Rectangle().fill(Theme.accent).frame(width: 3)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 5)
-                .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 1.2, dash: task.isDone ? [] : [4, 3]))
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Theme.borderStrong, style: StrokeStyle(lineWidth: 1, dash: task.isDone ? [] : [4, 3]))
         )
         .opacity(task.isDone ? 0.55 : 1)
         .offset(y: top + dragOffset)
@@ -405,7 +419,7 @@ struct LogEventSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Termin als Zeit erfassen")
-                    .font(.title2.weight(.semibold))
+                    .font(.title2.weight(.medium))
                 Text("\(event.start.formatted(date: .abbreviated, time: .shortened))–\(event.end.formatted(date: .omitted, time: .shortened)) · \(TimeMath.format(minutes: event.minutes)) h")
                     .foregroundStyle(.secondary)
                     .monospacedDigit()

@@ -55,10 +55,18 @@ struct CustomersView: View {
                     Spacer()
                 }
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16)], spacing: 16) {
-                    ForEach(shown) { customer in
-                        CustomerCard(customer: customer)
+                if shown.isEmpty {
+                    Text(showsArchived ? "Keine archivierten Kunden" : "Noch keine Kunden")
+                        .foregroundStyle(Theme.tertiary)
+                } else {
+                    VStack(spacing: 0) {
+                        CustomerListHeader()
+                        ForEach(shown) { customer in
+                            Rectangle().fill(Theme.border).frame(height: 1)
+                            CustomerRow(customer: customer)
+                        }
                     }
+                    .surface()
                 }
             }
             .padding(.horizontal, 40)
@@ -69,7 +77,7 @@ struct CustomersView: View {
     private var newCustomerForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Neuer Kunde")
-                .font(.headline)
+                .font(.system(size: 14, weight: .medium))
             TextField("Name", text: $newName)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 260)
@@ -115,12 +123,41 @@ struct StatCard: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .card(padding: 22)
+        .card(padding: 24)
     }
 }
 
-/// Ein Kunde als Karte: Stunden dieser Woche, Monat, offene Todos, PSP-Elemente.
-struct CustomerCard: View {
+/// Spaltenköpfe der Kundenliste.
+struct CustomerListHeader: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("Kunde")
+            Spacer(minLength: 16)
+            CustomerColumn.header("Diese Woche", width: CustomerColumn.hours)
+            CustomerColumn.header("Monat", width: CustomerColumn.hours)
+            CustomerColumn.header("Offen", width: CustomerColumn.count)
+            CustomerColumn.header("PSP", width: CustomerColumn.count)
+            Color.clear.frame(width: 12)
+        }
+        .font(.caption)
+        .foregroundStyle(Theme.tertiary)
+        .padding(.horizontal, 16)
+        .frame(height: 32)
+    }
+}
+
+/// Spaltenbreiten der Kundenliste, damit Köpfe und Zahlen untereinander stehen.
+enum CustomerColumn {
+    static let hours: CGFloat = 88
+    static let count: CGFloat = 56
+
+    static func header(_ title: String, width: CGFloat) -> some View {
+        Text(title).frame(width: width, alignment: .trailing)
+    }
+}
+
+/// Ein Kunde als Zeile: Stunden dieser Woche und im Monat, offene Aufgaben, PSP-Elemente.
+struct CustomerRow: View {
     @Environment(AppModel.self) private var model
     let customer: Customer
     @State private var hovering = false
@@ -129,56 +166,48 @@ struct CustomerCard: View {
         let monday = model.currentWeekStart
         let week = model.trackedByCustomer(from: monday, through: monday.adding(days: 6))
             .first { $0.customerID == customer.id }?.seconds ?? 0
-        let color = CustomerPalette.color(customer.colorIndex)
         Button {
             model.selection = .customer(customer.id)
         } label: {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 12) {
-                    Text(String(customer.name.prefix(1)).uppercased())
-                        .font(.headline)
-                        .foregroundStyle(color)
-                        .frame(width: 36, height: 36)
-                        .background(RoundedRectangle(cornerRadius: 9).fill(color.opacity(0.16)))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(customer.name)
-                            .font(.title3)
+            HStack(spacing: 12) {
+                CustomerDot(colorIndex: customer.colorIndex, size: 8)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(customer.name)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                    if let account = customer.manageEngineAccount, !account.isEmpty, account != customer.name {
+                        Text(account)
+                            .font(.caption)
+                            .foregroundStyle(Theme.tertiary)
                             .lineLimit(1)
-                        if let account = customer.manageEngineAccount, !account.isEmpty {
-                            Text(account)
-                                .font(.caption)
-                                .foregroundStyle(Theme.tertiary)
-                                .lineLimit(1)
-                        }
                     }
                 }
-                HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(TimeMath.format(week))
-                            .font(Theme.statNumber)
-                        SectionLabel(text: "Diese Woche")
-                    }
-                    Spacer()
-                    Text("\(TimeMath.format(model.trackedThisMonth(customerID: customer.id))) h im Monat")
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(Theme.secondary)
-                }
-                Rectangle().fill(Theme.border).frame(height: 1)
-                HStack(spacing: 14) {
-                    Label("\(model.openTaskCount(for: customer.id)) offen", systemImage: "circle")
-                    Label("\(model.psps(for: customer.id).count) PSP", systemImage: "number")
-                    Spacer()
-                }
-                .font(.caption)
-                .foregroundStyle(Theme.tertiary)
+                Spacer(minLength: 16)
+                number("\(TimeMath.format(week)) h", width: CustomerColumn.hours, primary: true)
+                number("\(TimeMath.format(model.trackedThisMonth(customerID: customer.id))) h", width: CustomerColumn.hours)
+                number("\(model.openTaskCount(for: customer.id))", width: CustomerColumn.count)
+                number("\(model.psps(for: customer.id).count)", width: CustomerColumn.count)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.tertiary)
+                    .frame(width: 12)
             }
-            .padding(22)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(fill: hovering ? Theme.surfaceRaised : Theme.surface)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 52)
+            .background(Color.white.opacity(hovering ? 0.04 : 0))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+    }
+
+    private func number(_ text: String, width: CGFloat, primary: Bool = false) -> some View {
+        Text(text)
+            .font(.system(size: 14, design: .rounded).monospacedDigit())
+            .foregroundStyle(primary ? Theme.text : Theme.secondary)
+            .frame(width: width, alignment: .trailing)
     }
 }
 
@@ -224,13 +253,13 @@ struct CustomerDetailContent: View {
                     .buttonStyle(GhostButtonStyle())
             }
             .padding(.horizontal, 20)
-            .padding(.top, 14)
+            .padding(.top, 16)
 
             HStack(spacing: 12) {
                 CustomerDot(colorIndex: customer.colorIndex, size: 14)
                 TextField("Name", text: $name)
                     .textFieldStyle(.plain)
-                    .font(.title2.weight(.semibold))
+                    .font(.title2.weight(.medium))
                     .onSubmit(saveName)
                 Spacer()
                 ColorChooser(selected: customer.colorIndex) { index in

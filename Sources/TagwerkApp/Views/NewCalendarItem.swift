@@ -21,11 +21,11 @@ struct NewCalendarItem: View {
     private var isPast: Bool { slot.start < Date() }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 TextField(isPast ? "Was gemacht?" : "Was steht an?", text: $title)
                     .textFieldStyle(.plain)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.medium))
                     .focused($focused)
                     .onSubmit { finish() }
                     .onExitCommand { close(commit: false) }

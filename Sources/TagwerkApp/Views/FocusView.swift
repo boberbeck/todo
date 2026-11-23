@@ -17,7 +17,7 @@ struct FocusView: View {
                     FocusTaskPane(task: task)
                         .id(task.id)
                 } else {
-                    VStack(spacing: 14) {
+                    VStack(spacing: 16) {
                         Text("Keine Aufgabe für den Fokus")
                             .font(.system(size: 26, weight: .regular))
                         Text("Plane auf Start eine Aufgabe für heute ein, dann geht es hier los.")
@@ -30,13 +30,13 @@ struct FocusView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            VStack(spacing: 14) {
+            VStack(spacing: 16) {
                 FocusMusicBar()
                 FocusTimeBar()
             }
             .frame(maxWidth: 640)
             .padding(.horizontal, 28)
-            .padding(.bottom, 26)
+            .padding(.bottom, 24)
         }
         .background(Theme.background)
         .onAppear { model.music.startWatching() }
@@ -54,7 +54,7 @@ struct FocusTaskPane: View {
 
     var body: some View {
         let running = model.isRunning(task.id)
-        VStack(spacing: 22) {
+        VStack(spacing: 24) {
             VStack(spacing: 10) {
                 if let parent = model.parent(of: task) {
                     Button {
@@ -77,7 +77,7 @@ struct FocusTaskPane: View {
                     .foregroundStyle(Theme.secondary)
                 }
                 Text(task.title)
-                    .font(.system(size: 34, weight: .semibold))
+                    .font(.system(size: 32, weight: .medium))
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
                     .frame(maxWidth: 760)
@@ -105,7 +105,7 @@ struct FocusTaskPane: View {
                         .font(Theme.timerNumber)
                         .monospacedDigit()
                         .foregroundStyle(running ? Theme.text : Theme.secondary)
-                    ProgressLine(value: Pomodoro.progress(pomodoro, settings: settings, now: model.now), height: 3)
+                    ProgressLine(value: Pomodoro.progress(pomodoro, settings: settings, now: model.now), height: 3, color: running ? Theme.accent : Theme.secondary)
                         .frame(width: 220)
                         .padding(.vertical, 4)
                     Text("Pomodoro \(pomodoro.round(settings: settings)) von \(settings.roundsUntilLongBreak) · \(TimeMath.format(tracked)) h erfasst\(task.estimateMinutes.map { " von \(TimeMath.format(minutes: $0)) h" } ?? "")")
@@ -122,7 +122,7 @@ struct FocusTaskPane: View {
                 }
             }
 
-            HStack(spacing: 18) {
+            HStack(spacing: 16) {
                 Button {
                     model.complete(task.id)
                 } label: {
@@ -217,14 +217,14 @@ struct FocusTaskPane: View {
                                 if descriptionText.isEmpty {
                                     Text("Was hast du gemacht? Wird zum Text für den Worklog.")
                                         .foregroundStyle(Theme.tertiary)
-                                        .padding(.horizontal, 13)
+                                        .padding(.horizontal, 12)
                                         .padding(.vertical, 8)
                                         .allowsHitTesting(false)
                                 }
                             }
                     }
                     .frame(maxWidth: 620)
-                    .card(padding: 14)
+                    .card(padding: 16)
                 }
             }
         }
@@ -280,7 +280,7 @@ struct FocusMusicBar: View {
         HStack(spacing: 12) {
             Image(systemName: "music.note")
                 .font(.system(size: 14))
-                .foregroundStyle(music.state == .playing ? Theme.accent : Theme.tertiary)
+                .foregroundStyle(music.state == .playing ? Theme.secondary : Theme.tertiary)
                 .frame(width: 30, height: 30)
                 .background(Circle().fill(Color.white.opacity(0.05)))
 
@@ -307,7 +307,7 @@ struct FocusMusicBar: View {
                 if let problem = music.problem {
                     Text(problem)
                         .font(.caption)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.warning)
                         .lineLimit(2)
                 }
             }
@@ -373,7 +373,7 @@ struct FocusMusicBar: View {
             .disabled(music.state == .stopped)
             .help("Nächster Titel")
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.border))
@@ -395,10 +395,10 @@ struct PomodoroToggle: View {
                 Text(enabled ? "Pomodoro \(settings.workMinutes)/\(settings.shortBreakMinutes)" : "Pomodoro")
             }
             .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(enabled ? Theme.accent : Theme.tertiary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(enabled ? Theme.accentSoft : Color.white.opacity(0.04)))
+            .foregroundStyle(enabled ? Theme.text : Theme.tertiary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(enabled ? 0.08 : 0.04)))
         }
         .buttonStyle(.plain)
         .help(enabled
@@ -416,10 +416,10 @@ struct PomodoroBreakPane: View {
         let settings = model.pomodoroSettings
         let isReady = state.phase == .ready
         let next = model.task(state.taskID).flatMap { $0.isDone ? nil : $0 } ?? model.focusTask
-        VStack(spacing: 22) {
+        VStack(spacing: 24) {
             VStack(spacing: 10) {
                 Text(isReady ? "Pause vorbei" : (state.phase == .longBreak ? "Lange Pause" : "Pause"))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(isReady ? Theme.accent : Theme.done)
                 Text(isReady ? "Weiter geht's" : "Kurz raus, Augen weg vom Bildschirm")
                     .font(.system(size: 30, weight: .regular))
@@ -442,14 +442,14 @@ struct PomodoroBreakPane: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
             }
-            HStack(spacing: 14) {
+            HStack(spacing: 16) {
                 if isReady {
                     Button {
                         model.continuePomodoro()
                     } label: {
                         Label("Weiter", systemImage: "play.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .padding(.horizontal, 22)
+                            .font(.system(size: 16, weight: .medium))
+                            .padding(.horizontal, 24)
                             .padding(.vertical, 12)
                             .background(Capsule().fill(Theme.accent))
                             .foregroundStyle(Color.black.opacity(0.85))

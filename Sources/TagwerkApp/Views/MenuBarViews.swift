@@ -26,7 +26,7 @@ struct MenuBarContent: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(task.title)
-                    .font(.headline)
+                    .font(.system(size: 14, weight: .medium))
                     .lineLimit(2)
                 Text(TimeMath.format(model.tracked(taskID: task.id, now: model.now), showSeconds: true))
                     .font(.title2.monospacedDigit())
@@ -72,7 +72,7 @@ struct MenuBarContent: View {
                 NSApp.terminate(nil)
             }
         }
-        .padding(14)
+        .padding(16)
         .frame(width: 280, alignment: .leading)
     }
 }

@@ -23,10 +23,10 @@ struct EditEntrySheet: View {
         let problem = EntryEditing.problem(start: start, end: end, excluding: entry.id, in: model.entries, now: now)
         let minutes = Int(((end ?? now).timeIntervalSince(start) / 60).rounded())
 
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Zeit bearbeiten")
-                    .font(.title2.weight(.semibold))
+                    .font(.title2.weight(.medium))
                 Text(isRunning
                      ? "Der Timer läuft noch. Ändern lässt sich der Beginn, z. B. wenn du zu spät gestartet hast."
                      : "Beginn, Ende oder Aufgabe korrigieren. Im Kalender geht das auch direkt mit der Maus.")

@@ -19,7 +19,7 @@ struct DayCloseView: View {
         VStack(spacing: 0) {
             header(total: total, lineCount: lines.count)
                 .padding(.horizontal, 24)
-                .padding(.top, 18)
+                .padding(.top, 16)
                 .padding(.bottom, 10)
 
             if lines.isEmpty {
@@ -42,7 +42,7 @@ struct DayCloseView: View {
 
             footer(hasLines: !lines.isEmpty, openSAP: openSAP)
                 .padding(.horizontal, 24)
-                .padding(.vertical, 14)
+                .padding(.vertical, 16)
         }
         .navigationTitle("Tag abschließen")
         .onAppear {
@@ -67,7 +67,7 @@ struct DayCloseView: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Tag abschließen")
-                    .font(.title2.weight(.semibold))
+                    .font(.title2.weight(.medium))
                 Text("\(lineCount) Aufgaben · \(TimeMath.format(minutes: total)) h zu buchen · gerundet auf \(model.bookingRules.roundingStep) Minuten")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -81,7 +81,7 @@ struct DayCloseView: View {
             .buttonStyle(IconButtonStyle(size: 28))
             .help("Vortag")
             Text(day.startDate().formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
-                .font(.headline)
+                .font(.system(size: 14, weight: .medium))
                 .frame(minWidth: 110)
             Button {
                 day = day.adding(days: 1)
@@ -136,7 +136,7 @@ struct DayCloseView: View {
                 .help("Worklogs an ManageEngine senden und SAP-Zeilen vorbereiten")
             }
             if openSAP > 0 && hasLines {
-                Text("SAP hat keine Schnittstelle: Trag die Zeilen in ByDesign ein und hak sie hier mit „In SAP eingetragen“ ab. Die Kopier-Knöpfe helfen beim Übertragen.")
+                Text("SAP-Zeilen in ByDesign eintragen und hier abhaken, die Kopier-Knöpfe helfen")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -168,14 +168,14 @@ struct CloseLineRow: View {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(line.displayTitle)
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .medium))
                     TaskMetaLine(task: line.task, showsBooking: false)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
                     HStack(spacing: 6) {
                         Text("\(TimeMath.format(minutes: minutes)) h")
-                            .font(.title3.weight(.semibold))
+                            .font(.title3.weight(.medium))
                             .monospacedDigit()
                         Stepper("Zeit", value: $minutes, in: 0...720, step: model.bookingRules.roundingStep)
                             .labelsHidden()
@@ -333,7 +333,8 @@ struct DescriptionField: View {
     @State private var text = ""
 
     var body: some View {
-        TextField("Was wurde gemacht? (Text für Worklog und SAP)", text: $text)
+        TextField("Was wurde gemacht", text: $text)
+            .help("Text für den Worklog im Ticket und für SAP")
             .textFieldStyle(.roundedBorder)
             .onAppear { text = task.workDescription }
             .onSubmit { model.setDescription(text, for: task.id) }

@@ -33,7 +33,7 @@ struct GoalsView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: showsDone ? "chevron.down" : "chevron.right")
-                                    .font(.caption2.weight(.semibold))
+                                    .font(.caption2.weight(.medium))
                                     .foregroundStyle(Theme.tertiary)
                                 SectionLabel(text: "Erreicht", detail: "\(done.count)")
                             }
@@ -74,7 +74,7 @@ struct NewGoalCard: View {
                     .focused($focused)
                     .onSubmit(add)
             }
-            HStack(spacing: 14) {
+            HStack(spacing: 16) {
                 Toggle("Bis", isOn: $hasDueDate)
                     .toggleStyle(.checkbox)
                 DatePicker("Zieldatum", selection: $dueDate, displayedComponents: .date)
@@ -103,7 +103,7 @@ struct NewGoalCard: View {
             }
             .font(.callout)
         }
-        .card(padding: 18)
+        .card(padding: 16)
     }
 
     private func add() {
@@ -133,7 +133,7 @@ struct GoalCard: View {
         let tasks = model.goalTasks(goal)
         let open = tasks.filter { !$0.isDone }
         let done = tasks.filter(\.isDone)
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Button {
                     model.toggleLongGoal(goal.id)
@@ -259,7 +259,7 @@ struct GoalEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Ziel bearbeiten")
-                .font(.title2.weight(.semibold))
+                .font(.title2.weight(.medium))
             Form {
                 TextField("Titel", text: $title)
                 Toggle("Zieldatum", isOn: $hasDueDate)

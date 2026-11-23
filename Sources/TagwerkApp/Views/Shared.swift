@@ -4,7 +4,17 @@ import TagwerkCore
 
 /// Feste Farbpalette für Kunden. In der Datenbank steht nur der Index.
 enum CustomerPalette {
-    static let colors: [Color] = [.blue, .orange, .green, .purple, .pink, .teal, .indigo, .brown]
+    /// Gedämpft, damit sie in die Fläche passen; bewusst ohne Orange (das heißt in Tagwerk „jetzt“).
+    static let colors: [Color] = [
+        Color(red: 0.478, green: 0.584, blue: 0.784),  // Taubenblau
+        Color(red: 0.788, green: 0.647, blue: 0.353),  // Ocker
+        Color(red: 0.498, green: 0.686, blue: 0.541),  // Salbei
+        Color(red: 0.604, green: 0.549, blue: 0.769),  // Lavendel
+        Color(red: 0.773, green: 0.541, blue: 0.608),  // Rosé
+        Color(red: 0.416, green: 0.686, blue: 0.690),  // Petrol
+        Color(red: 0.725, green: 0.514, blue: 0.420),  // Ton
+        Color(red: 0.616, green: 0.651, blue: 0.416),  // Oliv
+    ]
     static var count: Int { colors.count }
 
     static func color(_ index: Int) -> Color {
@@ -31,7 +41,7 @@ struct TaskMetaLine: View {
     var showsBooking = true
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             Image(systemName: task.source.systemImage)
             Text(sourceText)
             if let customer = model.customer(task.customerID) {
@@ -261,7 +271,7 @@ struct ColorChooser: View {
     let onSelect: (Int) -> Void
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             ForEach(0..<CustomerPalette.count, id: \.self) { index in
                 Button {
                     onSelect(index)
@@ -380,7 +390,7 @@ struct SAPTaskPicker: View {
                                 }
                             }
                             .padding(.horizontal, 8)
-                            .padding(.vertical, 5)
+                            .padding(.vertical, 4)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)

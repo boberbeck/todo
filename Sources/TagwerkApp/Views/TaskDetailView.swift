@@ -29,7 +29,7 @@ struct TaskDetailView: View {
                 Text("Die Aufgabe gibt es nicht mehr.")
                 Button("Schließen") { close() }
             }
-            .padding(30)
+            .padding(32)
         }
     }
 
@@ -39,7 +39,7 @@ struct TaskDetailView: View {
         let running = model.isRunning(task.id)
         VStack(spacing: 0) {
             header(task)
-                .padding(.horizontal, 22)
+                .padding(.horizontal, 24)
                 .padding(.top, 20)
                 .padding(.bottom, 10)
 
@@ -112,7 +112,7 @@ struct TaskDetailView: View {
                             showsSAPPicker = true
                         } label: {
                             Text(sapLabel(task, effective: effective))
-                                .foregroundStyle(effective.pspElement == nil ? Theme.accent : Color.primary)
+                                .foregroundStyle(effective.pspElement == nil ? Theme.warning : Color.primary)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.trailing)
                         }
@@ -251,7 +251,7 @@ struct TaskDetailView: View {
 
             Divider()
             footer(task, running: running)
-                .padding(.horizontal, 22)
+                .padding(.horizontal, 24)
                 .padding(.vertical, 12)
         }
         .frame(width: 640, height: height)
@@ -312,7 +312,7 @@ struct TaskDetailView: View {
                 close()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12, weight: .medium))
                     .frame(width: 26, height: 26)
                     .background(Circle().fill(Color.white.opacity(0.08)))
             }

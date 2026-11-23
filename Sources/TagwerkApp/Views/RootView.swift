@@ -244,7 +244,7 @@ struct TopBarTabLabel: View {
             .font(.system(size: 14, weight: selected ? .medium : .regular))
             .foregroundStyle(selected ? Theme.text : (hovering ? Theme.text.opacity(0.85) : Theme.secondary))
             .padding(.horizontal, 12)
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
             .background {
                 if selected || hovering {
                     RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
@@ -270,7 +270,7 @@ struct RunningTimerPill: View {
                         .fill(Theme.accent)
                         .frame(width: 7, height: 7)
                     Text(TimeMath.format(model.tracked(taskID: task.id, now: model.now), showSeconds: true))
-                        .font(.system(.callout, design: .rounded).weight(.semibold))
+                        .font(.system(.callout, design: .rounded).weight(.medium))
                         .monospacedDigit()
                         .foregroundStyle(Theme.text)
                     Text(task.title)
@@ -286,7 +286,7 @@ struct RunningTimerPill: View {
                 }
                 .font(.callout)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 7)
+                .padding(.vertical, 8)
                 .background(Capsule().fill(Theme.accent.opacity(0.12)))
                 .overlay(Capsule().strokeBorder(Theme.accent.opacity(0.35)))
             }
@@ -305,7 +305,7 @@ struct RunningTimerPill: View {
                 .font(.callout)
                 .foregroundStyle(pomodoro.phase == .ready ? Theme.accent : Theme.done)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 7)
+                .padding(.vertical, 8)
                 .background(Capsule().fill((pomodoro.phase == .ready ? Theme.accent : Theme.done).opacity(0.14)))
             }
             .buttonStyle(.plain)
@@ -334,7 +334,7 @@ struct RitualPage<Content: View>: View {
                 Spacer()
             }
             .padding(.horizontal, 24)
-            .padding(.top, 14)
+            .padding(.top, 16)
             content()
         }
     }
@@ -349,13 +349,13 @@ struct IdlePromptView: View {
         let task = model.task(prompt.taskID)
         let others = model.todayTasks.filter { $0.id != prompt.taskID && !$0.isDone }
         VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 14) {
+            HStack(spacing: 16) {
                 Image(systemName: "cup.and.saucer.fill")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(Theme.onAccent)
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(Theme.accent))
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Du warst \(prompt.minutes) Minuten weg")
                         .font(Theme.title)
                     Text("\(prompt.start.formatted(date: .omitted, time: .shortened))–\(prompt.end.formatted(date: .omitted, time: .shortened)) ohne Eingabe")
@@ -381,7 +381,7 @@ struct IdlePromptView: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(26)
+        .padding(24)
         .frame(width: 540)
     }
 }
@@ -408,7 +408,7 @@ struct UpdatePill: View {
                 .font(.callout)
                 .foregroundStyle(Theme.done)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 7)
+                .padding(.vertical, 8)
                 .background(Capsule().fill(Theme.done.opacity(0.14)))
             }
             .buttonStyle(.plain)
@@ -432,7 +432,7 @@ struct UpdatePromptView: View {
                     .foregroundStyle(Theme.done)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Neue Fassung von Tagwerk")
-                        .font(.title2.weight(.semibold))
+                        .font(.title2.weight(.medium))
                     if let release = updater.available?.release {
                         Text("Stand \(release.shortCommit)\(release.publishedAt.map { " vom \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "") · jetzt \(updater.currentBuild ?? "?")")
                             .font(.callout)
@@ -443,9 +443,9 @@ struct UpdatePromptView: View {
             if let changes = updater.available?.changes, !changes.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Was ist neu")
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .medium))
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 5) {
+                        VStack(alignment: .leading, spacing: 4) {
                             ForEach(Array(changes.prefix(15).enumerated()), id: \.offset) { _, change in
                                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                                     Text("•")

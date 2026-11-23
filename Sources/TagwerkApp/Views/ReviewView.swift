@@ -64,7 +64,7 @@ struct ReviewView: View {
                                     x: .value("Tag", day.startDate().formatted(.dateTime.weekday(.abbreviated))),
                                     y: .value("Stunden", model.tracked(on: day) / 3600)
                                 )
-                                .foregroundStyle(day == model.today ? Theme.text.opacity(0.7) : Theme.text.opacity(0.35))
+                                .foregroundStyle(day == model.today ? Theme.accent : Theme.text.opacity(0.3))
                                 .cornerRadius(4)
                             }
                             .chartYAxis {
@@ -81,7 +81,7 @@ struct ReviewView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .card(padding: 22)
+                    .card(padding: 24)
 
                     VStack(alignment: .leading, spacing: 16) {
                         SectionLabel(text: "Stunden nach Kunde")
@@ -113,33 +113,27 @@ struct ReviewView: View {
                         }
                     }
                     .frame(width: 360, alignment: .leading)
-                    .card(padding: 22)
+                    .card(padding: 24)
                 }
 
-                VStack(alignment: .leading, spacing: 16) {
-                    SectionLabel(text: "Stunden · letzte Wochen")
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionLabel(text: "Letzte Wochen")
                     let weeks = (0..<8).reversed().map { monday.adding(days: -7 * $0) }
-                    Chart(weeks, id: \.self) { week in
-                        BarMark(
-                            x: .value("Woche", WeekSwitcher.label(for: week)),
-                            y: .value("Stunden", model.trackedInWeek(starting: week) / 3600)
-                        )
-                        .foregroundStyle(week == monday ? Theme.text.opacity(0.7) : Theme.text.opacity(0.22))
-                        .cornerRadius(4)
-                    }
-                    .chartYAxis {
-                        AxisMarks(position: .leading, values: .stride(by: 1)) { value in
-                            AxisGridLine().foregroundStyle(Theme.border)
-                            AxisValueLabel {
-                                if let hours = value.as(Double.self) {
-                                    Text("\(Int(hours)) h")
-                                }
-                            }
+                    let seconds = weeks.map { model.trackedInWeek(starting: $0) }
+                    let longest = max(seconds.max() ?? 0, 1)
+                    VStack(spacing: 8) {
+                        ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
+                            WeekShareRow(
+                                label: WeekSwitcher.label(for: week),
+                                seconds: seconds[index],
+                                fraction: seconds[index] / longest,
+                                isCurrent: week == monday
+                            )
                         }
                     }
-                    .frame(height: 180)
                 }
-                .card(padding: 22)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .card(padding: 24)
 
                 if !model.activeLongGoals.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
@@ -163,7 +157,7 @@ struct ReviewView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .card(padding: 22)
+                    .card(padding: 24)
                 }
 
                 HStack(alignment: .top, spacing: 16) {
@@ -181,7 +175,7 @@ struct ReviewView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .card(padding: 22)
+                    .card(padding: 24)
 
                     VStack(alignment: .leading, spacing: 12) {
                         SectionLabel(text: "Ziele für nächste Woche")
@@ -194,7 +188,7 @@ struct ReviewView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .card(padding: 22)
+                    .card(padding: 24)
                 }
             }
             .padding(.horizontal, 40)
@@ -219,6 +213,36 @@ struct ReviewView: View {
 }
 
 /// Anteil eines Kunden an der Woche als Balken.
+/// Eine Woche in der Liste „Letzte Wochen“: Zeitraum, schmaler Balken, Stunden.
+struct WeekShareRow: View {
+    let label: String
+    let seconds: TimeInterval
+    let fraction: Double
+    let isCurrent: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(isCurrent ? Theme.text : Theme.secondary)
+                .frame(width: 120, alignment: .leading)
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.05))
+                    Capsule()
+                        .fill(isCurrent ? Theme.accent : Theme.text.opacity(0.3))
+                        .frame(width: geometry.size.width * max(0, min(1, fraction)))
+                }
+            }
+            .frame(height: 4)
+            Text("\(TimeMath.format(seconds)) h")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(Theme.secondary)
+                .frame(width: 56, alignment: .trailing)
+        }
+    }
+}
+
 struct CustomerShareRow: View {
     let customer: Customer?
     let seconds: TimeInterval
@@ -226,7 +250,7 @@ struct CustomerShareRow: View {
 
     var body: some View {
         let color = customer.map { CustomerPalette.color($0.colorIndex) } ?? Color.white.opacity(0.3)
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Circle().fill(color).frame(width: 7, height: 7)
                 Text(customer?.name ?? "Ohne Kunde")

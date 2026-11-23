@@ -12,10 +12,13 @@ struct StartView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-                .padding(.horizontal, 40)
-                .padding(.top, 32)
-                .padding(.bottom, 24)
+            VStack(alignment: .leading, spacing: 20) {
+                header
+                DayBand()
+            }
+            .padding(.horizontal, 40)
+            .padding(.top, 32)
+            .padding(.bottom, 24)
 
             GeometryReader { geometry in
                 let maxCalendar = max(Preferences.minCalendarWidth, Double(geometry.size.width - taskColumnMinWidth - 60))
@@ -36,9 +39,9 @@ struct StartView: View {
                     )
 
                     CalendarColumn()
-                        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
-                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.border))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.surface))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.border))
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                         .frame(width: CGFloat(min(calendarWidth, maxCalendar)))
                         .padding(.trailing, 32)
                         .padding(.bottom, 28)
@@ -102,13 +105,13 @@ struct StartTaskColumn: View {
         let free = model.freeMinutesToday
         let overplanned = DayPlan.isOverplanned(plannedMinutes: planned, availableMinutes: free)
 
-        VStack(alignment: .leading, spacing: 30) {
+        VStack(alignment: .leading, spacing: 32) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center) {
                     SectionLabel(text: "Heute", detail: "\(TimeMath.format(minutes: planned)) h geplant · \(TimeMath.format(minutes: free)) h frei")
                     if overplanned {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.warning)
                             .help("Mehr geplant, als zwischen den Terminen Zeit ist")
                     }
                     Spacer()
@@ -176,7 +179,7 @@ struct StartTaskColumn: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: showInbox ? "chevron.down" : "chevron.right")
-                                .font(.caption2.weight(.semibold))
+                                .font(.caption2.weight(.medium))
                                 .foregroundStyle(Theme.tertiary)
                             SectionLabel(text: "Eingang", detail: "\(model.inboxTasks.count)")
                         }
@@ -216,7 +219,7 @@ struct StartTaskColumn: View {
                     }
                 }
             }
-            .padding(14)
+            .padding(16)
             .background(RoundedRectangle(cornerRadius: 14).fill(isInboxDropTarget ? Theme.accentSoft : Color.white.opacity(0.02)))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(isInboxDropTarget ? Theme.accent.opacity(0.6) : Theme.border))
             .onDrop(of: DropImporter.acceptedTypes, isTargeted: $isInboxDropTarget) { providers in

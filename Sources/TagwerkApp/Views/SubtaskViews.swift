@@ -36,7 +36,7 @@ struct SubtaskToggle: View {
                     Text("\(subtasks.filter(\.isDone).count)/\(subtasks.count)")
                         .monospacedDigit()
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 8, weight: .semibold))
+                        .font(.system(size: 8, weight: .medium))
                 }
                 .font(.caption)
                 .foregroundStyle(Theme.tertiary)
@@ -92,8 +92,8 @@ struct SubtaskRow: View {
 
             if let number = task.ticketNumber, number != model.parent(of: task)?.linkedTicketNumber {
                 Text("#\(number)")
-                    .font(.caption)
-                    .foregroundStyle(Theme.accent)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(Theme.tertiary)
                     .help("Zeit geht auch als Worklog an Ticket #\(number)")
             }
 
@@ -113,7 +113,7 @@ struct SubtaskRow: View {
                         .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(task.ticketNumber == nil ? Theme.tertiary : Theme.accent)
+                .foregroundStyle(task.ticketNumber == nil ? Theme.tertiary : Theme.secondary)
                 .help("Ticket zuordnen")
                 .popover(isPresented: $showsTicketPicker, arrowEdge: .bottom) {
                     TicketPicker(taskID: task.id) { showsTicketPicker = false }
@@ -132,7 +132,7 @@ struct SubtaskRow: View {
                 .help(running ? "Timer stoppen" : "Timer für diese Unteraufgabe starten")
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
         .padding(.horizontal, 4)
         .background(RoundedRectangle(cornerRadius: 6).fill(running ? Theme.accentSoft : (hovering ? Color.white.opacity(0.04) : .clear)))
         .contentShape(Rectangle())
@@ -165,7 +165,7 @@ struct OpenDetailButton: View {
             model.openDetail(task.id)
         } label: {
             Image(systemName: "info")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 11, weight: .medium))
                 .frame(width: 24, height: 24)
                 .background(Circle().fill(Color.white.opacity(0.08)))
                 .foregroundStyle(Theme.text)
@@ -186,7 +186,7 @@ struct AddSubtaskField: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "plus")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(Theme.tertiary)
                 .frame(width: 13)
             TextField("Unteraufgabe hinzufügen", text: $text)
@@ -206,7 +206,7 @@ struct AddSubtaskField: View {
                     focused = false
                 }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
         .padding(.horizontal, 4)
         .onAppear { takeFocusIfRequested() }
         .onChange(of: model.subtaskEntryTaskID) { takeFocusIfRequested() }
@@ -275,7 +275,7 @@ struct TicketPicker: View {
         let searchedRemote = remoteQuery == trimmed && !trimmed.isEmpty
         VStack(alignment: .leading, spacing: 8) {
             Text(current.map { "Ticket für „\($0.title)“" } ?? "Ticket zuordnen")
-                .font(.headline)
+                .font(.system(size: 14, weight: .medium))
                 .lineLimit(1)
             TextField("Ticketnummer oder Betreff, auch von Kollegen", text: $query)
                 .textFieldStyle(.roundedBorder)
@@ -333,7 +333,7 @@ struct TicketPicker: View {
                     if searchedRemote, remote.isEmpty, !isSearchingRemote, found.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(typedNumber != nil ? "Ticket #\(trimmed) in ManageEngine nicht gefunden." : "In ManageEngine nichts mit „\(trimmed)“ gefunden.")
-                                .foregroundStyle(Theme.accent)
+                                .foregroundStyle(Theme.warning)
                             if !attempts.isEmpty {
                                 Text("Versucht: " + attempts.joined(separator: " · "))
                                     .font(.caption)
@@ -392,7 +392,7 @@ struct TicketPicker: View {
 
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(.caption.weight(.semibold))
+            .font(.caption.weight(.medium))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
             .padding(.top, 6)
@@ -402,7 +402,7 @@ struct TicketPicker: View {
         HStack(spacing: 8) {
             Text("#\(number)")
                 .monospacedDigit()
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .lineLimit(1)
@@ -425,7 +425,7 @@ struct TicketPicker: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
 
@@ -503,6 +503,7 @@ struct BackdatedStartMenu: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .foregroundStyle(Theme.tertiary)
+            .tint(Theme.secondary)
             .help("Timer rückwirkend starten oder Zeit nachtragen")
         } else {
             Menu(model.isRunning(task.id) ? "Läuft eigentlich schon seit" : "Timer starten, läuft schon seit") {
@@ -538,7 +539,7 @@ struct ExpandedSubtasks: View {
     var body: some View {
         if model.expandedTaskIDs.contains(task.id) {
             SubtaskList(parent: task)
-                .padding(.leading, 26)
+                .padding(.leading, 24)
                 .padding(.top, 2)
         }
     }

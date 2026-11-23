@@ -139,7 +139,7 @@ struct SAPSyncSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Abgleich mit SAP ByDesign")
-                    .font(.title2.weight(.semibold))
+                    .font(.title2.weight(.medium))
                 Text("Deine Projektaufgaben werden zu PSP-Elementen bei den Kunden. In SAP ändert sich nichts.")
                     .foregroundStyle(.secondary)
             }
@@ -204,14 +204,14 @@ struct SAPSyncSheet: View {
     // MARK: Schritte
 
     private var start: some View {
-        VStack(spacing: 22) {
-            HStack(spacing: 14) {
+        VStack(spacing: 24) {
+            HStack(spacing: 16) {
                 Image(systemName: "globe")
                     .font(.system(size: 26, weight: .light))
                     .foregroundStyle(Theme.accent)
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Direkt aus ByDesign holen")
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .medium))
                     Text("Anmelden wie im Browser, Aufgabenliste öffnen, „Aufgaben holen“. Ohne Export.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -231,7 +231,7 @@ struct SAPSyncSheet: View {
                     .font(.system(size: 40, weight: .light))
                     .foregroundStyle(isTargeted ? Color.accentColor : Color.secondary)
                 Text("Oder: Excel-Export oder Bildschirmfoto der Liste hierher ziehen")
-                    .font(.headline)
+                    .font(.system(size: 14, weight: .medium))
                 HStack(spacing: 10) {
                     Button("Datei wählen …") { showsFilePicker = true }
                     Button("Aus Zwischenablage einfügen") { loadFromPasteboard() }
@@ -260,7 +260,7 @@ struct SAPSyncSheet: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("So geht’s")
-                    .font(.headline)
+                    .font(.system(size: 14, weight: .medium))
                 step(1, "Öffne in ByDesign die Liste deiner Aufgaben (die mit Kategorie und Aufgabennummer).")
                 step(2, "Blende über die Tabellen-Einstellungen am besten auch Aufgabenname, Projekt und Kunde ein. Dann ordnet Tagwerk die Aufgaben selbst den Kunden zu.")
                 step(3, "Ohne Export: Bildschirmfoto der Liste machen (⇧⌘4, mit ⌃ landet es in der Zwischenablage) und hierher ziehen oder einfügen. Tagwerk liest die Nummern per Texterkennung.")
@@ -277,7 +277,7 @@ struct SAPSyncSheet: View {
     private func step(_ number: Int, _ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text("\(number)")
-                .font(.callout.weight(.semibold).monospacedDigit())
+                .font(.callout.weight(.medium).monospacedDigit())
                 .frame(width: 22, height: 22)
                 .background(Circle().fill(Color.accentColor.opacity(0.15)))
             Text(text)
@@ -401,7 +401,7 @@ struct SAPSyncSheet: View {
             )) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Neuer Kunde für \(group.project)")
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .medium))
                     TextField("Name des Kunden", text: $newCustomerName)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 260)
@@ -413,7 +413,7 @@ struct SAPSyncSheet: View {
                             .disabled(newCustomerName.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
-                .padding(14)
+                .padding(16)
             }
         }
         .padding(.vertical, 4)
@@ -473,7 +473,7 @@ struct SAPSyncSheet: View {
     private func tag(_ text: String, color: Color) -> some View {
         Text(text)
             .font(.caption.weight(.medium))
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 8)
             .padding(.vertical, 2)
             .background(Capsule().fill(color.opacity(0.18)))
             .foregroundStyle(color)
@@ -485,7 +485,7 @@ struct SAPSyncSheet: View {
                 .font(.system(size: 44))
                 .foregroundStyle(Theme.done)
             Text(text)
-                .font(.headline)
+                .font(.system(size: 14, weight: .medium))
                 .multilineTextAlignment(.center)
             Text("Die PSP-Elemente stehen jetzt bei den Kunden und in jeder Aufgabe zur Auswahl.")
                 .foregroundStyle(.secondary)

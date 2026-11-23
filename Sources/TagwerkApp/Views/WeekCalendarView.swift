@@ -23,8 +23,8 @@ struct WeekCalendarView: View {
         let goal = Double(max(model.weeklyGoalMinutes, 1) * 60)
 
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .center, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .center, spacing: 16) {
                     Text("Kalender")
                         .font(Theme.pageTitle)
                         .lineLimit(1)
@@ -40,7 +40,7 @@ struct WeekCalendarView: View {
                     ProgressLine(value: tracked / goal)
                         .frame(minWidth: 60, maxWidth: 160)
                 }
-                HStack(alignment: .center, spacing: 14) {
+                HStack(alignment: .center, spacing: 16) {
                     WeekSwitcher(weekStart: Binding(get: { monday }, set: { weekStart = $0 }), currentWeek: model.currentWeekStart)
                     Button {
                         draft = TimeEntryDraft(start: defaultStart(in: days), minutes: 60)
@@ -115,13 +115,13 @@ struct WeekCalendarView: View {
     private func dayHeader(_ day: LocalDate) -> some View {
         let isToday = day == model.today
         return VStack(spacing: 4) {
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 Text(day.startDate().formatted(.dateTime.weekday(.abbreviated)))
                     .foregroundStyle(isToday ? Theme.text : Theme.secondary)
                 Text("\(day.day)")
                     .foregroundStyle(isToday ? Theme.accent : Theme.tertiary)
             }
-            .font(.system(size: 15, weight: .medium))
+            .font(.system(size: 14, weight: .medium))
             Text("\(TimeMath.format(model.tracked(on: day))) h")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(Theme.tertiary)
@@ -190,7 +190,7 @@ struct DayTimeline: View {
             ForEach(model.calendarEvents(on: day).filter { !$0.isAllDay }) { event in
                 let top = max(0, y(event.start))
                 EventBlock(event: event, height: max(16, min(total, y(event.end)) - top), logged: model.isLogged(event))
-                    .padding(.horizontal, 3)
+                    .padding(.horizontal, 4)
                     .offset(y: top)
             }
 
@@ -203,23 +203,23 @@ struct DayTimeline: View {
                         hourHeight: hourHeight
                     )
                     .padding(.leading, 10)
-                    .padding(.trailing, 3)
+                    .padding(.trailing, 4)
                 }
             }
 
             ForEach(model.dayEntries(day)) { entry in
                 EntryBlock(entry: entry, dayStart: dayStart, hourHeight: hourHeight, dayHeight: total)
-                    .padding(.leading, 18)
-                    .padding(.trailing, 3)
+                    .padding(.leading, 16)
+                    .padding(.trailing, 4)
             }
 
             if isToday {
                 let nowY = y(model.now)
-                HStack(spacing: 0) {
-                    Circle().fill(Theme.accent).frame(width: 7, height: 7)
+                HStack(alignment: .bottom, spacing: 0) {
+                    SunMark(size: 10)
                     Rectangle().fill(Theme.accent).frame(height: 1.5)
                 }
-                .offset(x: -3.5, y: nowY - 3.5)
+                .offset(x: -5, y: nowY - 5)
                 .allowsHitTesting(false)
             }
 
@@ -240,7 +240,7 @@ struct DayTimeline: View {
                 )
                 .id(slot.start)
                 .padding(.leading, 4)
-                .padding(.trailing, 3)
+                .padding(.trailing, 4)
             }
         }
         .frame(maxWidth: .infinity)
@@ -295,7 +295,7 @@ struct EntryBlock: View {
         let bottom = min(dayHeight, y(times.end ?? model.now))
         let height = max(4, bottom - top)
         let task = model.task(entry.taskID)
-        let color = model.customer(task?.customerID).map { CustomerPalette.color($0.colorIndex) } ?? Theme.accent
+        let color = model.customer(task.map { model.resolved($0) }?.customerID).map { CustomerPalette.color($0.colorIndex) } ?? Theme.secondary
         let handleHeight = min(7, height / 4)
 
         HStack(spacing: 0) {
@@ -303,7 +303,7 @@ struct EntryBlock: View {
             if height > 18 {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(task?.title ?? "Ohne Aufgabe")
-                        .font(.caption.weight(.semibold))
+                        .font(.caption.weight(.medium))
                         .lineLimit(height > 40 ? 2 : 1)
                     if height > 34 {
                         Text(timeRange(times))
@@ -311,7 +311,7 @@ struct EntryBlock: View {
                             .foregroundStyle(Theme.secondary)
                     }
                 }
-                .padding(.horizontal, 5)
+                .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 Spacer(minLength: 0)
             }
@@ -337,7 +337,7 @@ struct EntryBlock: View {
         .overlay(alignment: .topLeading) {
             if drag != nil {
                 Text(badge(times))
-                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .font(.caption2.monospacedDigit().weight(.medium))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(Capsule().fill(Theme.surface))
@@ -447,10 +447,10 @@ struct AddTimeSheet: View {
         let end = combined(day, to)
         let minutes = Int(end.timeIntervalSince(start) / 60)
 
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Zeit nachtragen")
-                    .font(.title2.weight(.semibold))
+                    .font(.title2.weight(.medium))
                 Text("Vergessen, den Timer zu starten? Hier die Zeit eintragen; sie zählt wie gestoppte Zeit.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -496,7 +496,7 @@ struct AddTimeSheet: View {
                 }
                 LabeledContent("Dauer") {
                     Text(minutes > 0 ? "\(TimeMath.format(minutes: minutes)) h" : "Ende liegt vor dem Beginn")
-                        .foregroundStyle(minutes > 0 ? Theme.text : Theme.accent)
+                        .foregroundStyle(minutes > 0 ? Theme.text : Theme.warning)
                         .monospacedDigit()
                 }
             }

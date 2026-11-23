@@ -11,7 +11,7 @@ struct WeekPlanView: View {
         let days = (0..<7).map { monday.adding(days: $0) }
         VStack(alignment: .leading, spacing: 0) {
             PageHeader(title: "Woche planen", subtitle: weekSummary(days)) {
-                HStack(spacing: 14) {
+                HStack(spacing: 16) {
                     Text(monday.startDate().formatted(.dateTime.month(.wide).year()))
                         .foregroundStyle(Theme.secondary)
                     WeekSwitcher(weekStart: Binding(get: { monday }, set: { weekStart = $0 }), currentWeek: model.currentWeekStart)
@@ -21,13 +21,13 @@ struct WeekPlanView: View {
             .padding(.top, 32)
             .padding(.bottom, 24)
 
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .top, spacing: 16) {
                 InboxColumn()
                     .frame(width: 260)
 
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal) {
-                        HStack(alignment: .top, spacing: 14) {
+                        HStack(alignment: .top, spacing: 16) {
                             ForEach(days, id: \.self) { day in
                                 DayPlanColumn(day: day)
                                     .frame(width: 260)
@@ -81,7 +81,7 @@ struct DayPlanColumn: View {
                     Spacer()
                     Text(capacity(planned: planned))
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(isOverplanned(planned) ? Theme.accent : Theme.tertiary)
+                        .foregroundStyle(isOverplanned(planned) ? Theme.warning : Theme.tertiary)
                 }
                 Rectangle()
                     .fill(isToday ? Theme.accent : Theme.borderStrong)
@@ -105,7 +105,7 @@ struct DayPlanColumn: View {
                             .font(.caption)
                             .foregroundStyle(Theme.tertiary)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 18)
+                            .padding(.vertical, 16)
                     }
                 }
                 .padding(.bottom, 12)
@@ -186,7 +186,7 @@ struct InboxColumn: View {
                             .font(.caption)
                             .foregroundStyle(Theme.tertiary)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 18)
+                            .padding(.vertical, 16)
                     }
                 }
                 .padding(.bottom, 12)

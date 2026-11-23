@@ -2,7 +2,10 @@ import AppKit
 import SwiftUI
 import TagwerkCore
 
-/// Das Erscheinungsbild von Tagwerk: dunkel, warm, ruhig.
+/// Das Erscheinungsbild von Tagwerk: ruhig, genau, ein bisschen warm.
+/// Welt: Stundenzettel und Abendlicht, der Tag als Strecke von Arbeitsbeginn bis Feierabend
+/// (wie im Logo die Sonne am Horizont). Erkennungszeichen ist der Sonnenstand (`SunMark`): er markiert „jetzt“,
+/// nur im Tagesband und an der Jetzt-Linie der Kalender. Die Farbe sitzt im Tagesband, nicht in der Oberfläche.
 ///
 /// Regeln:
 /// - Orange heißt „läuft jetzt“ oder „Hauptaktion“. Sonst nirgends.
@@ -15,25 +18,29 @@ import TagwerkCore
 enum Theme {
     // MARK: Farben
 
-    /// Grund des Fensters (warmes Fast-Schwarz)
-    static let background = Color(red: 0.063, green: 0.051, blue: 0.043)
-    /// Kopfleiste
-    static let bar = Color(red: 0.075, green: 0.062, blue: 0.053)
+    // Warmes Graphit: fast neutral, nur ein Hauch Wärme (#161513 › #1C1A18 › #262421).
+
+    /// Grund des Fensters
+    static let background = Color(red: 0.086, green: 0.082, blue: 0.075)
+    /// Kopfleiste (eine Stufe tiefer als der Grund)
+    static let bar = Color(red: 0.071, green: 0.067, blue: 0.059)
     /// Karten und Felder
-    static let surface = Color(red: 0.110, green: 0.094, blue: 0.082)
+    static let surface = Color(red: 0.110, green: 0.102, blue: 0.094)
     /// Gehobene Flächen: Hover, Knöpfe, ausgewählte Reiter
-    static let surfaceRaised = Color(red: 0.150, green: 0.129, blue: 0.113)
+    static let surfaceRaised = Color(red: 0.149, green: 0.141, blue: 0.129)
     /// Schwebende Flächen: Fenster, Menüs
-    static let surfaceFloating = Color(red: 0.125, green: 0.107, blue: 0.094)
-    /// Vertieft: Eingabefelder, Leisten in Karten
-    static let surfaceSunken = Color(red: 0.078, green: 0.066, blue: 0.057)
+    static let surfaceFloating = Color(red: 0.122, green: 0.114, blue: 0.106)
+    /// Vertieft: Spur des Tagesbands, Leisten in Karten
+    static let surfaceSunken = Color(red: 0.071, green: 0.067, blue: 0.059)
 
-    static let border = Color(red: 1, green: 0.92, blue: 0.84).opacity(0.075)
-    static let borderStrong = Color(red: 1, green: 0.92, blue: 0.84).opacity(0.14)
+    /// Haarlinien: Textfarbe mit 8 %
+    static let border = Color(red: 0.937, green: 0.914, blue: 0.871).opacity(0.08)
+    static let borderStrong = Color(red: 0.937, green: 0.914, blue: 0.871).opacity(0.14)
 
-    static let text = Color(red: 0.97, green: 0.94, blue: 0.91)
-    static let secondary = Color(red: 0.97, green: 0.94, blue: 0.91).opacity(0.62)
-    static let tertiary = Color(red: 0.97, green: 0.94, blue: 0.91).opacity(0.40)
+    /// Drei Textrollen
+    static let text = Color(red: 0.937, green: 0.914, blue: 0.871)
+    static let secondary = Color(red: 0.667, green: 0.639, blue: 0.596)
+    static let tertiary = Color(red: 0.541, green: 0.518, blue: 0.478)
 
     /// Sonnen-Orange
     static let accent = Color(red: 1.0, green: 0.63, blue: 0.29)
@@ -46,9 +53,10 @@ enum Theme {
     /// Text auf Orange
     static let onAccent = Color(red: 0.16, green: 0.08, blue: 0.03)
 
-    static let done = Color(red: 0.48, green: 0.85, blue: 0.58)
-    static let warning = Color(red: 1.0, green: 0.78, blue: 0.36)
-    static let danger = Color(red: 1.0, green: 0.44, blue: 0.38)
+    // Bedeutungsfarben, gedämpft
+    static let done = Color(red: 0.298, green: 0.765, blue: 0.541)
+    static let warning = Color(red: 0.878, green: 0.690, blue: 0.290)
+    static let danger = Color(red: 0.898, green: 0.282, blue: 0.302)
     /// Tickets (ManageEngine): kühler Gegenton zum warmen SAP
     static let info = Color(red: 0.58, green: 0.68, blue: 1.0)
 
@@ -91,13 +99,13 @@ enum Theme {
     // MARK: Schrift
     // Überschriften und Zahlen gerundet (freundlicher, wie das Logo), Fließtext normal.
 
-    static let pageTitle = Font.system(size: 28, weight: .semibold)
-    static let title = Font.system(size: 19, weight: .semibold)
+    static let pageTitle = Font.system(size: 28, weight: .medium)
+    static let title = Font.system(size: 20, weight: .medium)
     static let cardTitle = Font.system(size: 14, weight: .medium)
     static let bigNumber = Font.system(size: 30, weight: .medium, design: .rounded).monospacedDigit()
     static let statNumber = Font.system(size: 34, weight: .medium, design: .rounded).monospacedDigit()
     static let timerNumber = Font.system(size: 80, weight: .light, design: .rounded).monospacedDigit()
-    static let label = Font.system(size: 13, weight: .semibold)
+    static let label = Font.system(size: 13, weight: .medium)
 }
 
 /// Grund des Fensters: einfarbig warmes Dunkel.
@@ -139,7 +147,7 @@ enum Elevation {
 }
 
 /// Fläche: einfarbig mit Haarlinie; Schatten nur, wenn sie schwebt. Mit `tint` bekommt sie links eine Kante
-/// in der Farbe und einen Hauch davon in der Fläche (die laufende Aufgabe in Orange).
+/// in der Farbe (die laufende Aufgabe in Orange), sonst nichts.
 struct SurfaceStyle: ViewModifier {
     var radius: CGFloat = Theme.Radius.card
     var elevation: Elevation = .raised
@@ -153,7 +161,6 @@ struct SurfaceStyle: ViewModifier {
                 ZStack(alignment: .leading) {
                     shape.fill(fill)
                     if let tint {
-                        shape.fill(tint.opacity(0.08))
                         Rectangle().fill(tint).frame(width: 3)
                     }
                 }
@@ -161,7 +168,7 @@ struct SurfaceStyle: ViewModifier {
                 .shadow(color: shadowColor, radius: shadowRadius, y: shadowY)
             }
             .overlay {
-                shape.strokeBorder(tint.map { $0.opacity(0.35) } ?? Theme.border, lineWidth: 1)
+                shape.strokeBorder(Theme.border, lineWidth: 1)
             }
     }
 
@@ -255,9 +262,9 @@ private struct GhostButtonBody: View {
         configuration.label
             .lineLimit(1)
             .fixedSize()
-            .font(.system(size: small ? 12 : 13, weight: prominent ? .semibold : .medium))
-            .padding(.horizontal, small ? 9 : 14)
-            .padding(.vertical, small ? 4 : 7)
+            .font(.system(size: small ? 12 : 13, weight: .medium))
+            .padding(.horizontal, small ? 8 : 16)
+            .padding(.vertical, small ? 4 : 8)
             .foregroundStyle(prominent ? Theme.onAccent : (destructive ? Theme.danger : Theme.text))
             .background {
                 if prominent {
@@ -298,7 +305,7 @@ private struct IconButtonBody: View {
 
     var body: some View {
         configuration.label
-            .font(.system(size: size * 0.42, weight: .semibold))
+            .font(.system(size: size * 0.42, weight: .medium))
             .foregroundStyle(prominent ? Theme.onAccent : (hovering ? Theme.text : Theme.secondary))
             .frame(width: size, height: size)
             .background {
@@ -317,16 +324,16 @@ private struct IconButtonBody: View {
     }
 }
 
-/// Markierung in Kapselform: SAP-Aufgabe, Ticket, Hinweise. Der Ton sagt, was es ist.
+/// Meta-Angabe wie SAP-Aufgabe oder Ticket: ruhiger Text mit Symbol, keine Pille.
+/// Fehlt etwas (`warning`), steht ein kleiner Punkt davor. Beim Darüberfahren eine leichte Fläche (anklickbar).
 struct Chip: View {
     enum Tone {
         case neutral, accent, info, success, warning, danger
 
         var color: Color {
             switch self {
-            case .neutral: return Theme.secondary
+            case .neutral, .info: return Theme.secondary
             case .accent: return Theme.accent
-            case .info: return Theme.info
             case .success: return Theme.done
             case .warning: return Theme.warning
             case .danger: return Theme.danger
@@ -339,29 +346,35 @@ struct Chip: View {
     var text: String?
     var tone: Tone = .neutral
 
+    @State private var hovering = false
+
     var body: some View {
         HStack(spacing: 4) {
-            if let icon {
+            if tone == .warning || tone == .danger {
+                Circle().fill(tone.color).frame(width: 6, height: 6)
+            } else if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.tertiary)
             }
             if let label {
                 Text(label)
-                    .fontWeight(.semibold)
+                    .fontWeight(.medium)
+                    .foregroundStyle(Theme.secondary)
             }
             if let text {
                 Text(text)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .foregroundStyle(tone == .neutral ? Theme.secondary : tone.color.opacity(0.85))
+                    .foregroundStyle(Theme.tertiary)
             }
         }
         .font(.caption)
-        .foregroundStyle(tone == .neutral ? Theme.text.opacity(0.8) : tone.color)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Capsule().fill(tone == .neutral ? Color.white.opacity(0.06) : tone.color.opacity(0.12)))
-        .contentShape(Capsule())
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .background(RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(hovering ? 0.06 : 0)))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
     }
 }
 
@@ -446,7 +459,8 @@ struct WeekSwitcher: View {
 struct ProgressLine: View {
     let value: Double
     var height: CGFloat = 4
-    var color: Color = Theme.accent
+    /// Neutral; Orange nur, wenn es um „jetzt“ geht (laufender Pomodoro)
+    var color: Color = Theme.secondary
 
     var body: some View {
         GeometryReader { geometry in
@@ -461,7 +475,7 @@ struct ProgressLine: View {
     }
 }
 
-/// Das Zeichen aus dem App-Symbol: Sonne am Horizont mit Haken.
+/// Das Zeichen aus dem App-Symbol: Sonne am Horizont mit Haken, flach in einer Farbe.
 struct LogoMark: View {
     var body: some View {
         Canvas { context, size in
@@ -471,14 +485,10 @@ struct LogoMark: View {
             var sun = Path()
             sun.addArc(center: center, radius: 30 * scale, startAngle: .degrees(180), endAngle: .degrees(360), clockwise: false)
             sun.closeSubpath()
-            context.fill(sun, with: .linearGradient(
-                Gradient(colors: [Color(red: 1, green: 0.82, blue: 0.35), Color(red: 1, green: 0.45, blue: 0.22)]),
-                startPoint: CGPoint(x: 0, y: horizon - 30 * scale),
-                endPoint: CGPoint(x: 0, y: horizon)
-            ))
+            context.fill(sun, with: .color(Theme.accent))
             var line = Path()
             line.addRoundedRect(in: CGRect(x: 14 * scale, y: horizon + 5 * scale, width: 72 * scale, height: 4 * scale), cornerSize: CGSize(width: 2 * scale, height: 2 * scale))
-            context.fill(line, with: .color(Color(red: 1, green: 0.55, blue: 0.25).opacity(0.7)))
+            context.fill(line, with: .color(Theme.accent.opacity(0.6)))
             var check = Path()
             check.move(to: CGPoint(x: 34 * scale, y: 52 * scale))
             check.addLine(to: CGPoint(x: 46 * scale, y: 63 * scale))
@@ -504,7 +514,7 @@ struct AddTaskField: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            TextField("", text: $text, prompt: Text(compact ? "Aufgabe hinzufügen …" : "Aufgabe hinzufügen … (z. B. „Angebot prüfen 30m“)").foregroundColor(Theme.tertiary))
+            TextField("", text: $text, prompt: Text("Neue Aufgabe").foregroundColor(Theme.tertiary))
                 .textFieldStyle(.plain)
                 .foregroundStyle(Theme.text)
                 .focused($focused)
@@ -517,14 +527,16 @@ struct AddTaskField: View {
             .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.05)))
             .opacity(text.trimmingCharacters(in: .whitespaces).isEmpty ? 0.6 : 1)
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 6)
-        .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(focused ? 0.04 : 0.015)))
+        .padding(.leading, 16)
+        .padding(.trailing, 4)
+        .padding(.vertical, 4)
+        .frame(minHeight: 36)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous).fill(focused ? Theme.surfaceRaised : Theme.surface))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(focused ? Theme.accent.opacity(0.6) : Theme.borderStrong, style: StrokeStyle(lineWidth: 1, dash: focused ? [] : [4, 3]))
+            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                .strokeBorder(focused ? Theme.borderStrong : Theme.border)
         )
+        .help("Neue Aufgabe. Eine Dauer am Ende setzt die Schätzung, z. B. „Angebot prüfen 30m“")
         .onChange(of: model.newTaskRequest) {
             if takesNewTaskShortcut { focused = true }
         }
@@ -571,18 +583,18 @@ struct TaskCard: View {
 
     var body: some View {
         let running = model.isRunning(task.id)
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             Button {
                 model.toggleDone(task.id)
             } label: {
                 Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(task.isDone ? Theme.done : (running ? Theme.accent : Theme.tertiary))
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(task.isDone ? Theme.done : Theme.tertiary)
             }
             .buttonStyle(.plain)
             .help(task.isDone ? "Wieder öffnen" : "Erledigt")
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(task.isDone ? Theme.secondary : Theme.text)
@@ -608,8 +620,8 @@ struct TaskCard: View {
                 VStack(alignment: .trailing, spacing: 6) {
                     if !compact {
                         Text(model.timeLabel(for: task, now: running ? model.now : Date()))
-                            .font(.system(.callout, design: .rounded).weight(running ? .semibold : .regular).monospacedDigit())
-                            .foregroundStyle(running ? Theme.accent : Theme.secondary)
+                            .font(.system(.callout, design: .rounded).weight(running ? .medium : .regular).monospacedDigit())
+                            .foregroundStyle(running ? Theme.text : Theme.secondary)
                     }
                     if !task.isDone, running || hovering {
                         HStack(spacing: 6) {
@@ -629,8 +641,8 @@ struct TaskCard: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, compact ? 10 : 13)
+        .padding(.horizontal, 16)
+        .padding(.vertical, compact ? 8 : 12)
         .surface(
             radius: compact ? 12 : 14,
             elevation: task.isDone ? .flat : .raised,
@@ -671,12 +683,20 @@ struct CardMeta: View {
 
     var body: some View {
         let parts = metaParts
-        if model.customer(task.customerID) != nil || !parts.isEmpty {
+        let goal = model.longGoal(task.longGoalID)
+        if model.customer(task.customerID) != nil || !parts.isEmpty || goal != nil {
             HStack(spacing: 6) {
                 if let customer = model.customer(task.customerID) {
                     HStack(spacing: 4) {
                         CustomerDot(colorIndex: customer.colorIndex, size: 6)
                         Text(customer.name)
+                            .lineLimit(1)
+                    }
+                }
+                if let goal {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flag")
+                        Text(goal.title)
                             .lineLimit(1)
                     }
                 }
@@ -693,7 +713,6 @@ struct CardMeta: View {
     private var metaParts: [String] {
         var parts: [String] = []
         if compact || task.isDone, let number = task.linkedTicketNumber { parts.append("#\(number)") }
-        if let goal = model.longGoal(task.longGoalID) { parts.append("◎ \(goal.title)") }
         if task.source == .mail { parts.append("Mail") }
         if !compact, let start = task.scheduledStart, !task.isDone { parts.append(start.formatted(date: .omitted, time: .shortened)) }
         if let estimate = task.estimateMinutes, compact || task.isDone { parts.append("\(TimeMath.format(minutes: estimate)) h") }

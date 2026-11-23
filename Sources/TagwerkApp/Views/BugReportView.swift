@@ -17,14 +17,14 @@ struct BugReportView: View {
     @State private var crash: URL?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
                 Image(systemName: "ladybug.fill")
                     .font(.system(size: 24))
                     .foregroundStyle(Theme.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Fehler melden")
-                        .font(.title2.weight(.semibold))
+                        .font(.title2.weight(.medium))
                     Text(crash != nil ? "Tagwerk ist zuletzt abgestürzt. Der Bericht von macOS kann mit." : "Was ist schiefgegangen? Das Protokoll hilft beim Finden.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -78,7 +78,7 @@ struct BugReportView: View {
                     .disabled(!canSend)
             }
         }
-        .padding(22)
+        .padding(24)
         .frame(width: 620)
         .onAppear {
             crash = model.pendingCrash ?? BugReport.crashReports().first.flatMap { url in
