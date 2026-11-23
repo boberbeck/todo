@@ -92,6 +92,11 @@ enum SnapshotMode {
         await capture(window, name: "fokus-pause", in: directory)
         model.pomodoro = nil
 
+        // Klangwelt im Fokus (läuft, Stimmung je nach Tageszeit)
+        model.music.showDemoSoundscape()
+        try? await Task.sleep(for: .seconds(1.2))
+        await capture(window, name: "fokus-klangwelt", in: directory)
+
         // Aufgabenfenster mit Unteraufgaben
         if let offer = model.todayTasks.first(where: { !model.subtasks(of: $0.id).isEmpty && $0.title.hasPrefix("Angebot") }) {
             model.selection = .today

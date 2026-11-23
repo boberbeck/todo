@@ -58,16 +58,14 @@ final class Updater {
 
     /// Beim Start und danach alle sechs Stunden, wenn ein Schlüssel hinterlegt ist.
     func checkIfDue() {
-        guard isAutomatic, hasToken, !isChecking, !isInstalling, SnapshotMode.directory == nil else { return }
+        guard isAutomatic, !isChecking, !isInstalling, SnapshotMode.directory == nil else { return }
         if let lastCheck, Date().timeIntervalSince(lastCheck) < 6 * 3600 { return }
         Task { await check(userInitiated: false) }
     }
 
     func check(userInitiated: Bool) async {
-        guard let token = Keychain.get(account: Self.tokenAccount), !token.isEmpty else {
-            status = "Für Updates fehlt der GitHub-Schlüssel (Einstellungen › Allgemein › Updates)."
-            return
-        }
+        // Öffentliches Repository: geht ohne Schlüssel. Privat: Schlüssel nötig.
+        let token = hasToken ? Keychain.get(account: Self.tokenAccount) : nil
         isChecking = true
         defer { isChecking = false }
         lastCheck = Date()
@@ -76,6 +74,9 @@ final class Updater {
             do {
                 data = try await Self.send(ReleaseCheck.releaseRequest(repository: Self.repository, tag: Self.tag, token: token))
             } catch let error as UpdateError where error.status == 404 {
+                guard let token, !token.isEmpty else {
+                    throw UpdateError("Das Repository ist privat. Für Updates einen GitHub-Schlüssel eintragen (Einstellungen › Allgemein › Updates) oder das Repository öffentlich stellen.")
+                }
                 throw await diagnoseNotFound(token: token)
             }
             let release = try ReleaseCheck.parseRelease(data)
@@ -113,8 +114,8 @@ final class Updater {
 
     /// Lädt die DMG, prüft die App darin, ersetzt die laufende App und startet neu.
     func install() async {
-        guard let available, let url = available.release.dmgURL,
-              let token = Keychain.get(account: Self.tokenAccount) else { return }
+        guard let available, let url = available.release.dmgURL else { return }
+        let token = hasToken ? Keychain.get(account: Self.tokenAccount) : nil
         let target = Bundle.main.bundleURL
         guard target.pathExtension == "app", !target.path.contains("/AppTranslocation/") else {
             status = "Tagwerk läuft nicht aus „Programme“. Erst die App dorthin ziehen, dann aktualisieren."

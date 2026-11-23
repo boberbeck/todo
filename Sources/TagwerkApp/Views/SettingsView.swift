@@ -1521,7 +1521,7 @@ struct UpdateSection: View {
                         Button("Schlüssel bei GitHub anlegen") { NSWorkspace.shared.open(Updater.tokenPage) }
                         Spacer()
                     }
-                    Text("Bei GitHub: „Fine-grained token“, Repository access „Only select repositories“ › \(Updater.repository), Permissions › Contents: Read-only. Ablaufdatum nach Wunsch (z. B. 1 Jahr). Den Schlüssel hier einfügen.")
+                    Text("Nur nötig, solange das Repository privat ist; öffentlich geht es ohne. Bei GitHub: „Fine-grained token“, Repository access „Only select repositories“ › \(Updater.repository), Permissions › Contents: Read-only. Ablaufdatum nach Wunsch (z. B. 1 Jahr). Den Schlüssel hier einfügen.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1532,7 +1532,7 @@ struct UpdateSection: View {
                 Button(updater.isChecking ? "Prüft …" : "Jetzt prüfen") {
                     Task { await updater.check(userInitiated: true) }
                 }
-                .disabled(updater.isChecking || !updater.hasToken)
+                .disabled(updater.isChecking)
                 if let status = updater.status {
                     Text(status)
                         .font(.caption)

@@ -57,6 +57,14 @@ final class FocusMusic {
         return Soundscape.mood(mode: soundscapeSettings.mode, hour: hour, activity: activity, settings: soundscapeSettings)
     }
 
+    /// Für Bildschirmfotos: Klangwelt als laufend zeigen, ohne Ton.
+    func showDemoSoundscape() {
+        source = .soundscape
+        state = .playing
+        trackTitle = selectionName
+        trackArtist = currentMood().description
+    }
+
     func chooseSoundscape(_ mode: SoundscapeMode) {
         let wasPlaying = state == .playing
         soundscapeSettings.mode = mode

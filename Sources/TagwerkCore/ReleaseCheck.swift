@@ -23,37 +23,43 @@ public enum ReleaseCheck {
     public static let apiBase = "https://api.github.com"
 
     /// Anfrage für das Release mit dem Tag (z. B. „aktuell“).
-    public static func releaseRequest(repository: String, tag: String, token: String) -> URLRequest {
+    public static func releaseRequest(repository: String, tag: String, token: String?) -> URLRequest {
         request(path: "/repos/\(repository)/releases/tags/\(tag)", token: token)
     }
 
     /// Das Repository selbst (um zu prüfen, ob der Schlüssel es überhaupt sieht).
-    public static func repositoryRequest(repository: String, token: String) -> URLRequest {
+    public static func repositoryRequest(repository: String, token: String?) -> URLRequest {
         request(path: "/repos/\(repository)", token: token)
     }
 
     /// Commits zwischen der laufenden und der neuen Fassung (für „Was ist neu“).
-    public static func compareRequest(repository: String, base: String, head: String, token: String) -> URLRequest {
+    public static func compareRequest(repository: String, base: String, head: String, token: String?) -> URLRequest {
         request(path: "/repos/\(repository)/compare/\(base)...\(head)", token: token)
     }
 
     /// Lädt eine Datei des Releases (die API leitet zu einem vorab signierten Download weiter).
-    public static func assetRequest(_ url: URL, token: String) -> URLRequest {
+    public static func assetRequest(_ url: URL, token: String?) -> URLRequest {
         var request = URLRequest(url: url, timeoutInterval: 300)
         request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        authorize(&request, token: token)
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         request.setValue("Tagwerk", forHTTPHeaderField: "User-Agent")
         return request
     }
 
-    static func request(path: String, token: String) -> URLRequest {
+    static func request(path: String, token: String?) -> URLRequest {
         var request = URLRequest(url: URL(string: apiBase + path)!, timeoutInterval: 30)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        authorize(&request, token: token)
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         request.setValue("Tagwerk", forHTTPHeaderField: "User-Agent")
         return request
+    }
+
+    /// Schlüssel nur mitschicken, wenn einer da ist; öffentliche Repositorys gehen auch ohne.
+    static func authorize(_ request: inout URLRequest, token: String?) {
+        guard let token, !token.isEmpty else { return }
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     }
 
     public static func parseRelease(_ data: Data) throws -> ReleaseInfo {
