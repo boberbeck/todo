@@ -70,7 +70,7 @@ struct RootView: View {
                             .id(id)
                             .background(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous).fill(Theme.surfaceFloating))
                             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
-                            .surface(radius: Theme.Radius.panel, elevation: .floating, fill: .clear)
+                            .surface(radius: Theme.Radius.panel, elevation: .floating, fill: Theme.surfaceFloating)
                             .tint(Theme.accent)
                             .buttonStyle(GhostButtonStyle())
                     }
