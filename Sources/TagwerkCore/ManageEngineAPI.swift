@@ -153,7 +153,8 @@ public enum ManageEngineAPI {
         description: String,
         minutes: Int,
         start: Date,
-        worklogType: String? = nil
+        worklogType: String? = nil,
+        variant: WorklogVariant = .standard
     ) throws -> URLRequest {
         guard config.isComplete else { throw ManageEngineError.notConfigured }
         guard config.technicianIDIsNumeric else { throw ManageEngineError.technicianNotNumeric }
@@ -163,11 +164,13 @@ public enum ManageEngineAPI {
             "owner": ["id": config.trimmedTechnician],
             "start_time": ["value": String(Int64(start.timeIntervalSince1970 * 1000))],
             "end_time": ["value": String(Int64(end.timeIntervalSince1970 * 1000))],
-            "time_spent": ["hours": String(minutes / 60), "minutes": String(minutes % 60)],
         ]
-        // „Work Log Type“ ist in vielen Installationen ein Pflichtfeld
-        if let worklogType = worklogType?.trimmingCharacters(in: .whitespaces), !worklogType.isEmpty {
-            worklog["type"] = ["name": worklogType]
+        if variant.sendsTimeSpent {
+            worklog["time_spent"] = ["hours": String(minutes / 60), "minutes": String(minutes % 60)]
+        }
+        // „Work Log Type“ ist in vielen Installationen ein Pflichtfeld; der Feldname unterscheidet sich je nach Ausgabe.
+        if let field = variant.typeField, let worklogType = worklogType?.trimmingCharacters(in: .whitespaces), !worklogType.isEmpty {
+            worklog[field] = ["name": worklogType]
         }
         var request = try base(path: "/api/v3/requests/\(requestKey)/worklogs", query: nil, config: config, token: token)
         request.httpMethod = "POST"
@@ -381,6 +384,34 @@ public enum ManageEngineAPI {
     }
 
     /// Fehlermeldung aus `response_status`, falls die Antwort einen Fehler meldet.
+    /// Wie der Worklog aufgebaut wird. ServiceDesk Plus erwartet je nach Ausgabe andere Felder;
+    /// Tagwerk probiert die Varianten der Reihe nach und merkt sich die passende.
+    public enum WorklogVariant: String, CaseIterable, Sendable {
+        case standard
+        case worklogTypeField
+        case withoutType
+        case withoutTimeSpent
+
+        var typeField: String? {
+            switch self {
+            case .standard, .withoutTimeSpent: return "type"
+            case .worklogTypeField: return "worklog_type"
+            case .withoutType: return nil
+            }
+        }
+
+        var sendsTimeSpent: Bool { self != .withoutTimeSpent }
+
+        public var label: String {
+            switch self {
+            case .standard: return "Feld „type“"
+            case .worklogTypeField: return "Feld „worklog_type“"
+            case .withoutType: return "ohne Work Log Type"
+            case .withoutTimeSpent: return "ohne „time_spent“"
+            }
+        }
+    }
+
     public static func errorMessage(in root: [String: Any]) -> String? {
         let statuses: [[String: Any]]
         if let single = root["response_status"] as? [String: Any] {
@@ -393,7 +424,12 @@ public enum ManageEngineAPI {
             let state = (status["status"] as? String)?.lowercased()
             guard code >= 4000 || state == "failed" else { continue }
             let messages = status["messages"] as? [[String: Any]] ?? []
-            let text = messages.compactMap { ($0["message"] as? String) ?? stringValue($0["status_code"]) }.joined(separator: ", ")
+            let text = messages.compactMap { message -> String? in
+                let body = (message["message"] as? String) ?? stringValue(message["status_code"])
+                let field = (message["field"] as? String) ?? (message["fields"] as? [String])?.joined(separator: ", ")
+                guard let body else { return field.map { "Feld „\($0)“" } }
+                return field.map { "\(body) (Feld „\($0)“)" } ?? body
+            }.joined(separator: ", ")
             return text.isEmpty ? "Fehler \(code)" : text
         }
         return nil

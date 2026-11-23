@@ -1399,6 +1399,7 @@ final class AppModel {
 
     /// Bucht den Tag: bereitet vor und sendet die Worklogs an ManageEngine. SAP bleibt für die Übertragung offen.
     func bookDay(_ day: LocalDate, minutes overrides: [UUID: Int]) async -> String {
+        await connectMissingTickets(for: day)
         prepareBookings(for: day, minutes: overrides)
         let pendingME = BookingQueue.due(bookings.filter { $0.day == day }, target: .manageEngine, now: Date())
         var parts: [String] = []
@@ -1429,8 +1430,20 @@ final class AppModel {
         defer { isSendingBookings = false }
         var sent = 0
         var failed = 0
-        for booking in due {
-            guard let key = booking.ticketKey else { continue }
+        for var booking in due {
+            // Ohne interne ID (nur Nummer zugeordnet) erst bei ManageEngine nachschlagen, statt still zu überspringen
+            guard let key = await ticketKey(for: booking) else {
+                let number = task(booking.taskID).map { resolved($0) }?.linkedTicketNumber
+                let error = number.map { "Ticket #\($0) wurde in ManageEngine nicht gefunden. Nummer prüfen oder das Ticket neu zuordnen." }
+                    ?? "Der Aufgabe ist kein Ticket zugeordnet."
+                save(BookingQueue.failed(booking, error: error, now: Date()))
+                AppLog.error("Worklog", error)
+                failed += 1
+                continue
+            }
+            if booking.ticketKey != key {
+                booking.ticketKey = key
+            }
             let start = firstStart(of: booking.taskID, on: booking.day)
             do {
                 let reference = try await manageEngine.addWorklog(
@@ -1441,14 +1454,61 @@ final class AppModel {
                     worklogType: worklogType(for: task(booking.taskID))
                 )
                 save(BookingQueue.confirmed(booking, reference: reference, now: Date()))
+                AppLog.info("Worklog", "Ticket \(key): \(booking.minutes) Minuten gebucht")
                 sent += 1
             } catch {
                 save(BookingQueue.failed(booking, error: String(describing: error), now: Date()))
+                AppLog.error("Worklog", "Ticket \(key): \(error)")
                 failed += 1
             }
         }
         if failed == 0 { return "\(sent) Worklog(s) an ManageEngine gesendet." }
         return "\(sent) gesendet, \(failed) fehlgeschlagen. Tagwerk versucht es später erneut."
+    }
+
+    /// Interne ManageEngine-ID für den Worklog: aus der Buchung, sonst aus der Aufgabe, sonst über die Ticketnummer gesucht
+    /// (und dann an der Aufgabe gemerkt).
+    private func ticketKey(for booking: Booking) async -> String? {
+        if let key = booking.ticketKey, !key.isEmpty { return key }
+        guard let current = task(booking.taskID) else { return nil }
+        let effective = resolved(current)
+        if let key = effective.linkedTicketKey, !key.isEmpty { return key }
+        guard let number = effective.linkedTicketNumber else { return nil }
+        return await lookUpTicketKey(number: number)
+    }
+
+    /// Sucht das Ticket zur Nummer bei ManageEngine und merkt sich die interne ID an den Aufgaben.
+    @discardableResult
+    private func lookUpTicketKey(number: String) async -> String? {
+        let search = await manageEngine.findTickets(number)
+        guard let ticket = search.tickets.first(where: { $0.number == number }) ?? (search.tickets.count == 1 ? search.tickets.first : nil) else {
+            AppLog.warning("Worklog", "Ticket #\(number) nicht gefunden: \(search.attempts.joined(separator: "; "))")
+            return nil
+        }
+        rememberTicketKey(ticket, number: number)
+        AppLog.info("Worklog", "Ticket #\(number) hat die interne ID \(ticket.key)")
+        return ticket.key
+    }
+
+    /// Für Zeilen des Tages, deren Ticket nur als Nummer zugeordnet ist (z. B. über Claude oder ein Ticket von Kollegen),
+    /// die Verbindung zu ManageEngine herstellen. Sonst bleibt der Worklog mit „nicht verbunden“ hängen.
+    func connectMissingTickets(for day: LocalDate) async {
+        guard manageEngine.isReady else { return }
+        let numbers = Set(closeLines(for: day)
+            .filter { $0.issues.contains(.missingTicketKey) }
+            .compactMap(\.task.linkedTicketNumber))
+        for number in numbers.sorted() {
+            await lookUpTicketKey(number: number)
+        }
+    }
+
+    /// Trägt die interne ID bei allen Aufgaben mit dieser Ticketnummer nach, denen sie noch fehlt.
+    private func rememberTicketKey(_ ticket: ManageEngineTicket, number: String) {
+        for var item in tasks where item.source != .ticket && item.ticketNumber == number && (item.ticketKey ?? "").isEmpty {
+            item.ticketKey = ticket.key
+            if (item.ticketTitle ?? "").isEmpty { item.ticketTitle = ticket.subject }
+            persist(item)
+        }
     }
 
     /// Markiert die SAP-Zeile als von Hand eingetragen (legt die Buchung bei Bedarf an).
@@ -1575,8 +1635,10 @@ final class AppModel {
     /// Holt den Betreff für offene Aufgaben mit Ticket, bei denen er noch fehlt (z. B. Tickets von Kollegen).
     func fillMissingTicketTitles() async {
         guard manageEngine.isReady else { return }
+        // Fehlt der Betreff oder die interne ID (für den Worklog), bei ManageEngine nachschlagen
         let missing = tasks.filter { task in
-            !task.isDone && task.source != .ticket && task.ticketNumber != nil && (task.ticketTitle ?? "").isEmpty
+            !task.isDone && task.source != .ticket && task.ticketNumber != nil
+                && ((task.ticketTitle ?? "").isEmpty || (task.ticketKey ?? "").isEmpty)
                 && !ticketTitleMisses.contains(task.ticketNumber ?? "")
         }
         var looked = Set<String>()
@@ -1587,10 +1649,7 @@ final class AppModel {
             if let ticket = search.tickets.first(where: { $0.number == number }) ?? search.tickets.first {
                 updateTicketTitle(ticket)
                 // Fehlte die Verbindung (nur Nummer), jetzt nachtragen
-                if var current = self.task(task.id), current.source != .ticket, current.ticketKey == nil {
-                    current.ticketKey = ticket.key
-                    persist(current)
-                }
+                rememberTicketKey(ticket, number: number)
             }
         }
     }

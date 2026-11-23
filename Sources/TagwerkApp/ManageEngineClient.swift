@@ -276,18 +276,45 @@ final class ManageEngineClient {
     }
 
     /// Legt den Worklog an und gibt seine ID zurück.
+    /// Legt den Worklog an. Lehnt ServiceDesk Plus den Aufbau ab (z. B. unbekanntes Feld), probiert Tagwerk
+    /// die anderen Varianten und merkt sich die, die funktioniert hat.
     func addWorklog(requestKey: String, description: String, minutes: Int, start: Date, worklogType: String?) async throws -> String? {
-        let request = try ManageEngineAPI.addWorklog(
-            config: config,
-            token: try requireToken(),
-            requestKey: requestKey,
-            description: description,
-            minutes: minutes,
-            start: start,
-            worklogType: worklogType
-        )
-        let data = try await send(request)
-        return try ManageEngineAPI.parseWorklogID(data)
+        let key = "meWorklogVariant"
+        let remembered = UserDefaults.standard.string(forKey: key).flatMap(ManageEngineAPI.WorklogVariant.init(rawValue:))
+        let variants = [remembered].compactMap { $0 } + ManageEngineAPI.WorklogVariant.allCases.filter { $0 != remembered }
+        var firstError: Error?
+        for variant in variants {
+            let request = try ManageEngineAPI.addWorklog(
+                config: config,
+                token: try requireToken(),
+                requestKey: requestKey,
+                description: description,
+                minutes: minutes,
+                start: start,
+                worklogType: worklogType,
+                variant: variant
+            )
+            do {
+                let data = try await send(request)
+                if variant != remembered {
+                    UserDefaults.standard.set(variant.rawValue, forKey: key)
+                    AppLog.info("ManageEngine", "Worklog klappt mit \(variant.label); wird gemerkt")
+                }
+                return try ManageEngineAPI.parseWorklogID(data)
+            } catch let error as ManageEngineError {
+                // Nur Ablehnungen des Inhalts neu versuchen, nicht fehlende Rechte oder Verbindung
+                guard case .server(let message) = error, !Self.isPermissionProblem(message) else { throw error }
+                AppLog.warning("ManageEngine", "Worklog an Ticket \(requestKey) mit \(variant.label) abgelehnt: \(message)")
+                if firstError == nil { firstError = error }
+            }
+        }
+        throw firstError ?? ManageEngineError.unexpectedResponse
+    }
+
+    private static func isPermissionProblem(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("http 401") || lower.contains("http 403") || lower.contains("permission")
+            || lower.contains("not authorized") || lower.contains("unauthorized") || lower.contains("berechtigung")
     }
 
     /// Prüft Adresse und Schlüssel und gibt die Techniker aus den letzten Tickets zurück.

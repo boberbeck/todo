@@ -57,6 +57,10 @@ struct DayCloseView: View {
         .onChange(of: reflection) {
             model.setReflection(reflection, for: day)
         }
+        // Tickets, die nur als Nummer zugeordnet sind, mit ManageEngine verbinden
+        .task(id: day) {
+            await model.connectMissingTickets(for: day)
+        }
     }
 
     private func header(total: Int, lineCount: Int) -> some View {
@@ -210,6 +214,13 @@ struct CloseLineRow: View {
                 }
             }
 
+            if line.status(for: .manageEngine) == .failed, let error = line.bookings[.manageEngine]?.lastError {
+                Label("Worklog abgelehnt: \(error)", systemImage: "xmark.octagon.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             ForEach(line.openIssues, id: \.self) { issue in
                 Label(issue.message, systemImage: "exclamationmark.circle")
                     .font(.caption)

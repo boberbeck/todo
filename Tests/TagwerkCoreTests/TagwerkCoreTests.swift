@@ -501,6 +501,33 @@ final class ManageEngineAPITests: XCTestCase {
         XCTAssertEqual((worklog?["type"] as? [String: Any])?["name"] as? String, "Ticketbearbeitung")
     }
 
+    func testWorklogVariants() throws {
+        func worklog(_ variant: ManageEngineAPI.WorklogVariant) throws -> [String: Any] {
+            let request = try ManageEngineAPI.addWorklog(
+                config: config, token: "T", requestKey: "1", description: "x", minutes: 30,
+                start: Date(timeIntervalSince1970: 0), worklogType: "Ticketbearbeitung", variant: variant
+            )
+            let body = String(decoding: request.httpBody ?? Data(), as: UTF8.self)
+            let json = String(body.dropFirst("input_data=".count)).removingPercentEncoding ?? ""
+            return (try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])?["worklog"] as? [String: Any] ?? [:]
+        }
+        XCTAssertNotNil(try worklog(.standard)["type"])
+        XCTAssertNil(try worklog(.worklogTypeField)["type"])
+        XCTAssertEqual((try worklog(.worklogTypeField)["worklog_type"] as? [String: Any])?["name"] as? String, "Ticketbearbeitung")
+        XCTAssertNil(try worklog(.withoutType)["type"])
+        XCTAssertNil(try worklog(.withoutType)["worklog_type"])
+        XCTAssertNotNil(try worklog(.withoutType)["time_spent"])
+        XCTAssertNil(try worklog(.withoutTimeSpent)["time_spent"])
+        XCTAssertNotNil(try worklog(.withoutTimeSpent)["end_time"])
+    }
+
+    func testErrorMessageNamesField() {
+        let root: [String: Any] = ["response_status": ["status_code": 4000, "messages": [["status_code": 4001, "field": "type", "message": "Invalid value"]]]]
+        XCTAssertEqual(ManageEngineAPI.errorMessage(in: root), "Invalid value (Feld „type“)")
+        let onlyField: [String: Any] = ["response_status": ["status_code": 4000, "messages": [["field": "owner"]]]]
+        XCTAssertEqual(ManageEngineAPI.errorMessage(in: onlyField), "Feld „owner“")
+    }
+
     func testParseTickets() throws {
         let json = """
         {"requests": [

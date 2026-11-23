@@ -108,7 +108,7 @@ public enum BookingIssue: String, Hashable, Sendable, CaseIterable {
         case .missingPSP: return "PSP-Element fehlt"
         case .missingWorkType: return "Arbeitsart oder SAP-Tätigkeit fehlt (legt die Leistung fest)"
         case .missingDescription: return "Beschreibung der Bearbeitung fehlt"
-        case .missingTicketKey: return "Ticket ist nicht mit ManageEngine verbunden"
+        case .missingTicketKey: return "Ticket in ManageEngine nicht gefunden (Nummer prüfen oder neu zuordnen)"
         }
     }
 
