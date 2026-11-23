@@ -384,11 +384,20 @@ struct FocusMusicBar: View {
                         youtubeDraft = Self.clipboardYouTubeLink() ?? music.youtubeLinkText
                         showsYouTubeEntry = true
                     }
-                    if music.youtubeLink != nil, music.source != .youtube {
-                        Button("Gespeicherten YouTube-Link spielen") {
-                            music.chooseYouTube(music.youtubeLinkText)
-                            music.startMusic()
+                    // Verlauf: zuletzt gespielte Links, ein Klick spielt sie wieder
+                    ForEach(music.youtubeHistory.prefix(8)) { entry in
+                        Button {
+                            music.playFromHistory(entry)
+                        } label: {
+                            if music.isCurrent(entry) {
+                                Label(entry.displayTitle, systemImage: "checkmark")
+                            } else {
+                                Text(entry.displayTitle)
+                            }
                         }
+                    }
+                    if !music.youtubeHistory.isEmpty {
+                        Button("Verlauf leeren") { music.clearHistory() }
                     }
                 }
                 if music.hasSelection {

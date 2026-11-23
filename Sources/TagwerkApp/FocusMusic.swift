@@ -21,6 +21,7 @@ final class FocusMusic {
     static let sourceKey = "focusMusicSource"
     static let radioStationKey = "focusMusicRadioStation"
     static let youtubeLinkKey = "focusMusicYouTubeLink"
+    static let youtubeHistoryKey = "focusMusicYouTubeHistory"
 
     let radio = RadioPlayer()
     let youtube = YouTubePlayer()
@@ -81,6 +82,37 @@ final class FocusMusic {
 
     var youtubeLink: YouTubeLink? { YouTubeLink.parse(youtubeLinkText) }
 
+    /// Zuletzt gespielte YouTube-Links, neueste zuerst.
+    var youtubeHistory: [YouTubeHistoryEntry] = FocusMusic.storedHistory() {
+        didSet {
+            let data = try? JSONEncoder().encode(youtubeHistory)
+            UserDefaults.standard.set(data, forKey: Self.youtubeHistoryKey)
+        }
+    }
+
+    private static func storedHistory() -> [YouTubeHistoryEntry] {
+        guard let data = UserDefaults.standard.data(forKey: youtubeHistoryKey) else { return [] }
+        return (try? JSONDecoder().decode([YouTubeHistoryEntry].self, from: data)) ?? []
+    }
+
+    /// Ist dieser Verlaufseintrag der gerade gewählte Link?
+    func isCurrent(_ entry: YouTubeHistoryEntry) -> Bool {
+        source == .youtube && YouTubeHistoryEntry(link: youtubeLinkText, lastPlayed: Date()).id == entry.id
+    }
+
+    func playFromHistory(_ entry: YouTubeHistoryEntry) {
+        chooseYouTube(entry.link)
+        startMusic()
+    }
+
+    func removeFromHistory(_ entry: YouTubeHistoryEntry) {
+        youtubeHistory.removeAll { $0.id == entry.id }
+    }
+
+    func clearHistory() {
+        youtubeHistory = []
+    }
+
     /// Ist für die gewählte Quelle etwas ausgesucht?
     var hasSelection: Bool {
         switch source {
@@ -107,6 +139,9 @@ final class FocusMusic {
         youtube.onChange = { [weak self] playing, title, problem in
             guard let self, self.source == .youtube else { return }
             self.update(playing: playing, title: title, subtitle: "YouTube", problem: problem)
+            if let title {
+                self.youtubeHistory = YouTubeHistory.settingTitle(title, for: self.youtubeLinkText, in: self.youtubeHistory)
+            }
         }
     }
 
@@ -211,6 +246,7 @@ final class FocusMusic {
         case .youtube:
             guard let link = youtubeLink else { return }
             startedByTagwerk = true
+            youtubeHistory = YouTubeHistory.adding(youtubeLinkText, at: Date(), to: youtubeHistory)
             youtube.play(link)
         }
     }

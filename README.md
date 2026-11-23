@@ -165,7 +165,7 @@ Unter Einstellungen › Fokus (oder im Fokus über das Notensymbol) wählst du d
 
 - **Apple Music:** eine Playlist aus der Musik-App. Tagwerk steuert die Musik-App per AppleScript; macOS fragt beim ersten Mal, ob Tagwerk das darf (Systemeinstellungen › Datenschutz & Sicherheit › Automation).
 - **Internetradio:** ruhige Sender von SomaFM (Groove Salad, Fluid, Drone Zone, Deep Space One), werbefrei und hörerfinanziert, oder eine eigene Stream-Adresse (MP3/AAC). Spielt direkt in Tagwerk, der laufende Titel erscheint, wenn der Sender ihn mitschickt.
-- **YouTube:** einen Link einfügen (Video, Playlist, Mix oder Livestream; liegt einer in der Zwischenablage, schlägt Tagwerk ihn vor). Er spielt mit dem offiziellen Player, sichtbar im Fokus, wie YouTube es verlangt; verlässt du den Fokus, hält das Video an. Werbung ist möglich, und manche Kanäle erlauben kein Abspielen außerhalb von YouTube.
+- **YouTube:** einen Link einfügen (Video, Playlist, Mix oder Livestream; liegt einer in der Zwischenablage, schlägt Tagwerk ihn vor). Er spielt mit dem offiziellen Player im Fokus: das Bild bleibt klein sichtbar (nur Ton erlaubt YouTube bei eingebetteten Videos nicht), aber ohne YouTube-Bedienleiste, gesteuert über die Knöpfe von Tagwerk; verlässt du den Fokus, hält das Video an. Zuletzt gespielte Links stehen im Verlauf (Notensymbol im Fokus und Einstellungen › Fokus). Werbung ist möglich, und manche Kanäle erlauben kein Abspielen außerhalb von YouTube.
 
 ## Aufbau
 

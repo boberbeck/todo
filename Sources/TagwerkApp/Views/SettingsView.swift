@@ -301,6 +301,31 @@ struct FocusSettings: View {
                             .font(.caption)
                             .foregroundStyle(music.youtubeLink == nil ? Theme.warning : Theme.secondary)
                     }
+                    if !music.youtubeHistory.isEmpty {
+                        LabeledContent("Verlauf") {
+                            Button("Leeren") { music.clearHistory() }
+                        }
+                        ForEach(music.youtubeHistory) { entry in
+                            HStack(spacing: 8) {
+                                Text(entry.displayTitle)
+                                    .lineLimit(1)
+                                    .foregroundStyle(music.isCurrent(entry) ? Theme.text : Theme.secondary)
+                                Spacer(minLength: 8)
+                                Text(entry.lastPlayed.formatted(.relative(presentation: .named)))
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.tertiary)
+                                Button("Wählen") { music.chooseYouTube(entry.link) }
+                                    .disabled(music.isCurrent(entry))
+                                Button {
+                                    music.removeFromHistory(entry)
+                                } label: {
+                                    Image(systemName: "xmark")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Aus dem Verlauf entfernen")
+                            }
+                        }
+                    }
                 }
 
                 Toggle("Beim Start des Timers im Fokus abspielen", isOn: $autoPlay)
@@ -319,7 +344,7 @@ struct FocusSettings: View {
                 case .radio:
                     SettingsFootnote("Die Sender kommen von SomaFM, werbefrei und von den Hörern finanziert. Eigene Adressen: direkte MP3- oder AAC-Streams. Die Pomodoro-Pause hält das Radio an, danach geht es live weiter.")
                 case .youtube:
-                    SettingsFootnote("YouTube spielt mit dem offiziellen Player, sichtbar im Fokus, wie YouTube es verlangt. Verlässt du den Fokus, hält das Video an. Werbung ist möglich, und manche Kanäle erlauben kein Abspielen außerhalb von YouTube.")
+                    SettingsFootnote("YouTube spielt mit dem offiziellen Player im Fokus. Das Bild bleibt klein sichtbar, ohne YouTube-Bedienleiste; nur Ton erlaubt YouTube bei eingebetteten Videos nicht. Verlässt du den Fokus, hält das Video an. Werbung ist möglich, und manche Kanäle erlauben kein Abspielen außerhalb von YouTube. Nur Ton: Internetradio oder Apple Music.")
                 }
             }
         }

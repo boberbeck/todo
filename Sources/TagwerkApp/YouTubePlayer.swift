@@ -86,7 +86,9 @@ final class YouTubePlayer {
 
     /// Seite mit dem offiziellen Player (IFrame-API). Video, Playlist oder beides.
     static func html(for link: YouTubeLink) -> String {
-        var vars = ["autoplay: 1", "playsinline: 1", "rel: 0", "origin: '\(origin.absoluteString)'"]
+        // Ruhig wie ein Albumcover: ohne YouTube-Bedienleiste (Tagwerk hat eigene Knöpfe), ohne Einblendungen und Vollbild.
+        // Das Bild bleibt sichtbar; nur Ton ist bei eingebetteten YouTube-Videos nicht erlaubt.
+        var vars = ["autoplay: 1", "playsinline: 1", "rel: 0", "controls: 0", "disablekb: 1", "fs: 0", "iv_load_policy: 3", "origin: '\(origin.absoluteString)'"]
         if let list = link.listID {
             vars.append("listType: 'playlist'")
             vars.append("list: '\(list)'")
