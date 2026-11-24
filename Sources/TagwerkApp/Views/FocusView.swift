@@ -280,12 +280,11 @@ struct FocusTimeBar: View {
     }
 }
 
-/// Musik zum Fokus: Playlist aus der Musik-App, Internetradio oder YouTube. Start, Pause, nächster Titel.
-/// Bei YouTube steht der Player sichtbar darüber (so verlangt es YouTube).
+/// Musik zum Fokus: Klangwelt, Internetradio, Apple Music oder YouTube. Start, Pause, nächster Titel.
+/// Gewählt wird in einem eigenen Fenster mit einem Reiter je Quelle. Bei YouTube steht der Player sichtbar darüber.
 struct FocusMusicBar: View {
     @Environment(AppModel.self) private var model
-    @State private var showsYouTubeEntry = false
-    @State private var youtubeDraft = ""
+    @State private var showsPicker = false
 
     var body: some View {
         let music = model.music
@@ -298,176 +297,62 @@ struct FocusMusicBar: View {
             }
             bar(music)
         }
-        .alert("YouTube-Link", isPresented: $showsYouTubeEntry) {
-            TextField("https://www.youtube.com/watch?v=…", text: $youtubeDraft)
-            Button("Übernehmen") {
-                music.chooseYouTube(youtubeDraft)
-                if music.youtubeLink != nil { music.startMusic() }
-            }
-            Button("Abbrechen", role: .cancel) {}
-        } message: {
-            Text("Video, Playlist oder Livestream, so wie im Browser kopiert")
-        }
     }
 
     private func bar(_ music: FocusMusic) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon(music.source))
+            Image(systemName: MusicPicker.icon(music.source))
                 .font(.system(size: 14))
                 .foregroundStyle(music.state == .playing ? Theme.secondary : Theme.tertiary)
                 .frame(width: 32, height: 32)
                 .background(Circle().fill(Color.white.opacity(0.05)))
 
-            VStack(alignment: .leading, spacing: 2) {
-                if let title = music.trackTitle, music.state != .stopped {
-                    Text(title)
-                        .lineLimit(1)
-                    Text([music.trackArtist, music.source == .appleMusic ? music.selectedPlaylist : nil, music.hasSelection && music.toneSettings.isEnabled ? music.toneSettings.tone.label : nil].compactMap { $0 }.joined(separator: " · "))
-                        .font(.caption)
-                        .foregroundStyle(Theme.tertiary)
-                        .lineLimit(1)
-                } else if music.selectionName == nil, music.toneSettings.isEnabled {
-                    Text(music.toneSettings.tone.label)
-                        .lineLimit(1)
-                    Text("Fokus-Frequenz · startet mit dem Timer")
-                        .font(.caption)
-                        .foregroundStyle(Theme.tertiary)
-                } else if let name = music.selectionName {
-                    Text(name)
-                        .lineLimit(1)
-                    Text(music.source == .youtube ? (music.youtubeLink?.summary ?? "") + " · startet mit dem Timer" : "Startet mit dem Timer")
-                        .font(.caption)
-                        .foregroundStyle(Theme.tertiary)
-                } else {
-                    Text("Musik zum Fokus")
-                    Text("Playlist, Radiosender oder YouTube-Link wählen")
-                        .font(.caption)
-                        .foregroundStyle(Theme.tertiary)
-                }
-                if let problem = music.problem {
-                    Text(problem)
-                        .font(.caption)
-                        .foregroundStyle(Theme.warning)
-                        .lineLimit(2)
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            Menu {
-                Section("Klangwelt · erzeugt von Tagwerk") {
-                    ForEach(SoundscapeMode.allCases) { mode in
-                        Button {
-                            music.chooseSoundscape(mode)
-                        } label: {
-                            if music.source == .soundscape, music.soundscapeSettings.mode == mode {
-                                Label("\(mode.label) · \(mode.detail)", systemImage: "checkmark")
-                            } else {
-                                Text("\(mode.label) · \(mode.detail)")
-                            }
-                        }
-                    }
-                }
-                Section("Apple Music") {
-                    if music.playlists.isEmpty {
-                        Button(music.isLoadingPlaylists ? "Lädt …" : "Playlists laden") { music.loadPlaylists() }
-                            .disabled(music.isLoadingPlaylists)
+            // Ein Klick auf den Titel öffnet die Auswahl
+            Button {
+                showsPicker = true
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let title = music.trackTitle, music.state != .stopped {
+                        Text(title)
+                            .lineLimit(1)
+                        Text([music.trackArtist, music.source == .appleMusic ? music.selectedPlaylist : nil].compactMap { $0 }.joined(separator: " · "))
+                            .font(.caption)
+                            .foregroundStyle(Theme.tertiary)
+                            .lineLimit(1)
+                    } else if let name = music.selectionName {
+                        Text(name)
+                            .lineLimit(1)
+                        Text("Startet mit dem Timer · ändern")
+                            .font(.caption)
+                            .foregroundStyle(Theme.tertiary)
                     } else {
-                        ForEach(music.playlists, id: \.self) { name in
-                            Button {
-                                music.choosePlaylist(name)
-                            } label: {
-                                if music.source == .appleMusic, name == music.selectedPlaylist {
-                                    Label(name, systemImage: "checkmark")
-                                } else {
-                                    Text(name)
-                                }
-                            }
-                        }
-                        Button("Liste neu laden") { music.loadPlaylists() }
+                        Text("Musik zum Fokus")
+                        Text("Musik wählen")
+                            .font(.caption)
+                            .foregroundStyle(Theme.tertiary)
+                    }
+                    if let problem = music.problem {
+                        Text(problem)
+                            .font(.caption)
+                            .foregroundStyle(Theme.warning)
+                            .lineLimit(2)
                     }
                 }
-                // Internetradio nach Richtung
-                ForEach(RadioStation.genres, id: \.self) { genre in
-                    Section("Radio · \(genre)") {
-                        ForEach(RadioStation.stations(in: genre)) { station in
-                            Button {
-                                music.chooseStation(station)
-                            } label: {
-                                if music.source == .radio, station.id == music.radioStation?.id {
-                                    Label("\(station.name) · \(station.detail)", systemImage: "checkmark")
-                                } else {
-                                    Text("\(station.name) · \(station.detail)")
-                                }
-                            }
-                        }
-                    }
-                }
-                if let custom = music.radioStation, !RadioStation.builtIn.contains(where: { $0.id == custom.id }) {
-                    Section("Radio · eigene Adresse") {
-                        Button {
-                            music.chooseStation(custom)
-                        } label: {
-                            Label(custom.name, systemImage: music.source == .radio ? "checkmark" : "antenna.radiowaves.left.and.right")
-                        }
-                    }
-                }
-                Section("YouTube") {
-                    Button(music.youtubeLink == nil ? "YouTube-Link einfügen …" : "Anderen YouTube-Link …") {
-                        youtubeDraft = Self.clipboardYouTubeLink() ?? music.youtubeLinkText
-                        showsYouTubeEntry = true
-                    }
-                    // Verlauf: zuletzt gespielte Links, ein Klick spielt sie wieder
-                    ForEach(music.youtubeHistory.prefix(8)) { entry in
-                        Button {
-                            music.playFromHistory(entry)
-                        } label: {
-                            if music.isCurrent(entry) {
-                                Label(entry.displayTitle, systemImage: "checkmark")
-                            } else {
-                                Text(entry.displayTitle)
-                            }
-                        }
-                    }
-                    if !music.youtubeHistory.isEmpty {
-                        Button("Verlauf leeren") { music.clearHistory() }
-                    }
-                }
-                Section("Fokus-Frequenz") {
-                    ForEach(FocusTone.allCases) { tone in
-                        Button {
-                            music.chooseTone(tone)
-                        } label: {
-                            if music.toneSettings.isEnabled, music.toneSettings.tone == tone {
-                                Label("\(tone.label) · \(tone.detail)", systemImage: "checkmark")
-                            } else {
-                                Text("\(tone.label) · \(tone.detail)")
-                            }
-                        }
-                    }
-                    Toggle("Mit Kopfhörern (binaural)", isOn: Binding(
-                        get: { music.toneSettings.binaural },
-                        set: { music.toneSettings.binaural = $0 }
-                    ))
-                    if music.toneSettings.isEnabled {
-                        Button("Frequenz aus") { music.toneSettings.isEnabled = false }
-                    }
-                }
-                if music.hasSelection {
-                    Divider()
-                    Button("Keine Musik") { music.clearSelection() }
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Musik wählen")
+
+            Button {
+                showsPicker = true
             } label: {
                 Image(systemName: "music.note.list")
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .foregroundStyle(Theme.secondary)
-            .tint(Theme.secondary)
-            .help("Musik wählen: Apple Music, Internetradio oder YouTube")
-            .onAppear {
-                if music.playlists.isEmpty, music.isDemo { music.loadPlaylists() }
+            .buttonStyle(IconButtonStyle(size: 28))
+            .help("Musik wählen: Klangwelt, Internetradio, Apple Music oder YouTube")
+            .popover(isPresented: $showsPicker, arrowEdge: .top) {
+                MusicPicker { showsPicker = false }
             }
 
             Button {
@@ -479,7 +364,7 @@ struct FocusMusicBar: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Theme.text)
-            .disabled(!music.canPlay && music.state == .stopped)
+            .disabled(!music.hasSelection && music.state == .stopped)
             .help(music.state == .playing ? "Musik anhalten" : "Musik abspielen")
 
             if music.canSkip {
@@ -500,8 +385,186 @@ struct FocusMusicBar: View {
         .padding(.vertical, 12)
         .surface(radius: Theme.Radius.card, elevation: .flat)
     }
+}
 
-    private func icon(_ source: MusicSource) -> String {
+/// Auswahl der Fokus-Musik: oben die Quelle, darunter nur deren Einträge.
+struct MusicPicker: View {
+    @Environment(AppModel.self) private var model
+    let close: () -> Void
+
+    @State private var tab: MusicSource = .soundscape
+    @State private var youtubeDraft = ""
+
+    /// Reihenfolge der Reiter: was ohne Einrichtung geht, zuerst
+    private let tabs: [MusicSource] = [.soundscape, .radio, .appleMusic, .youtube]
+
+    var body: some View {
+        let music = model.music
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Quelle", selection: $tab) {
+                ForEach(tabs) { source in
+                    Text(source.label).tag(source)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    switch tab {
+                    case .soundscape: soundscapeList(music)
+                    case .radio: radioList(music)
+                    case .appleMusic: appleMusicList(music)
+                    case .youtube: youtubeList(music)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: 300)
+
+            HStack {
+                if music.hasSelection {
+                    Button("Keine Musik") {
+                        music.clearSelection()
+                        close()
+                    }
+                    .buttonStyle(GhostButtonStyle(small: true))
+                }
+                Spacer()
+                Text(Self.footnote(tab))
+                    .font(.caption)
+                    .foregroundStyle(Theme.tertiary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.trailing)
+            }
+        }
+        .padding(16)
+        .frame(width: 400)
+        .onAppear {
+            tab = music.source
+            if music.playlists.isEmpty, music.isDemo { music.loadPlaylists() }
+        }
+    }
+
+    // MARK: Listen
+
+    @ViewBuilder
+    private func soundscapeList(_ music: FocusMusic) -> some View {
+        ForEach(SoundscapeMode.allCases) { mode in
+            MusicRow(
+                title: mode.label,
+                subtitle: mode.detail,
+                selected: music.source == .soundscape && music.soundscapeSettings.mode == mode
+            ) {
+                music.chooseSoundscape(mode)
+                close()
+            }
+        }
+        Text("Passt sich an: gerade \(music.currentMood().description)")
+            .font(.caption)
+            .foregroundStyle(Theme.tertiary)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+    }
+
+    @ViewBuilder
+    private func radioList(_ music: FocusMusic) -> some View {
+        ForEach(RadioStation.genres, id: \.self) { genre in
+            GroupHeader(title: genre)
+            ForEach(RadioStation.stations(in: genre)) { station in
+                MusicRow(
+                    title: station.name,
+                    subtitle: station.detail,
+                    selected: music.source == .radio && station.id == music.radioStation?.id
+                ) {
+                    music.chooseStation(station)
+                    close()
+                }
+            }
+        }
+        if let custom = music.radioStation, !RadioStation.builtIn.contains(where: { $0.id == custom.id }) {
+            GroupHeader(title: "Eigene Adresse")
+            MusicRow(title: custom.name, subtitle: custom.url.absoluteString, selected: music.source == .radio) {
+                music.chooseStation(custom)
+                close()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func appleMusicList(_ music: FocusMusic) -> some View {
+        if music.playlists.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Deine eigenen Playlists aus der Musik-App")
+                    .foregroundStyle(Theme.secondary)
+                Button(music.isLoadingPlaylists ? "Lädt …" : "Playlists laden") { music.loadPlaylists() }
+                    .buttonStyle(GhostButtonStyle(small: true))
+                    .disabled(music.isLoadingPlaylists)
+            }
+            .padding(8)
+        } else {
+            ForEach(music.playlists, id: \.self) { name in
+                MusicRow(title: name, subtitle: nil, selected: music.source == .appleMusic && name == music.selectedPlaylist) {
+                    music.choosePlaylist(name)
+                    if music.state == .playing { music.startMusic() }
+                    close()
+                }
+            }
+            Button("Liste neu laden") { music.loadPlaylists() }
+                .buttonStyle(GhostButtonStyle(small: true))
+                .padding(.top, 8)
+                .padding(.horizontal, 8)
+        }
+    }
+
+    @ViewBuilder
+    private func youtubeList(_ music: FocusMusic) -> some View {
+        HStack(spacing: 8) {
+            TextField("YouTube-Link einfügen", text: $youtubeDraft)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { playDraft(music) }
+            Button("Abspielen") { playDraft(music) }
+                .buttonStyle(GhostButtonStyle(small: true))
+                .disabled(YouTubeLink.parse(youtubeDraft) == nil)
+        }
+        .padding(.horizontal, 8)
+        .padding(.bottom, 4)
+        .onAppear {
+            if youtubeDraft.isEmpty { youtubeDraft = FocusMusicBar.clipboardYouTubeLink() ?? "" }
+        }
+        if !music.youtubeHistory.isEmpty {
+            GroupHeader(title: "Zuletzt gespielt")
+            ForEach(music.youtubeHistory) { entry in
+                MusicRow(
+                    title: entry.displayTitle,
+                    subtitle: entry.lastPlayed.formatted(.relative(presentation: .named)),
+                    selected: music.isCurrent(entry),
+                    onRemove: { music.removeFromHistory(entry) }
+                ) {
+                    music.playFromHistory(entry)
+                    close()
+                }
+            }
+        }
+    }
+
+    private func playDraft(_ music: FocusMusic) {
+        guard YouTubeLink.parse(youtubeDraft) != nil else { return }
+        music.chooseYouTube(youtubeDraft)
+        music.startMusic()
+        close()
+    }
+
+    static func footnote(_ source: MusicSource) -> String {
+        switch source {
+        case .soundscape: return "Erzeugt von Tagwerk, offline"
+        case .radio: return "Werbefrei, überwiegend ohne Gesang"
+        case .appleMusic: return "Über die Musik-App"
+        case .youtube: return "Player bleibt im Fokus sichtbar"
+        }
+    }
+
+    static func icon(_ source: MusicSource) -> String {
         switch source {
         case .appleMusic: return "music.note"
         case .radio: return "antenna.radiowaves.left.and.right"
@@ -509,7 +572,75 @@ struct FocusMusicBar: View {
         case .soundscape: return "waveform"
         }
     }
+}
 
+/// Eine Zeile in der Musikauswahl: Titel, Zusatz, Haken wenn gewählt, optional Entfernen.
+private struct MusicRow: View {
+    let title: String
+    let subtitle: String?
+    let selected: Bool
+    var onRemove: (() -> Void)?
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(action: action) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .foregroundStyle(Theme.text)
+                            .lineLimit(1)
+                        if let subtitle, !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.caption)
+                                .foregroundStyle(Theme.tertiary)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    if selected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if let onRemove, hovering {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Aus dem Verlauf entfernen")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(selected ? 0.06 : (hovering ? 0.04 : 0))))
+        .onHover { hovering = $0 }
+    }
+}
+
+/// Kleine Zwischenüberschrift in der Musikauswahl.
+private struct GroupHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(Theme.secondary)
+            .padding(.horizontal, 8)
+            .padding(.top, 12)
+            .padding(.bottom, 2)
+    }
+}
+
+extension FocusMusicBar {
     /// Liegt ein YouTube-Link in der Zwischenablage, gleich vorschlagen.
     static func clipboardYouTubeLink() -> String? {
         guard let text = NSPasteboard.general.string(forType: .string), YouTubeLink.parse(text) != nil else { return nil }
