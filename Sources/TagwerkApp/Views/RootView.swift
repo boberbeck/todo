@@ -98,6 +98,10 @@ struct RootView: View {
             AddTimeSheet(draft: draft)
                 .tagwerkSheet()
         }
+        .sheet(item: $model.absenceDraft) { draft in
+            AbsenceSheet(draft: draft)
+                .tagwerkSheet()
+        }
         .sheet(item: $model.editingEntry) { entry in
             EditEntrySheet(entry: entry)
                 .tagwerkSheet()

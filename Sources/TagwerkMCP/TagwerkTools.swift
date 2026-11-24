@@ -20,6 +20,8 @@ public final class TagwerkTools {
     Tätigkeit und Ticket. Eigene Aufgaben lassen sich einem Ticket aus ManageEngine zuordnen (Parameter ticket), \
     zum PSP-Element gehört die Tätigkeit (Activity) aus SAP (Parameter taetigkeit). \
     Lange Ziele (z. B. „AZ-305 bestehen“, Werkzeug ziele) haben Zieldatum und Stundenziel; Aufgaben zahlen über den Parameter ziel darauf ein. \
+    Krank- und Urlaubstage trägt abwesenheit_eintragen ein (auch mehrere Tage, nur Arbeitstage); offene Aufgaben dieser Tage \
+    rücken dabei auf den nächsten Arbeitstag. \
     IDs aus den Antworten sind für Änderungen nötig; die ersten 8 Zeichen reichen. \
     Datumsangaben: heute, morgen, gestern, JJJJ-MM-TT oder TT.MM.JJJJ. Gebucht wird nur in der App selbst.
     """
@@ -148,6 +150,32 @@ public final class TagwerkTools {
                 required: ["titel"]
             ),
             tool(
+                "abwesenheit_eintragen",
+                "Krank- oder Urlaubstag eintragen, auch für mehrere Tage (Wochenenden zählen nicht). Offene Aufgaben dieser Tage rücken auf den nächsten Arbeitstag, das Wochenziel wird kleiner.",
+                properties: [
+                    "art": text("krank oder urlaub, Standard: krank"),
+                    "von": text("Erster Tag, Standard: heute"),
+                    "bis": text("Letzter Tag, Standard: wie von"),
+                    "halber_tag": flag("true = nur ein halber Tag (nur bei einem einzelnen Tag)"),
+                    "notiz": text("Optionale Notiz, z. B. Arzttermin"),
+                    "aufgaben_verschieben": flag("false = offene Aufgaben dieser Tage nicht verschieben"),
+                ]
+            ),
+            tool(
+                "abwesenheiten",
+                "Krank- und Urlaubstage in einem Zeitraum.",
+                properties: [
+                    "von": text("Standard: Anfang dieser Woche"),
+                    "bis": text("Standard: 4 Wochen nach von"),
+                ]
+            ),
+            tool(
+                "abwesenheit_entfernen",
+                "Einen eingetragenen Krank- oder Urlaubstag wieder entfernen.",
+                properties: ["datum": text("Der Tag, z. B. heute oder 2026-11-24")],
+                required: ["datum"]
+            ),
+            tool(
                 "wochenziel_anlegen",
                 "Ein Wochenziel anlegen.",
                 properties: [
@@ -177,6 +205,9 @@ public final class TagwerkTools {
         case "wochenziel_anlegen": return try addWeeklyGoal(arguments)
         case "ziele": return try longGoals(arguments)
         case "ziel_anlegen": return try addLongGoal(arguments)
+        case "abwesenheit_eintragen": return try addAbsence(arguments)
+        case "abwesenheiten": return try listAbsences(arguments)
+        case "abwesenheit_entfernen": return try removeAbsence(arguments)
         default: throw ToolError("Unbekanntes Werkzeug: \(name)")
         }
     }
@@ -200,6 +231,9 @@ public final class TagwerkTools {
         ]
         if !leftovers.isEmpty, day == today {
             result["uebrig_von_frueher"] = leftovers.map { describe($0, in: snapshot, day: nil) }
+        }
+        if let absence = Absences.absence(on: day, in: snapshot.absences) {
+            result["abwesend"] = absence.label
         }
         if let running = runningInfo(snapshot) {
             result["laufender_timer"] = running
@@ -563,6 +597,77 @@ public final class TagwerkTools {
         if let due { entry["bis"] = due.string }
         if let target { entry["stundenziel_min"] = target }
         return json(["angelegt": entry])
+    }
+
+    // MARK: Abwesenheit
+
+    private func addAbsence(_ arguments: [String: Any]) throws -> String {
+        let snapshot = try store.load()
+        let kindText = string(arguments, "art") ?? "krank"
+        guard let kind = AbsenceKind.parse(kindText) else {
+            throw ToolError("Unbekannte Art „\(kindText)“. Erlaubt: krank, urlaub.")
+        }
+        let start = try parseDay(string(arguments, "von")) ?? today
+        let end = try parseDay(string(arguments, "bis")) ?? start
+        guard end >= start else { throw ToolError("„bis“ liegt vor „von“.") }
+        let new = Absences.make(
+            kind: kind, from: start, through: end,
+            halfDay: bool(arguments, "halber_tag") ?? false,
+            note: string(arguments, "notiz") ?? "",
+            now: now(), calendar: calendar
+        )
+        guard !new.isEmpty else { throw ToolError("Im Zeitraum liegt kein Arbeitstag (Montag bis Freitag).") }
+        // Vorhandene Einträge derselben Tage ersetzen
+        for old in snapshot.absences where new.contains(where: { $0.day == old.day }) {
+            try store.deleteAbsence(id: old.id)
+        }
+        for absence in new { try store.save(absence) }
+
+        var moved: [[String: Any]] = []
+        if bool(arguments, "aufgaben_verschieben") ?? true {
+            let all = snapshot.absences.filter { old in !new.contains { $0.day == old.day } } + new
+            for absence in new where !absence.halfDay {
+                let target = Absences.nextWorkingDay(after: absence.day, absences: all, calendar: calendar)
+                for var task in snapshot.tasks where task.plannedDate == absence.day && !task.isDone && task.parentID == nil {
+                    task.plannedDate = target
+                    task.scheduledStart = nil
+                    try store.save(task)
+                    moved.append(["titel": task.title, "nach": target.string])
+                }
+            }
+        }
+        var result: [String: Any] = [
+            "eingetragen": new.map { ["datum": $0.day.string, "wochentag": weekdayName($0.day), "art": $0.label] },
+        ]
+        if !moved.isEmpty { result["verschoben"] = moved }
+        return json(result)
+    }
+
+    private func listAbsences(_ arguments: [String: Any]) throws -> String {
+        let snapshot = try store.load()
+        let start = try parseDay(string(arguments, "von")) ?? today.startOfWeek(calendar: calendar)
+        let end = try parseDay(string(arguments, "bis")) ?? start.adding(days: 27, calendar: calendar)
+        let list = snapshot.absences.filter { $0.day >= start && $0.day <= end }.sorted { $0.day < $1.day }
+        return json([
+            "von": start.string,
+            "bis": end.string,
+            "abwesenheiten": list.map { absence -> [String: Any] in
+                var entry: [String: Any] = ["datum": absence.day.string, "wochentag": weekdayName(absence.day), "art": absence.label]
+                if !absence.note.isEmpty { entry["notiz"] = absence.note }
+                return entry
+            },
+            "zusammen": Absences.summary(list) ?? "keine",
+        ])
+    }
+
+    private func removeAbsence(_ arguments: [String: Any]) throws -> String {
+        let snapshot = try store.load()
+        guard let day = try parseDay(string(arguments, "datum")) else { throw ToolError("Datum fehlt.") }
+        guard let absence = Absences.absence(on: day, in: snapshot.absences) else {
+            throw ToolError("Am \(day.string) ist nichts eingetragen.")
+        }
+        try store.deleteAbsence(id: absence.id)
+        return json(["entfernt": ["datum": day.string, "art": absence.label]])
     }
 
     func resolveLongGoal(_ reference: String, in goals: [LongGoal]) throws -> LongGoal {

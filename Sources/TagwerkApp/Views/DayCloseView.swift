@@ -71,6 +71,11 @@ struct DayCloseView: View {
                 Text("\(lineCount) Aufgaben · \(TimeMath.format(minutes: total)) h zu buchen · gerundet auf \(model.bookingRules.roundingStep) Minuten")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                if let absence = model.absence(on: day) {
+                    Label("\(absence.label) eingetragen: in ByDesign als Abwesenheit erfassen", systemImage: absence.kind.symbol)
+                        .font(.callout)
+                        .foregroundStyle(Theme.secondary)
+                }
             }
             Spacer()
             Button {

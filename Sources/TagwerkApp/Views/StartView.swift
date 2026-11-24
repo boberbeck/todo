@@ -14,6 +14,9 @@ struct StartView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 20) {
                 header
+                if let absence = model.absence(on: model.today) {
+                    AbsenceBanner(absence: absence)
+                }
                 DayBand()
             }
             .padding(.horizontal, 40)
@@ -115,6 +118,19 @@ struct StartTaskColumn: View {
                             .help("Mehr geplant, als zwischen den Terminen Zeit ist")
                     }
                     Spacer()
+                    Menu {
+                        Button("Heute krank") { model.markAbsent(.sick, from: model.today, through: model.today) }
+                        Button("Heute halber Tag krank") { model.markAbsent(.sick, from: model.today, through: model.today, halfDay: true) }
+                        Divider()
+                        Button("Krank für mehrere Tage …") { model.beginAbsence(.sick) }
+                        Button("Urlaub eintragen …") { model.beginAbsence(.vacation) }
+                    } label: {
+                        Label("Abwesend", systemImage: "cross.case")
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(GhostButtonStyle())
+                    .fixedSize()
+                    .help("Krank- oder Urlaubstag eintragen")
                     Button {
                         model.beginTimeEntry()
                     } label: {
@@ -309,5 +325,40 @@ struct InboxRow: View {
         .draggable(task.id.uuidString)
         .onTapGesture(count: 2) { model.openFocus(task.id) }
         .contextMenu { TaskContextMenu(task: task) }
+    }
+}
+
+/// Hinweis auf Start, wenn heute ein Krank- oder Urlaubstag eingetragen ist.
+struct AbsenceBanner: View {
+    @Environment(AppModel.self) private var model
+    let absence: Absence
+
+    var body: some View {
+        let open = model.todayTasks.filter { !$0.isDone }
+        HStack(spacing: 12) {
+            Image(systemName: absence.kind.symbol)
+                .font(.system(size: 16))
+                .foregroundStyle(Theme.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Heute: \(absence.label)")
+                    .font(.system(size: 14, weight: .medium))
+                Text(absence.note.isEmpty ? (absence.kind == .sick ? "Gute Besserung. Das Wochenziel ist angepasst." : "Schönen freien Tag. Das Wochenziel ist angepasst.") : absence.note)
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+            }
+            Spacer(minLength: 12)
+            if !open.isEmpty, !absence.halfDay {
+                Button("\(open.count) Aufgabe\(open.count == 1 ? "" : "n") verschieben") {
+                    model.moveOpenTasks(from: model.today)
+                }
+                .buttonStyle(GhostButtonStyle(small: true))
+                .help("Auf den nächsten Arbeitstag")
+            }
+            Button("Austragen") { model.removeAbsence(on: model.today) }
+                .buttonStyle(GhostButtonStyle(small: true))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .surface(radius: Theme.Radius.control, elevation: .flat, fill: Theme.surfaceRaised)
     }
 }

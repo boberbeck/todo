@@ -21,7 +21,9 @@ struct ReviewView: View {
         let total = byCustomer.reduce(0) { $0 + $1.seconds }
         let customerTime = byCustomer.filter { $0.customerID != nil }.reduce(0) { $0 + $1.seconds }
         let workedDays = days.filter { model.tracked(on: $0) > 0 }.count
-        let goal = Double(max(model.weeklyGoalMinutes, 1) * 60)
+        let weekGoalMinutes = model.weeklyGoalMinutes(forWeekStarting: monday)
+        let goal = Double(max(weekGoalMinutes, 1) * 60)
+        let away = Absences.summary(model.absences(inWeekStarting: monday))
         let goals = model.goals(forWeekStarting: monday)
         let nextGoals = model.goals(forWeekStarting: nextMonday)
 
@@ -30,8 +32,8 @@ struct ReviewView: View {
                 PageHeader(
                     title: "Wochenrückblick",
                     subtitle: total > 0
-                        ? "\(TimeMath.format(total)) von \(TimeMath.format(minutes: model.weeklyGoalMinutes)) h (\(Int((total / goal * 100).rounded())) %) · Ø \(TimeMath.format(workedDays > 0 ? total / Double(workedDays) : 0)) h an \(workedDays == 1 ? "1 Arbeitstag" : "\(workedDays) Arbeitstagen") · \(Int((customerTime / total * 100).rounded())) % für Kunden"
-                        : "Noch keine Zeit erfasst"
+                        ? "\(TimeMath.format(total)) von \(TimeMath.format(minutes: weekGoalMinutes)) h (\(Int((total / goal * 100).rounded())) %) · Ø \(TimeMath.format(workedDays > 0 ? total / Double(workedDays) : 0)) h an \(workedDays == 1 ? "1 Arbeitstag" : "\(workedDays) Arbeitstagen") · \(Int((customerTime / total * 100).rounded())) % für Kunden\(away.map { " · \($0)" } ?? "")"
+                        : (away ?? "Noch keine Zeit erfasst")
                 ) {
                     HStack(spacing: 12) {
                         WeekSwitcher(weekStart: Binding(get: { monday }, set: { weekStart = $0 }), currentWeek: model.currentWeekStart)

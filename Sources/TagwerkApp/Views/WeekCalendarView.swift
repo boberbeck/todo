@@ -20,7 +20,7 @@ struct WeekCalendarView: View {
         let monday = weekStart ?? model.currentWeekStart
         let days = (0..<7).map { monday.adding(days: $0) }
         let tracked = model.trackedInWeek(starting: monday)
-        let goal = Double(max(model.weeklyGoalMinutes, 1) * 60)
+        let goal = Double(max(model.weeklyGoalMinutes(forWeekStarting: monday), 1) * 60)
 
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
@@ -33,7 +33,7 @@ struct WeekCalendarView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text(TimeMath.format(tracked))
                             .font(Theme.bigNumber)
-                        Text("/ \(TimeMath.format(minutes: model.weeklyGoalMinutes)) h diese Woche")
+                        Text("/ \(TimeMath.format(minutes: model.weeklyGoalMinutes(forWeekStarting: monday))) h diese Woche")
                             .foregroundStyle(Theme.secondary)
                     }
                     .fixedSize()
@@ -122,15 +122,35 @@ struct WeekCalendarView: View {
                     .foregroundStyle(isToday ? Theme.accent : Theme.tertiary)
             }
             .font(.system(size: 14, weight: .medium))
-            Text("\(TimeMath.format(model.tracked(on: day))) h")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(Theme.tertiary)
+            if let absence = model.absence(on: day) {
+                Label(absence.halfDay ? "\(absence.kind.label) ½" : absence.kind.label, systemImage: absence.kind.symbol)
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondary)
+                    .help(absence.note.isEmpty ? absence.label : "\(absence.label): \(absence.note)")
+            } else {
+                Text("\(TimeMath.format(model.tracked(on: day))) h")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(Theme.tertiary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(isToday ? Theme.todayTint : Color.clear)
         .overlay(alignment: .leading) {
             Rectangle().fill(Theme.border).frame(width: 1)
         }
+        .contentShape(Rectangle())
+        .contextMenu {
+            if model.absence(on: day) != nil {
+                Button("Abwesenheit entfernen") { model.removeAbsence(on: day) }
+            } else {
+                Button("Krank") { model.markAbsent(.sick, from: day, through: day) }
+                Button("Halber Tag krank") { model.markAbsent(.sick, from: day, through: day, halfDay: true) }
+                Button("Urlaub") { model.markAbsent(.vacation, from: day, through: day) }
+                Divider()
+                Button("Mehrere Tage …") { model.beginAbsence(.sick, from: day) }
+            }
+        }
+        .help("Rechtsklick: Krank oder Urlaub eintragen")
     }
 
     private var hourLabels: some View {

@@ -31,6 +31,10 @@ final class AppModel {
     private(set) var goals: [WeeklyGoal] = []
     /// Lange Ziele über Wochen (z. B. „AZ-305 bestehen“)
     private(set) var longGoals: [LongGoal] = []
+    /// Krank- und Urlaubstage
+    private(set) var absences: [Absence] = []
+    /// Offenes Fenster „Abwesenheit eintragen“
+    var absenceDraft: AbsenceDraft?
     /// Erkannte Pause während eines laufenden Timers, wartet auf eine Entscheidung.
     var idlePrompt: IdlePrompt?
     /// Zeigt den Abgleich mit SAP ByDesign. `sapSyncRows` füllt ihn vorab (Vorschau, Bildschirmfotos).
@@ -1056,11 +1060,86 @@ final class AppModel {
         (0..<7).reduce(0) { $0 + tracked(on: monday.adding(days: $1)) }
     }
 
-    /// Wochenziel für die erfasste Zeit: Tagesziel Fokuszeit mal fünf Arbeitstage.
+    /// Wochenziel dieser Woche: Tagesziel Fokuszeit mal Arbeitstage, ohne Krank- und Urlaubstage.
     var weeklyGoalMinutes: Int {
+        weeklyGoalMinutes(forWeekStarting: currentWeekStart)
+    }
+
+    var dailyGoalMinutes: Int {
         _ = settingsVersion
         let daily = UserDefaults.standard.integer(forKey: Preferences.focusGoalMinutesKey)
-        return (daily > 0 ? daily : Preferences.defaultFocusGoalMinutes) * 5
+        return daily > 0 ? daily : Preferences.defaultFocusGoalMinutes
+    }
+
+    func weeklyGoalMinutes(forWeekStarting monday: LocalDate) -> Int {
+        Absences.weeklyGoalMinutes(dailyMinutes: dailyGoalMinutes, weekStart: monday, absences: absences)
+    }
+
+    // MARK: Abwesenheit
+
+    func absence(on day: LocalDate) -> Absence? {
+        Absences.absence(on: day, in: absences)
+    }
+
+    func absences(inWeekStarting monday: LocalDate) -> [Absence] {
+        Absences.inWeek(starting: monday, absences)
+    }
+
+    /// Krank oder Urlaub eintragen (nur Arbeitstage). Vorhandene Einträge derselben Tage werden ersetzt;
+    /// offene Aufgaben ganzer Abwesenheitstage rücken auf Wunsch auf den nächsten Arbeitstag.
+    @discardableResult
+    func markAbsent(_ kind: AbsenceKind, from start: LocalDate, through end: LocalDate, halfDay: Bool = false, note: String = "", moveTasks: Bool = true) -> String {
+        let new = Absences.make(kind: kind, from: start, through: end, halfDay: halfDay, note: note, now: Date())
+        guard !new.isEmpty else { return "Im Zeitraum liegt kein Arbeitstag." }
+        do {
+            for old in absences where new.contains(where: { $0.day == old.day }) {
+                try store.deleteAbsence(id: old.id)
+            }
+            absences.removeAll { old in new.contains { $0.day == old.day } }
+            for absence in new {
+                try store.save(absence)
+                absences.append(absence)
+            }
+        } catch {
+            report(error)
+            return "Konnte nicht eingetragen werden."
+        }
+        var moved = 0
+        if moveTasks {
+            for absence in new where !absence.halfDay {
+                let target = Absences.nextWorkingDay(after: absence.day, absences: absences)
+                for task in tasks where task.plannedDate == absence.day && !task.isDone && task.parentID == nil {
+                    plan(task.id, for: target)
+                    moved += 1
+                }
+            }
+        }
+        AppLog.info("Abwesenheit", "\(kind.label): \(new.count) Tag(e)\(moved > 0 ? ", \(moved) Aufgabe(n) verschoben" : "")")
+        let days = new.count == 1 ? (new[0].halfDay ? "halber Tag" : "1 Tag") : "\(new.count) Tage"
+        return moved > 0 ? "\(kind.label) eingetragen (\(days)), \(moved) Aufgabe(n) verschoben." : "\(kind.label) eingetragen (\(days))."
+    }
+
+    func removeAbsence(on day: LocalDate) {
+        guard let absence = absence(on: day) else { return }
+        do {
+            try store.deleteAbsence(id: absence.id)
+            absences.removeAll { $0.id == absence.id }
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Offene Aufgaben eines Tages auf den nächsten Arbeitstag schieben (z. B. heute krank).
+    func moveOpenTasks(from day: LocalDate) {
+        let target = Absences.nextWorkingDay(after: day, absences: absences)
+        for task in tasks where task.plannedDate == day && !task.isDone && task.parentID == nil {
+            plan(task.id, for: target)
+        }
+    }
+
+    func beginAbsence(_ kind: AbsenceKind = .sick, from day: LocalDate? = nil) {
+        let start = day ?? today
+        absenceDraft = AbsenceDraft(kind: kind, from: start, through: start)
     }
 
     /// Legt eine Aufgabe oben oder unten in einem Tag (oder im Eingang) an.
@@ -2086,6 +2165,7 @@ final class AppModel {
             bookings = snapshot.bookings
             goals = snapshot.goals
             longGoals = snapshot.longGoals
+            absences = snapshot.absences
             cleanUpHTMLEntities()
         } catch {
             report(error)

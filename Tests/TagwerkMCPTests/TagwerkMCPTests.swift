@@ -332,3 +332,31 @@ final class MCPEntityTests: XCTestCase {
         XCTAssertEqual(try store.load().tasks.first?.title, "Konfiguration nach environments/<env>/ & Modul")
     }
 }
+
+/// Krank- und Urlaubstage über Claude
+final class MCPAbsenceTests: XCTestCase {
+    func testSickDayMovesOpenTasks() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        // Freitag, 27. November 2026
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: 8))!
+        let friday = LocalDate(year: 2026, month: 11, day: 27)
+        let task = TaskItem(title: "Angebot schreiben", plannedDate: friday)
+        let store = InMemoryStore(Snapshot(tasks: [task]))
+        let tools = TagwerkTools(store: store, calendar: calendar, now: { now })
+
+        let answer = try tools.call(name: "abwesenheit_eintragen", arguments: ["art": "krank"])
+        XCTAssertTrue(answer.contains("Krank"), answer)
+        let snapshot = try store.load()
+        XCTAssertEqual(snapshot.absences.map(\.day), [friday])
+        // auf Montag verschoben, nicht aufs Wochenende
+        XCTAssertEqual(snapshot.tasks.first?.plannedDate, LocalDate(year: 2026, month: 11, day: 30))
+
+        let list = try tools.call(name: "abwesenheiten", arguments: [:])
+        XCTAssertTrue(list.contains("1 Tag krank"), list)
+
+        _ = try tools.call(name: "abwesenheit_entfernen", arguments: ["datum": "heute"])
+        XCTAssertTrue(try store.load().absences.isEmpty)
+        XCTAssertThrowsError(try tools.call(name: "abwesenheit_eintragen", arguments: ["art": "homeoffice"]))
+    }
+}

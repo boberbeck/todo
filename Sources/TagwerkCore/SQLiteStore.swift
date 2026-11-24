@@ -267,6 +267,27 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+        if version < 11 {
+            // Krank- und Urlaubstage
+            try exec("""
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS absence (
+                id TEXT PRIMARY KEY,
+                day TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                half_day INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL,
+                modified_at REAL
+            );
+            CREATE INDEX IF NOT EXISTS absence_day ON absence (day);
+            CREATE TRIGGER IF NOT EXISTS absence_inserted AFTER INSERT ON absence BEGIN UPDATE absence SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS absence_updated AFTER UPDATE ON absence BEGIN UPDATE absence SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS absence_deleted AFTER DELETE ON absence BEGIN INSERT OR REPLACE INTO deleted_record (entity, id, deleted_at) VALUES ('absence', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+            PRAGMA user_version = 11;
+            COMMIT;
+            """)
+        }
     }
 
     /// Für einen späteren Abgleich: was sich seit `date` geändert hat (Tabelle → IDs) und was gelöscht wurde.
@@ -443,6 +464,21 @@ public final class SQLiteStore: Store {
                 isDone: (longGoals.int(6) ?? 0) != 0,
                 completedAt: longGoals.date(7),
                 createdAt: longGoals.date(8) ?? Date()
+            ))
+        }
+
+        let absences = try prepare("SELECT id, day, kind, half_day, note, created_at FROM absence ORDER BY day;")
+        while try absences.step() {
+            guard let id = absences.uuid(0),
+                  let day = absences.text(1).flatMap({ LocalDate(string: $0) }),
+                  let kind = absences.text(2).flatMap({ AbsenceKind(rawValue: $0) }) else { continue }
+            snapshot.absences.append(Absence(
+                id: id,
+                day: day,
+                kind: kind,
+                halfDay: (absences.int(3) ?? 0) != 0,
+                note: absences.text(4) ?? "",
+                createdAt: absences.date(5) ?? Date()
             ))
         }
 
@@ -654,6 +690,29 @@ public final class SQLiteStore: Store {
         ])
     }
 
+    public func save(_ absence: Absence) throws {
+        try run("""
+        INSERT INTO absence (id, day, kind, half_day, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            day = excluded.day,
+            kind = excluded.kind,
+            half_day = excluded.half_day,
+            note = excluded.note;
+        """, [
+            .text(absence.id.uuidString),
+            .text(absence.day.string),
+            .text(absence.kind.rawValue),
+            .int(absence.halfDay ? 1 : 0),
+            .text(absence.note),
+            .double(absence.createdAt.timeIntervalSince1970),
+        ])
+    }
+
+    public func deleteAbsence(id: UUID) throws {
+        try run("DELETE FROM absence WHERE id = ?;", [.text(id.uuidString)])
+    }
+
     public func deleteLongGoal(id: UUID) throws {
         try exec("BEGIN;")
         do {
@@ -826,7 +885,7 @@ final class Statement {
 
 /// Änderungen seit einem Zeitpunkt, als Grundlage für einen Abgleich zwischen Geräten.
 public struct StoreChanges: Equatable, Sendable {
-    public static let tables = ["customer", "task", "time_entry", "psp_element", "booking", "weekly_goal", "long_goal"]
+    public static let tables = ["customer", "task", "time_entry", "psp_element", "booking", "weekly_goal", "long_goal", "absence"]
 
     public struct Deletion: Equatable, Sendable {
         public var entity: String

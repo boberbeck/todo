@@ -9,6 +9,8 @@ public struct Snapshot: Sendable, Equatable {
     public var bookings: [Booking]
     public var goals: [WeeklyGoal]
     public var longGoals: [LongGoal]
+    /// Krank- und Urlaubstage
+    public var absences: [Absence]
 
     public init(
         customers: [Customer] = [],
@@ -17,7 +19,8 @@ public struct Snapshot: Sendable, Equatable {
         pspElements: [PSPElement] = [],
         bookings: [Booking] = [],
         goals: [WeeklyGoal] = [],
-        longGoals: [LongGoal] = []
+        longGoals: [LongGoal] = [],
+        absences: [Absence] = []
     ) {
         self.customers = customers
         self.tasks = tasks
@@ -26,6 +29,7 @@ public struct Snapshot: Sendable, Equatable {
         self.bookings = bookings
         self.goals = goals
         self.longGoals = longGoals
+        self.absences = absences
     }
 }
 
@@ -42,6 +46,8 @@ public protocol Store: AnyObject {
     func save(_ goal: LongGoal) throws
     /// Löscht das Ziel; Aufgaben verlieren nur die Verknüpfung.
     func deleteLongGoal(id: UUID) throws
+    func save(_ absence: Absence) throws
+    func deleteAbsence(id: UUID) throws
     /// Legt eine Sicherungskopie der Daten an.
     func backup(to url: URL) throws
     /// Löscht die Aufgabe, ihre Zeiteinträge und Buchungen.
@@ -106,6 +112,14 @@ public final class InMemoryStore: Store {
         for index in snapshot.tasks.indices where snapshot.tasks[index].longGoalID == id {
             snapshot.tasks[index].longGoalID = nil
         }
+    }
+
+    public func save(_ absence: Absence) throws {
+        upsert(absence, into: &snapshot.absences)
+    }
+
+    public func deleteAbsence(id: UUID) throws {
+        snapshot.absences.removeAll { $0.id == id }
     }
 
     public func backup(to url: URL) throws {}
