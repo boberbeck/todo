@@ -41,22 +41,18 @@ public struct RadioStation: Codable, Hashable, Sendable, Identifiable {
     }
 
     public static let ambient = "Ambient & Chill"
-    public static let jazz = "Klassik & Jazz"
     public static let electronic = "Elektronik"
 
     /// Richtungen in der Reihenfolge fürs Menü.
-    public static let genres = [ambient, jazz, electronic]
+    public static let genres = [ambient, electronic]
 
-    /// Werbefreie Sender zum Arbeiten, überwiegend ohne Gesang: SomaFM (hörerfinanziert, San Francisco)
-    /// und Radio Swiss Classic (öffentlich-rechtlich, ohne Moderation). Ganz ohne Gesang kann ein Sender nicht versprechen.
+    /// Werbefreie Sender zum Arbeiten, überwiegend ohne Gesang, von SomaFM (hörerfinanziert, San Francisco).
+    /// Ganz ohne Gesang kann ein Sender nicht versprechen.
     public static let builtIn: [RadioStation] = [
         soma("dronezone", "Drone Zone", "Ambient ohne Takt, sehr ruhig", ambient),
         soma("deepspaceone", "Deep Space One", "Tiefer Ambient, Weltraumklänge", ambient),
         soma("spacestation", "Space Station Soma", "Ambient mit sanftem Takt", ambient),
         soma("fluid", "Fluid", "Instrumentaler Hip-Hop, Lo-Fi", ambient),
-
-        RadioStation(name: "Radio Swiss Classic", detail: "Klassik, viel Klavier, ohne Moderation", url: URL(string: "https://stream.srg-ssr.ch/m/rsc_de/mp3_128")!, genre: jazz),
-        soma("sonicuniverse", "Sonic Universe", "Moderner Jazz, meist instrumental", jazz),
 
         soma("synphaera", "Synphaera", "Moderne Elektronik, Synth-Ambient", electronic),
         soma("cliqhop", "cliqhop idm", "Verspielte Elektronik (IDM)", electronic),

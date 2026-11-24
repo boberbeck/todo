@@ -36,7 +36,7 @@ final class FocusSourcesTests: XCTestCase {
         XCTAssertEqual(station?.url.absoluteString, "https://stream.example.org/lofi.mp3")
         XCTAssertNil(RadioStation.custom("kein link"))
         XCTAssertNil(RadioStation.custom("ftp://example.org/a.mp3"))
-        XCTAssertEqual(RadioStation.builtIn.count, 9)
+        XCTAssertEqual(RadioStation.builtIn.count, 7)
         // jede Richtung hat Sender, keine Adresse doppelt
         for genre in RadioStation.genres {
             XCTAssertFalse(RadioStation.stations(in: genre).isEmpty, genre)
