@@ -9,6 +9,8 @@ struct MenuBarLabel: View {
     var body: some View {
         if let task = model.runningTask {
             Text("▶ \(TimeMath.format(model.tracked(taskID: task.id, now: model.now))) \(String(task.title.prefix(20)))")
+        } else if let pause = model.runningBreak {
+            Text("☕ \(TimeMath.format(pause.duration(now: model.now)))")
         } else {
             Image(systemName: "checklist")
         }
@@ -21,7 +23,20 @@ struct MenuBarContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let task = model.runningTask {
+            if let pause = model.runningBreak {
+                Text("Pause")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(TimeMath.format(pause.duration(now: model.now), showSeconds: true))
+                    .font(.title2.monospacedDigit())
+                HStack {
+                    if let task = model.taskAfterBreak {
+                        Button("Weiter mit \(task.title)") { model.endBreak(resume: true) }
+                            .lineLimit(1)
+                    }
+                    Button("Beenden") { model.endBreak(resume: false) }
+                }
+            } else if let task = model.runningTask {
                 Text("Läuft")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -32,7 +47,10 @@ struct MenuBarContent: View {
                     .font(.title2.monospacedDigit())
                 HStack {
                     Button("Stoppen") { model.stopTimer() }
-                    Button("Erledigt") { model.complete(task.id) }
+                    Button("Pause") { model.startBreak() }
+                    if !task.isStanding {
+                        Button("Erledigt") { model.complete(task.id) }
+                    }
                 }
             } else {
                 Text("Kein Timer aktiv")
@@ -41,7 +59,7 @@ struct MenuBarContent: View {
 
             Divider()
 
-            let open = model.todayTasks.filter { !$0.isDone && !model.isRunning($0.id) }
+            let open = (model.todayTasks.filter { !$0.isDone } + model.standingTasks).filter { !model.isRunning($0.id) }
             if !open.isEmpty {
                 Text("Heute")
                     .font(.caption)

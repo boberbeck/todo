@@ -33,6 +33,10 @@ final class AppModel {
     private(set) var longGoals: [LongGoal] = []
     /// Krank- und Urlaubstage
     private(set) var absences: [Absence] = []
+    /// Pausen (zählen nicht als Arbeitszeit)
+    private(set) var breaks: [WorkBreak] = []
+    /// Offenes Fenster „Pause nachtragen“ oder „Pause bearbeiten“
+    var breakDraft: BreakDraft?
     /// Offenes Fenster „Abwesenheit eintragen“
     var absenceDraft: AbsenceDraft?
     /// Erkannte Pause während eines laufenden Timers, wartet auf eine Entscheidung.
@@ -125,6 +129,7 @@ final class AppModel {
         lastPlannedDay = UserDefaults.standard.string(forKey: Preferences.lastPlannedDayKey).flatMap { LocalDate(string: $0) }
         reload()
         rollOverOpenTasks()
+        if !SnapshotMode.usesDemoData { seedStandingTasksIfNeeded() }
         calendarAccess = calendar.access
         calendar.onChange = { [weak self] in
             self?.refreshEvents()
@@ -243,7 +248,7 @@ final class AppModel {
 
     /// Aufgaben eines Kunden: offene neueste zuerst, erledigte zuletzt erledigt zuerst.
     func customerTasks(_ customerID: UUID, done: Bool) -> [TaskItem] {
-        let matching = tasks.filter { $0.customerID == customerID && $0.isDone == done && $0.parentID == nil }
+        let matching = tasks.filter { $0.customerID == customerID && $0.isDone == done && $0.parentID == nil && !$0.isStanding }
         if done {
             return matching.sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
         }
@@ -251,7 +256,7 @@ final class AppModel {
     }
 
     func openTaskCount(for customerID: UUID) -> Int {
-        tasks.filter { $0.customerID == customerID && !$0.isDone && $0.parentID == nil }.count
+        tasks.filter { $0.customerID == customerID && !$0.isDone && $0.parentID == nil && !$0.isStanding }.count
     }
 
     func trackedThisMonth(customerID: UUID) -> TimeInterval {
@@ -314,7 +319,8 @@ final class AppModel {
 
     /// Erledigt die Aufgabe, stoppt ihren Timer und holt im Fokus die nächste.
     func complete(_ id: UUID) {
-        guard var task = self.task(id), !task.isDone else { return }
+        // Standardaufgaben wie „Organisatorisches“ werden nie erledigt
+        guard var task = self.task(id), !task.isDone, !task.isStanding else { return }
         if isRunning(id) { stopTracking() }
         let parent = task.parentID.flatMap { self.task($0) }
         let next = parent.flatMap { $0.isDone ? nil : $0 } ?? DayPlan.nextOpenTask(after: id, in: todayTasks)
@@ -335,7 +341,7 @@ final class AppModel {
 
     /// Plant eine Aufgabe für einen Tag ein (`nil` = zurück in den Eingang).
     func plan(_ id: UUID, for day: LocalDate?) {
-        guard var task = self.task(id), task.plannedDate != day else { return }
+        guard var task = self.task(id), task.plannedDate != day, !task.isStanding else { return }
         task.plannedDate = day
         task.sortIndex = DayPlan.nextSortIndex(in: tasks.filter { $0.plannedDate == day })
         if task.scheduledStart != nil {
@@ -626,6 +632,7 @@ final class AppModel {
     // MARK: Timer
 
     func startTimer(_ taskID: UUID) {
+        endBreakForWork()
         apply(TimerLogic.start(taskID: taskID, entries: entries, at: Date()))
         focusedTaskID = taskID
         pomodoroTimerStarted(taskID)
@@ -750,6 +757,7 @@ final class AppModel {
 
     /// Vergessen zu starten: Timer läuft rückwirkend seit `since` (frühestens ab dem Ende des letzten Eintrags).
     func startTimer(_ taskID: UUID, since: Date) {
+        endBreakForWork()
         apply(TimerLogic.start(taskID: taskID, entries: entries, since: since, now: Date()))
         focusedTaskID = taskID
     }
@@ -785,7 +793,9 @@ final class AppModel {
 
     /// Für Tastenkürzel und Menüleiste: startet oder stoppt die Fokus-Aufgabe.
     func toggleTimerForFocus() {
-        if runningEntry != nil {
+        if runningBreak != nil {
+            endBreak(resume: true)
+        } else if runningEntry != nil {
             stopTimer()
         } else if let task = focusTask {
             startTimer(task.id)
@@ -1036,6 +1046,168 @@ final class AppModel {
         }
     }
 
+    // MARK: Pausen
+
+    var runningBreak: WorkBreak? { Breaks.running(in: breaks) }
+
+    /// Pausen, die einen Tag berühren.
+    func breaks(on day: LocalDate) -> [WorkBreak] {
+        Breaks.on(day, breaks, now: now)
+    }
+
+    func breakTotal(on day: LocalDate) -> TimeInterval {
+        Breaks.total(on: day, breaks: breaks, now: now)
+    }
+
+    /// Fehlende Pause nach dem Arbeitszeitgesetz an einem Tag (0 = passt).
+    func missingBreakMinutes(on day: LocalDate) -> Int {
+        Breaks.missingMinutes(worked: tracked(on: day), countedMinutes: Breaks.countedMinutes(on: day, breaks: breaks, now: now))
+    }
+
+    /// Pause jetzt: hält den Timer an und merkt sich die Aufgabe; „Weiter“ startet sie danach wieder.
+    func startBreak() {
+        guard runningBreak == nil else { return }
+        pomodoro = nil
+        apply(Breaks.start(entries: entries, breaks: breaks, at: Date()))
+        AppLog.info("Pause", "Pause begonnen")
+    }
+
+    /// Pause beenden; mit `resume` geht es mit der Aufgabe von vorher weiter.
+    func endBreak(resume: Bool) {
+        guard let current = runningBreak else { return }
+        apply(Breaks.end(breaks: breaks, at: Date()))
+        AppLog.info("Pause", "Pause beendet nach \(Int(current.duration() / 60)) Min")
+        if resume, let id = current.resumeTaskID, let task = self.task(id), !task.isDone {
+            startTimer(id)
+        }
+    }
+
+    /// Wer eine Aufgabe startet, ist aus der Pause zurück.
+    private func endBreakForWork() {
+        if runningBreak != nil { apply(Breaks.end(breaks: breaks, at: Date())) }
+    }
+
+    /// Aufgabe, mit der es nach der laufenden Pause weitergeht.
+    var taskAfterBreak: TaskItem? {
+        guard let id = runningBreak?.resumeTaskID, let task = self.task(id), !task.isDone else { return nil }
+        return task
+    }
+
+    /// Pause nachtragen oder ändern. Erfasste Arbeit in diesem Zeitraum wird herausgeschnitten.
+    @discardableResult
+    func addBreak(start: Date, end: Date, note: String = "", replacing id: UUID? = nil) -> Bool {
+        let change = Breaks.add(start: start, end: end, note: note, replacing: id, entries: entries, breaks: breaks, now: Date())
+        guard !change.isEmpty else { return false }
+        apply(change)
+        let cut = change.savedEntries.count + change.deletedEntries.count
+        AppLog.info("Pause", "Pause eingetragen (\(Int(end.timeIntervalSince(start) / 60)) Min\(cut > 0 ? ", \(cut) Eintrag/Einträge angepasst" : ""))")
+        return true
+    }
+
+    func deleteBreak(_ id: UUID) {
+        do {
+            try store.deleteBreak(id: id)
+            breaks.removeAll { $0.id == id }
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Erfasste Arbeit in einem Zeitraum (zeigt, was eine nachgetragene Pause herausschneidet).
+    func workInside(start: Date, end: Date) -> TimeInterval {
+        let now = Date()
+        guard end > start else { return 0 }
+        let interval = DateInterval(start: start, end: max(start, min(end, now)))
+        return entries.reduce(0) { $0 + TimeMath.overlap(of: $1, with: interval, now: now) }
+    }
+
+    /// Öffnet „Pause nachtragen“: die letzte halbe Stunde, im Kalender der gewählte Zeitraum.
+    func beginBreakEntry(start: Date? = nil, minutes: Int = 30) {
+        let end = start.map { $0.addingTimeInterval(TimeInterval(minutes * 60)) } ?? FreeTime.snapNearest(Date(), stepMinutes: 5)
+        let begin = start ?? end.addingTimeInterval(TimeInterval(-minutes * 60))
+        breakDraft = BreakDraft(start: begin, end: end)
+    }
+
+    func editBreak(_ item: WorkBreak) {
+        breakDraft = BreakDraft(start: item.start, end: item.end ?? Date(), note: item.note, breakID: item.id, isRunning: item.isRunning)
+    }
+
+    private func apply(_ change: BreakChange) {
+        let wasRunning = runningEntry != nil
+        do {
+            for entry in change.deletedEntries {
+                try store.deleteEntry(id: entry.id)
+                entries.removeAll { $0.id == entry.id }
+            }
+            for entry in change.savedEntries {
+                try store.save(entry)
+                replace(entry)
+            }
+            for item in change.deletedBreaks {
+                try store.deleteBreak(id: item.id)
+                breaks.removeAll { $0.id == item.id }
+            }
+            for item in change.savedBreaks {
+                try store.save(item)
+                if let index = breaks.firstIndex(where: { $0.id == item.id }) {
+                    breaks[index] = item
+                } else {
+                    breaks.append(item)
+                }
+            }
+        } catch {
+            report(error)
+        }
+        if wasRunning, runningEntry == nil { music.timerStopped() }
+        now = Date()
+    }
+
+    // MARK: Standardaufgaben
+
+    /// Aufgaben wie „Organisatorisches“: immer da, nie erledigt, mit einem Klick gestartet.
+    var standingTasks: [TaskItem] { DayPlan.standing(tasks) }
+
+    @discardableResult
+    func addStandingTask(title rawTitle: String) -> TaskItem? {
+        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty,
+              !standingTasks.contains(where: { $0.title.caseInsensitiveCompare(title) == .orderedSame }) else { return nil }
+        let task = TaskItem(title: title, sortIndex: DayPlan.nextSortIndex(in: standingTasks), isStanding: true)
+        persist(task)
+        return task
+    }
+
+    /// Entfernt eine Standardaufgabe. Hat sie schon Zeiten, bleibt sie als erledigte Aufgabe erhalten (die Zeiten auch).
+    func removeStandingTask(_ id: UUID) {
+        guard var task = self.task(id), task.isStanding else { return }
+        if isRunning(id) { stopTimer() }
+        let ends = entries.filter { $0.taskID == id }.compactMap(\.end)
+        if ends.isEmpty {
+            delete(id)
+        } else {
+            task.isStanding = false
+            task.status = .done
+            task.completedAt = ends.max()
+            persist(task)
+        }
+    }
+
+    /// Heute erfasste Zeit einer Aufgabe (für die Standardaufgaben auf Start).
+    func trackedToday(taskID: UUID) -> TimeInterval {
+        TimeMath.tracked(taskID: taskID, on: today, entries: entries, now: now)
+    }
+
+    /// Beim ersten Start mit dieser Fassung ein paar Vorschläge anlegen.
+    private func seedStandingTasksIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: Preferences.standingSeededKey) else { return }
+        defaults.set(true, forKey: Preferences.standingSeededKey)
+        guard standingTasks.isEmpty else { return }
+        for title in DayPlan.defaultStandingTitles {
+            addStandingTask(title: title)
+        }
+    }
+
     // MARK: Woche und Kalender
 
     func dayTasks(_ day: LocalDate) -> [TaskItem] { DayPlan.tasks(for: day, in: tasks) }
@@ -1156,7 +1328,7 @@ final class AppModel {
 
     /// Verschiebt eine Aufgabe in einen Tag (oder den Eingang), vor eine andere Aufgabe oder ans Ende.
     func move(_ id: UUID, to day: LocalDate?, before targetID: UUID?) {
-        guard targetID != id, var task = self.task(id) else { return }
+        guard targetID != id, var task = self.task(id), !task.isStanding else { return }
         guard let day else {
             plan(id, for: nil)
             return
@@ -2049,7 +2221,12 @@ final class AppModel {
     func resolveIdle(_ decision: IdleDecision) {
         guard let prompt = idlePrompt else { return }
         idlePrompt = nil
-        apply(TimerLogic.resolveIdle(entries: entries, idleStart: prompt.start, now: Date(), decision: decision))
+        let now = Date()
+        apply(TimerLogic.resolveIdle(entries: entries, idleStart: prompt.start, now: now, decision: decision))
+        // Abgezogene Zeit steht als Pause im Kalender
+        if decision == .discard {
+            addBreak(start: prompt.start, end: now)
+        }
     }
 
     // MARK: Schnell erfassen und Drag-and-drop
@@ -2166,6 +2343,7 @@ final class AppModel {
             goals = snapshot.goals
             longGoals = snapshot.longGoals
             absences = snapshot.absences
+            breaks = snapshot.breaks
             cleanUpHTMLEntities()
         } catch {
             report(error)
@@ -2311,6 +2489,18 @@ final class AppModel {
         lastError = String(describing: error)
         AppLog.error("App", String(describing: error))
     }
+}
+
+/// Fenster „Pause nachtragen“ oder „Pause bearbeiten“.
+struct BreakDraft: Identifiable {
+    let id = UUID()
+    var start: Date
+    var end: Date
+    var note: String = ""
+    /// gesetzt beim Bearbeiten einer eingetragenen Pause
+    var breakID: UUID? = nil
+    /// laufende Pause: nur der Beginn lässt sich ändern
+    var isRunning = false
 }
 
 struct IdlePrompt: Identifiable, Equatable {

@@ -175,6 +175,27 @@ enum SnapshotMode {
             try? await Task.sleep(for: .seconds(0.5))
         }
 
+        // Pause nachtragen (die letzte halbe Stunde: schneidet die laufende Arbeit an)
+        model.selection = .today
+        model.beginBreakEntry()
+        try? await Task.sleep(for: .seconds(1.5))
+        await capture(window.attachedSheet ?? window, name: "pause-nachtragen", in: directory)
+        model.breakDraft = nil
+        try? await Task.sleep(for: .seconds(0.8))
+
+        // Pause läuft: Fokus und Leiste oben, danach weiter mit derselben Aufgabe
+        if model.runningEntry != nil {
+            model.startBreak()
+            model.selection = .focus
+            try? await Task.sleep(for: .seconds(1.5))
+            await capture(window, name: "fokus-pause-laeuft", in: directory)
+            model.selection = .today
+            try? await Task.sleep(for: .seconds(1.2))
+            await capture(window, name: "start-pause-laeuft", in: directory)
+            model.endBreak(resume: true)
+            try? await Task.sleep(for: .seconds(0.5))
+        }
+
         // Abgleich mit SAP ByDesign
         model.selection = .customers
         model.sapSyncRows = DemoData.sapRows

@@ -76,6 +76,21 @@ struct DayCloseView: View {
                         .font(.callout)
                         .foregroundStyle(Theme.secondary)
                 }
+                let pause = model.breakTotal(on: day)
+                let missing = model.missingBreakMinutes(on: day)
+                if pause >= 60 || missing > 0 {
+                    HStack(spacing: 6) {
+                        Label(pause >= 60 ? "\(TimeMath.format(pause)) h Pause, nicht gebucht" : "Keine Pause eingetragen", systemImage: "cup.and.saucer")
+                            .foregroundStyle(Theme.secondary)
+                        if missing > 0 {
+                            Text("· laut Arbeitszeitgesetz fehlen \(missing) Minuten (Pausen zählen ab 15 Minuten am Stück)")
+                                .foregroundStyle(Theme.warning)
+                            Button("Pause nachtragen …") { model.beginBreakEntry(start: FreeTime.date(on: day, minutes: 12 * 60)) }
+                                .buttonStyle(GhostButtonStyle(small: true))
+                        }
+                    }
+                    .font(.callout)
+                }
             }
             Spacer()
             Button {
@@ -103,7 +118,7 @@ struct DayCloseView: View {
         VStack(alignment: .leading, spacing: 10) {
             TextField("Rückschau: Was lief gut, was bleibt für morgen?", text: $reflection, axis: .vertical)
                 .lineLimit(1...3)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(TagwerkFieldStyle())
 
             HStack(spacing: 10) {
                 if let message {
@@ -340,7 +355,7 @@ struct DescriptionField: View {
     var body: some View {
         TextField("Was wurde gemacht", text: $text)
             .help("Text für den Worklog im Ticket und für SAP")
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(TagwerkFieldStyle())
             .onAppear { text = task.workDescription }
             .onSubmit { model.setDescription(text, for: task.id) }
             .onChange(of: text) { model.setDescription(text, for: task.id) }

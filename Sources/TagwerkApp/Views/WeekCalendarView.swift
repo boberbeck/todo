@@ -49,6 +49,13 @@ struct WeekCalendarView: View {
                     }
                     .buttonStyle(GhostButtonStyle())
                     .help("Arbeit nachträglich erfassen (oder Doppelklick in eine freie Stelle im Kalender und gleich beschriften)")
+                    Button {
+                        model.beginBreakEntry()
+                    } label: {
+                        Label("Pause nachtragen", systemImage: "cup.and.saucer")
+                    }
+                    .buttonStyle(GhostButtonStyle())
+                    .help("Pause eintragen; Arbeit, die in dieser Zeit erfasst ist, wird herausgenommen")
                     Spacer(minLength: 16)
                     HStack(spacing: 6) {
                         Button {
@@ -128,9 +135,12 @@ struct WeekCalendarView: View {
                     .foregroundStyle(Theme.secondary)
                     .help(absence.note.isEmpty ? absence.label : "\(absence.label): \(absence.note)")
             } else {
-                Text("\(TimeMath.format(model.tracked(on: day))) h")
+                let pause = model.breakTotal(on: day)
+                Text("\(TimeMath.format(model.tracked(on: day))) h\(pause >= 60 ? " · Pause \(TimeMath.format(pause))" : "")")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(Theme.tertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -225,6 +235,14 @@ struct DayTimeline: View {
                     .padding(.leading, 10)
                     .padding(.trailing, 4)
                 }
+            }
+
+            ForEach(model.breaks(on: day)) { item in
+                let top = max(0, y(item.start))
+                BreakBlock(item: item, height: min(total, y(item.end ?? model.now)) - top)
+                    .padding(.leading, 4)
+                    .padding(.trailing, 4)
+                    .offset(y: top)
             }
 
             ForEach(model.dayEntries(day)) { entry in
@@ -479,9 +497,17 @@ struct AddTimeSheet: View {
             Form {
                 Picker("Aufgabe", selection: $taskID) {
                     Text("Neue Aufgabe …").tag(UUID?.none)
-                    Divider()
-                    ForEach(candidates) { task in
-                        Text(label(for: task)).tag(UUID?.some(task.id))
+                    if !model.standingTasks.isEmpty {
+                        Section("Standardaufgaben") {
+                            ForEach(model.standingTasks) { task in
+                                Text(task.title).tag(UUID?.some(task.id))
+                            }
+                        }
+                    }
+                    Section("Aufgaben") {
+                        ForEach(candidates) { task in
+                            Text(label(for: task)).tag(UUID?.some(task.id))
+                        }
                     }
                 }
                 if taskID == nil {
@@ -558,9 +584,9 @@ struct AddTimeSheet: View {
 
     /// Aufgaben des Tages, von heute und offene, ohne Doppelte.
     private var candidates: [TaskItem] {
-        let chosen = model.task(draft.taskID).map { [$0] } ?? []
+        let chosen: [TaskItem] = model.task(draft.taskID).map { $0.isStanding ? [] : [$0] } ?? []
         let sameDay = model.dayTasks(LocalDate(day))
-        let open = model.tasks.filter { !$0.isDone }.sorted { $0.createdAt > $1.createdAt }
+        let open = model.tasks.filter { !$0.isDone && !$0.isStanding }.sorted { $0.createdAt > $1.createdAt }
         var seen = Set<UUID>()
         return (chosen + sameDay + model.todayTasks + open).filter { seen.insert($0.id).inserted }.prefix(60).map { $0 }
     }

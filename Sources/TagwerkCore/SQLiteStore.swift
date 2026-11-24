@@ -26,7 +26,7 @@ public final class SQLiteStore: Store {
     private var db: OpaquePointer?
 
     /// Aktuelle Version des Datenbankschemas.
-    public static let schemaVersion = 10
+    public static let schemaVersion = 12
 
     public init(url: URL) throws {
         try FileManager.default.createDirectory(
@@ -288,6 +288,27 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+        if version < 12 {
+            // Pausen und Standardaufgaben (z. B. „Organisatorisches“)
+            try exec("""
+            BEGIN;
+            ALTER TABLE task ADD COLUMN is_standing INTEGER NOT NULL DEFAULT 0;
+            CREATE TABLE IF NOT EXISTS work_break (
+                id TEXT PRIMARY KEY,
+                start_at REAL NOT NULL,
+                end_at REAL,
+                note TEXT NOT NULL DEFAULT '',
+                resume_task_id TEXT,
+                modified_at REAL
+            );
+            CREATE INDEX IF NOT EXISTS work_break_start ON work_break (start_at);
+            CREATE TRIGGER IF NOT EXISTS work_break_inserted AFTER INSERT ON work_break BEGIN UPDATE work_break SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS work_break_updated AFTER UPDATE ON work_break BEGIN UPDATE work_break SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS work_break_deleted AFTER DELETE ON work_break BEGIN INSERT OR REPLACE INTO deleted_record (entity, id, deleted_at) VALUES ('work_break', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+            PRAGMA user_version = 12;
+            COMMIT;
+            """)
+        }
     }
 
     /// Für einen späteren Abgleich: was sich seit `date` geändert hat (Tabelle → IDs) und was gelöscht wurde.
@@ -345,7 +366,7 @@ public final class SQLiteStore: Store {
         SELECT id, title, notes, customer_id, source, external_id, external_url, planned_date,
                estimate_minutes, work_type, psp_element, work_description, status, completed_at,
                sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type,
-               parent_id, ticket_number, ticket_key, sap_activity, long_goal_id, ticket_title
+               parent_id, ticket_number, ticket_key, sap_activity, long_goal_id, ticket_title, is_standing
         FROM task;
         """)
         while try tasks.step() {
@@ -377,7 +398,8 @@ public final class SQLiteStore: Store {
                 ticketKey: tasks.text(23),
                 sapActivity: tasks.text(24),
                 longGoalID: tasks.uuid(25),
-                ticketTitle: tasks.text(26)
+                ticketTitle: tasks.text(26),
+                isStanding: (tasks.int(27) ?? 0) != 0
             ))
         }
 
@@ -482,6 +504,18 @@ public final class SQLiteStore: Store {
             ))
         }
 
+        let breaks = try prepare("SELECT id, start_at, end_at, note, resume_task_id FROM work_break ORDER BY start_at;")
+        while try breaks.step() {
+            guard let id = breaks.uuid(0), let start = breaks.date(1) else { continue }
+            snapshot.breaks.append(WorkBreak(
+                id: id,
+                start: start,
+                end: breaks.date(2),
+                note: breaks.text(3) ?? "",
+                resumeTaskID: breaks.uuid(4)
+            ))
+        }
+
         return snapshot
     }
 
@@ -511,8 +545,8 @@ public final class SQLiteStore: Store {
         INSERT INTO task (id, title, notes, customer_id, source, external_id, external_url, planned_date,
                           estimate_minutes, work_type, psp_element, work_description, status, completed_at,
                           sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type,
-                          parent_id, ticket_number, ticket_key, sap_activity, long_goal_id, ticket_title)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          parent_id, ticket_number, ticket_key, sap_activity, long_goal_id, ticket_title, is_standing)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             notes = excluded.notes,
@@ -538,7 +572,8 @@ public final class SQLiteStore: Store {
             ticket_key = excluded.ticket_key,
             sap_activity = excluded.sap_activity,
             long_goal_id = excluded.long_goal_id,
-            ticket_title = excluded.ticket_title;
+            ticket_title = excluded.ticket_title,
+            is_standing = excluded.is_standing;
         """, [
             .text(task.id.uuidString),
             .text(task.title),
@@ -567,6 +602,7 @@ public final class SQLiteStore: Store {
             .optionalText(task.sapActivity),
             .optionalText(task.longGoalID?.uuidString),
             .optionalText(task.ticketTitle),
+            .int(task.isStanding ? 1 : 0),
         ])
     }
 
@@ -711,6 +747,28 @@ public final class SQLiteStore: Store {
 
     public func deleteAbsence(id: UUID) throws {
         try run("DELETE FROM absence WHERE id = ?;", [.text(id.uuidString)])
+    }
+
+    public func save(_ workBreak: WorkBreak) throws {
+        try run("""
+        INSERT INTO work_break (id, start_at, end_at, note, resume_task_id)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            start_at = excluded.start_at,
+            end_at = excluded.end_at,
+            note = excluded.note,
+            resume_task_id = excluded.resume_task_id;
+        """, [
+            .text(workBreak.id.uuidString),
+            .double(workBreak.start.timeIntervalSince1970),
+            .optionalDouble(workBreak.end?.timeIntervalSince1970),
+            .text(workBreak.note),
+            .optionalText(workBreak.resumeTaskID?.uuidString),
+        ])
+    }
+
+    public func deleteBreak(id: UUID) throws {
+        try run("DELETE FROM work_break WHERE id = ?;", [.text(id.uuidString)])
     }
 
     public func deleteLongGoal(id: UUID) throws {
@@ -885,7 +943,7 @@ final class Statement {
 
 /// Änderungen seit einem Zeitpunkt, als Grundlage für einen Abgleich zwischen Geräten.
 public struct StoreChanges: Equatable, Sendable {
-    public static let tables = ["customer", "task", "time_entry", "psp_element", "booking", "weekly_goal", "long_goal", "absence"]
+    public static let tables = ["customer", "task", "time_entry", "psp_element", "booking", "weekly_goal", "long_goal", "absence", "work_break"]
 
     public struct Deletion: Equatable, Sendable {
         public var entity: String

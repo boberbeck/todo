@@ -22,6 +22,10 @@ public final class TagwerkTools {
     Lange Ziele (z. B. „AZ-305 bestehen“, Werkzeug ziele) haben Zieldatum und Stundenziel; Aufgaben zahlen über den Parameter ziel darauf ein. \
     Krank- und Urlaubstage trägt abwesenheit_eintragen ein (auch mehrere Tage, nur Arbeitstage); offene Aufgaben dieser Tage \
     rücken dabei auf den nächsten Arbeitstag. \
+    Standardaufgaben (Werkzeug standardaufgaben, z. B. „Organisatorisches“) sind immer da und werden nie erledigt; \
+    Zeit darauf erfasst man mit timer_starten und ihrer ID. \
+    Pausen zählen nicht als Arbeitszeit: pause_starten hält den Timer an, pause_beenden macht (auf Wunsch) mit derselben Aufgabe weiter, \
+    pause_eintragen trägt eine vergessene Pause nach und schneidet sie aus der erfassten Arbeitszeit heraus. \
     IDs aus den Antworten sind für Änderungen nötig; die ersten 8 Zeichen reichen. \
     Datumsangaben: heute, morgen, gestern, JJJJ-MM-TT oder TT.MM.JJJJ. Gebucht wird nur in der App selbst.
     """
@@ -176,6 +180,32 @@ public final class TagwerkTools {
                 required: ["datum"]
             ),
             tool(
+                "standardaufgaben",
+                "Standardaufgaben wie „Organisatorisches“ oder „Interne Besprechung“: immer da, nie erledigt, mit heute erfasster Zeit. Zum Erfassen timer_starten mit der ID.",
+                properties: ["anlegen": text("Titel einer neuen Standardaufgabe")]
+            ),
+            tool(
+                "pause_starten",
+                "Pause jetzt: hält den laufenden Timer an. Die Pause zählt nicht als Arbeitszeit."
+            ),
+            tool(
+                "pause_beenden",
+                "Beendet die laufende Pause.",
+                properties: ["weiter": flag("Standard true: danach mit der Aufgabe von vor der Pause weiter")]
+            ),
+            tool(
+                "pause_eintragen",
+                "Eine Pause nachtragen, z. B. die Mittagspause. Erfasste Arbeitszeit in diesem Zeitraum wird dort herausgeschnitten.",
+                properties: [
+                    "datum": text("Tag, Standard: heute"),
+                    "von": text("Beginn als Uhrzeit, z. B. 12:00"),
+                    "bis": text("Ende als Uhrzeit, z. B. 12:30"),
+                    "dauer_min": number("Statt bis: Dauer in Minuten"),
+                    "notiz": text("Optionale Notiz"),
+                ],
+                required: ["von"]
+            ),
+            tool(
                 "wochenziel_anlegen",
                 "Ein Wochenziel anlegen.",
                 properties: [
@@ -208,6 +238,10 @@ public final class TagwerkTools {
         case "abwesenheit_eintragen": return try addAbsence(arguments)
         case "abwesenheiten": return try listAbsences(arguments)
         case "abwesenheit_entfernen": return try removeAbsence(arguments)
+        case "standardaufgaben": return try standingTasks(arguments)
+        case "pause_starten": return try startBreak()
+        case "pause_beenden": return try endBreak(arguments)
+        case "pause_eintragen": return try addBreak(arguments)
         default: throw ToolError("Unbekanntes Werkzeug: \(name)")
         }
     }
@@ -238,6 +272,20 @@ public final class TagwerkTools {
         if let running = runningInfo(snapshot) {
             result["laufender_timer"] = running
         }
+        let standing = DayPlan.standing(snapshot.tasks).compactMap { task -> [String: Any]? in
+            let seconds = TimeMath.tracked(taskID: task.id, on: day, entries: snapshot.entries, now: now(), calendar: calendar)
+            guard seconds > 0 else { return nil }
+            return ["id": task.id.uuidString, "titel": task.title, "erfasst_min": minutes(seconds)]
+        }
+        if !standing.isEmpty { result["standardaufgaben"] = standing }
+        let breaks = Breaks.on(day, snapshot.breaks, now: now(), calendar: calendar)
+        if !breaks.isEmpty {
+            result["pausen"] = breaks.map { describe($0) }
+            result["pause_min"] = minutes(Breaks.total(on: day, breaks: snapshot.breaks, now: now(), calendar: calendar))
+        }
+        if let current = Breaks.running(in: snapshot.breaks) {
+            result["pause_laeuft_seit"] = clock(current.start)
+        }
         return json(result)
     }
 
@@ -254,7 +302,7 @@ public final class TagwerkTools {
             tasks = tasks.filter { $0.customerID == customer.id }
         }
         if bool(arguments, "eingang") == true {
-            tasks = tasks.filter { $0.plannedDate == nil && $0.parentID == nil }
+            tasks = tasks.filter { $0.plannedDate == nil && $0.parentID == nil && !$0.isStanding }
         }
         if let query = string(arguments, "suche") {
             tasks = tasks.filter { task in
@@ -360,6 +408,9 @@ public final class TagwerkTools {
             task.longGoalID = try string(arguments, "ziel").map { try resolveLongGoal($0, in: snapshot.longGoals).id }
         }
         if let done = bool(arguments, "erledigt"), done != task.isDone {
+            if done, task.isStanding {
+                throw ToolError("„\(task.title)“ ist eine Standardaufgabe und wird nie erledigt.")
+            }
             if done {
                 task.status = .done
                 task.completedAt = now()
@@ -380,6 +431,8 @@ public final class TagwerkTools {
         let snapshot = try store.load()
         let task = try resolveTask(string(arguments, "id") ?? "", in: snapshot.tasks)
         guard !task.isDone else { throw ToolError("„\(task.title)“ ist schon erledigt.") }
+        // Wer eine Aufgabe startet, ist aus der Pause zurück
+        try persist(Breaks.end(breaks: snapshot.breaks, at: now()))
         try persist(TimerLogic.start(taskID: task.id, entries: snapshot.entries, at: now()))
         let updated = try store.load()
         return json(["laeuft": runningInfo(updated) ?? [:]])
@@ -670,6 +723,128 @@ public final class TagwerkTools {
         return json(["entfernt": ["datum": day.string, "art": absence.label]])
     }
 
+    // MARK: Standardaufgaben und Pausen
+
+    private func standingTasks(_ arguments: [String: Any]) throws -> String {
+        var snapshot = try store.load()
+        var created: TaskItem?
+        if let title = string(arguments, "anlegen") {
+            let existing = DayPlan.standing(snapshot.tasks)
+            if let same = existing.first(where: { $0.title.caseInsensitiveCompare(title) == .orderedSame }) {
+                created = same
+            } else {
+                let task = TaskItem(title: title, sortIndex: DayPlan.nextSortIndex(in: existing), isStanding: true)
+                try store.save(task)
+                created = task
+                snapshot = try store.load()
+            }
+        }
+        var result: [String: Any] = [
+            "standardaufgaben": DayPlan.standing(snapshot.tasks).map { task -> [String: Any] in
+                var entry = describe(task, in: snapshot, day: today)
+                entry["heute_min"] = minutes(TimeMath.tracked(taskID: task.id, on: today, entries: snapshot.entries, now: now(), calendar: calendar))
+                return entry
+            },
+        ]
+        if let created { result["angelegt"] = created.title }
+        return json(result)
+    }
+
+    private func startBreak() throws -> String {
+        let snapshot = try store.load()
+        if let current = Breaks.running(in: snapshot.breaks) {
+            return json(["meldung": "Die Pause läuft schon seit \(clock(current.start))."])
+        }
+        let running = TimerLogic.running(in: snapshot.entries)
+        try persist(Breaks.start(entries: snapshot.entries, breaks: snapshot.breaks, at: now()))
+        var result: [String: Any] = ["pause_seit": clock(now())]
+        if let task = snapshot.tasks.first(where: { $0.id == running?.taskID }) {
+            result["timer_angehalten"] = task.title
+        }
+        return json(result)
+    }
+
+    private func endBreak(_ arguments: [String: Any]) throws -> String {
+        let snapshot = try store.load()
+        guard let current = Breaks.running(in: snapshot.breaks) else {
+            return json(["meldung": "Es läuft keine Pause."])
+        }
+        try persist(Breaks.end(breaks: snapshot.breaks, at: now()))
+        var result: [String: Any] = ["pause_min": minutes(current.duration(now: now()))]
+        if bool(arguments, "weiter") ?? true,
+           let task = snapshot.tasks.first(where: { $0.id == current.resumeTaskID }), !task.isDone {
+            let updated = try store.load()
+            try persist(TimerLogic.start(taskID: task.id, entries: updated.entries, at: now()))
+            result["weiter_mit"] = task.title
+        }
+        return json(result)
+    }
+
+    private func addBreak(_ arguments: [String: Any]) throws -> String {
+        let snapshot = try store.load()
+        let day = try parseDay(string(arguments, "datum")) ?? today
+        let start = try clockTime(string(arguments, "von"), on: day)
+        let end: Date
+        if let until = string(arguments, "bis") {
+            end = try clockTime(until, on: day)
+        } else if let duration = int(arguments, "dauer_min"), duration > 0 {
+            end = start.addingTimeInterval(TimeInterval(duration * 60))
+        } else {
+            throw ToolError("Bitte „bis“ (Uhrzeit) oder „dauer_min“ angeben.")
+        }
+        guard end > start else { throw ToolError("Das Ende liegt vor dem Beginn.") }
+        guard start < now() else { throw ToolError("Die Pause liegt in der Zukunft.") }
+        let change = Breaks.add(start: start, end: end, note: string(arguments, "notiz") ?? "", entries: snapshot.entries, breaks: snapshot.breaks, now: now())
+        guard let saved = change.savedBreaks.first else { throw ToolError("Die Pause ist zu kurz (mindestens eine Minute).") }
+        try persist(change)
+        var result: [String: Any] = ["pause": describe(saved)]
+        let cut = change.savedEntries.count + change.deletedEntries.count
+        if cut > 0 { result["angepasste_zeiteintraege"] = cut }
+        return json(result)
+    }
+
+    private func describe(_ item: WorkBreak) -> [String: Any] {
+        var entry: [String: Any] = [
+            "beginn": clock(item.start),
+            "ende": item.end.map(clock) ?? "läuft",
+            "minuten": minutes(item.duration(now: now())),
+        ]
+        if !item.note.isEmpty { entry["notiz"] = item.note }
+        return entry
+    }
+
+    /// Uhrzeit wie „12:30“, „12.30“, „12 Uhr“ oder „1230“ an einem Tag.
+    func clockTime(_ text: String?, on day: LocalDate) throws -> Date {
+        guard let raw = text?.lowercased().replacingOccurrences(of: "uhr", with: "").trimmingCharacters(in: .whitespaces), !raw.isEmpty else {
+            throw ToolError("Uhrzeit fehlt.")
+        }
+        let parts = raw.split(whereSeparator: { $0 == ":" || $0 == "." }).map { String($0).trimmingCharacters(in: .whitespaces) }
+        var hour: Int?
+        var minute = 0
+        if parts.count == 2 {
+            hour = Int(parts[0])
+            minute = Int(parts[1]) ?? -1
+        } else if parts.count == 1, let number = Int(parts[0]) {
+            if parts[0].count >= 3 {
+                hour = number / 100
+                minute = number % 100
+            } else {
+                hour = number
+            }
+        }
+        guard let hour, (0...23).contains(hour), (0...59).contains(minute) else {
+            throw ToolError("Uhrzeit „\(text ?? "")“ nicht verstanden, bitte z. B. 12:30.")
+        }
+        return day.startDate(calendar: calendar).addingTimeInterval(TimeInterval(hour * 3600 + minute * 60))
+    }
+
+    private func persist(_ change: BreakChange) throws {
+        for entry in change.deletedEntries { try store.deleteEntry(id: entry.id) }
+        for entry in change.savedEntries { try store.save(entry) }
+        for item in change.deletedBreaks { try store.deleteBreak(id: item.id) }
+        for item in change.savedBreaks { try store.save(item) }
+    }
+
     func resolveLongGoal(_ reference: String, in goals: [LongGoal]) throws -> LongGoal {
         let key = reference.trimmingCharacters(in: .whitespaces)
         if key.count >= 4, let byID = goals.first(where: { $0.id.uuidString.lowercased().hasPrefix(key.lowercased()) }) { return byID }
@@ -734,7 +909,7 @@ public final class TagwerkTools {
             "titel": task.title,
             "status": task.isDone ? "erledigt" : "offen",
             "quelle": task.source.label,
-            "geplant_fuer": task.plannedDate?.string ?? "Eingang",
+            "geplant_fuer": task.isStanding ? "Standardaufgabe" : (task.plannedDate?.string ?? "Eingang"),
             "erfasst_min": minutes(TimeMath.tracked(taskID: task.id, entries: snapshot.entries, now: now())),
         ]
         if let customer = snapshot.customers.first(where: { $0.id == task.customerID }) { entry["kunde"] = customer.name }

@@ -217,12 +217,23 @@ extension View {
         modifier(SurfaceStyle(radius: radius, elevation: elevation, tint: tint, fill: fill))
     }
 
-    /// Einheitlicher Rahmen für Fenster (Sheets): warmer Grund, Orange statt System-Blau, Tagwerk-Knöpfe.
+    /// Einheitlicher Rahmen für Fenster (Sheets): warmer Grund, Orange statt System-Blau, Tagwerk-Knöpfe,
+    /// kein blauer Fokusrahmen um Eingabefelder.
     func tagwerkSheet() -> some View {
         self
             .tint(Theme.accent)
             .buttonStyle(GhostButtonStyle())
             .foregroundStyle(Theme.text)
+            .focusEffectDisabled()
+            .presentationBackground(Theme.surfaceFloating)
+    }
+
+    /// Kleine Fenster am Knopf (Popover) wie Sheets: warmer Grund, kein blauer Fokusrahmen.
+    func tagwerkPopover() -> some View {
+        self
+            .tint(Theme.accent)
+            .foregroundStyle(Theme.text)
+            .focusEffectDisabled()
             .presentationBackground(Theme.surfaceFloating)
     }
 
@@ -263,6 +274,8 @@ private struct GhostButtonBody: View {
             .lineLimit(1)
             .fixedSize()
             .font(.system(size: small ? 12 : 13, weight: .medium))
+            // feste Höhe: Knöpfe mit hohen Symbolen (z. B. Sonnenaufgang) stehen sonst über die anderen hinaus
+            .frame(height: small ? 16 : 18)
             .padding(.horizontal, small ? 8 : 16)
             .padding(.vertical, small ? 4 : 8)
             .foregroundStyle(prominent ? Theme.onAccent : (destructive ? Theme.danger : Theme.text))
@@ -284,6 +297,23 @@ private struct GhostButtonBody: View {
             .contentShape(shape)
             .onHover { hovering = $0 }
             .animation(.easeOut(duration: 0.12), value: hovering)
+    }
+}
+
+/// Eingabefeld im Tagwerk-Stil: leicht vertiefte Fläche mit Haarlinie, ohne den blauen Rahmen des Systems.
+struct TagwerkFieldStyle: TextFieldStyle {
+    var small = false
+
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        let shape = RoundedRectangle(cornerRadius: small ? 7 : Theme.Radius.control, style: .continuous)
+        configuration
+            .textFieldStyle(.plain)
+            .foregroundStyle(Theme.text)
+            .padding(.horizontal, small ? 8 : 10)
+            .padding(.vertical, small ? 4 : 7)
+            .background(shape.fill(Theme.surfaceSunken))
+            .overlay(shape.strokeBorder(Theme.borderStrong, lineWidth: 1))
+            .focusEffectDisabled()
     }
 }
 

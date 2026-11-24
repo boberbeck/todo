@@ -173,6 +173,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
     public var sapActivity: String?
     /// Langes Ziel, auf das die Aufgabe einzahlt (z. B. „AZ-305 bestehen“).
     public var longGoalID: UUID?
+    /// Standardaufgabe wie „Organisatorisches“: immer da, wird nie erledigt, steht nicht im Eingang.
+    public var isStanding: Bool
 
     public init(
         id: UUID = UUID(),
@@ -201,7 +203,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         ticketKey: String? = nil,
         sapActivity: String? = nil,
         longGoalID: UUID? = nil,
-        ticketTitle: String? = nil
+        ticketTitle: String? = nil,
+        isStanding: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -230,6 +233,7 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         self.sapActivity = sapActivity
         self.longGoalID = longGoalID
         self.ticketTitle = ticketTitle
+        self.isStanding = isStanding
     }
 
     public var isDone: Bool { status == .done }

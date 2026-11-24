@@ -74,7 +74,7 @@ struct SettingsTextField: View {
     var body: some View {
         TextField("", text: $text, prompt: Text(prompt))
             .labelsHidden()
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(TagwerkFieldStyle())
             .multilineTextAlignment(.leading)
             .font(monospaced ? .body.monospacedDigit() : .body)
             .frame(width: width)
@@ -140,8 +140,10 @@ struct GeneralSettings: View {
             } header: {
                 Text("Pausen")
             } footer: {
-                SettingsFootnote("Läuft ein Timer und du warst länger weg, fragt Tagwerk, ob die Zeit zählt.")
+                SettingsFootnote("Läuft ein Timer und du warst länger weg, fragt Tagwerk, ob die Zeit zählt oder als Pause eingetragen wird. Pausen machst du sonst oben rechts (Tasse neben dem Timer) oder mit ⇧⌘P; nachtragen geht auf Start unter „Eintragen“ und im Kalender.")
             }
+
+            StandingTasksSection()
 
             Section {
                 LabeledContent("Stand") {
@@ -191,6 +193,71 @@ struct GeneralSettings: View {
             get: { FreeTime.date(on: LocalDate.today(), minutes: minutes.wrappedValue) },
             set: { minutes.wrappedValue = FreeTime.minutesSinceMidnight($0) }
         )
+    }
+}
+
+/// Standardaufgaben wie „Organisatorisches“: anlegen, umbenennen, entfernen.
+struct StandingTasksSection: View {
+    @Environment(AppModel.self) private var model
+    @State private var newTitle = ""
+
+    var body: some View {
+        Section {
+            ForEach(model.standingTasks) { task in
+                HStack(spacing: 8) {
+                    StandingTitleField(task: task)
+                    if let customer = model.customer(task.customerID) {
+                        Text(customer.name)
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondary)
+                    }
+                    if let psp = model.pspLabel(for: task) {
+                        Text(psp)
+                            .font(.caption)
+                            .foregroundStyle(Theme.tertiary)
+                            .lineLimit(1)
+                    }
+                    Button {
+                        model.removeStandingTask(task.id)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Theme.secondary)
+                    .help("Entfernen; schon erfasste Zeiten bleiben erhalten")
+                }
+            }
+            HStack(spacing: 8) {
+                TextField("", text: $newTitle, prompt: Text("Neue Standardaufgabe, z. B. Interne Besprechung"))
+                    .textFieldStyle(TagwerkFieldStyle(small: true))
+                    .onSubmit(add)
+                Button("Hinzufügen", action: add)
+                    .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        } header: {
+            Text("Standardaufgaben")
+        } footer: {
+            SettingsFootnote("Immer da und nie erledigt, z. B. Organisatorisches oder Interne Besprechung. Auf Start startet ein Klick die Zeit; im Kalender stehen sie nach einem Doppelklick zur Wahl. Kunde und SAP-Aufgabe legst du auf Start per Rechtsklick › Details fest.")
+        }
+    }
+
+    private func add() {
+        if model.addStandingTask(title: newTitle) != nil { newTitle = "" }
+    }
+}
+
+/// Titel einer Standardaufgabe zum Umbenennen; gespeichert mit ↩ oder beim Verlassen.
+private struct StandingTitleField: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+    @State private var text = ""
+
+    var body: some View {
+        TextField("", text: $text)
+            .textFieldStyle(.plain)
+            .onAppear { text = task.title }
+            .onSubmit { model.setTitle(text, for: task.id) }
+            .onDisappear { model.setTitle(text, for: task.id) }
     }
 }
 
@@ -280,7 +347,7 @@ struct FocusSettings: View {
                     LabeledContent("Eigene Adresse") {
                         HStack(spacing: 8) {
                             TextField("https://…/stream.mp3", text: $customStream)
-                                .textFieldStyle(.roundedBorder)
+                                .textFieldStyle(TagwerkFieldStyle())
                                 .frame(maxWidth: 260)
                             Button("Übernehmen") {
                                 if let station = RadioStation.custom(customStream) {
@@ -318,7 +385,7 @@ struct FocusSettings: View {
                             get: { music.youtubeLinkText },
                             set: { music.youtubeLinkText = $0 }
                         ))
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(TagwerkFieldStyle())
                         .frame(maxWidth: 320)
                     }
                     if !music.youtubeLinkText.isEmpty {
@@ -507,7 +574,7 @@ struct BookingSettings: View {
                     HStack(spacing: 8) {
                         SecureField("", text: $bydesignPassword, prompt: Text(model.hasByDesignPassword ? "•••••••• (gespeichert)" : "Passwort"))
                             .labelsHidden()
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(TagwerkFieldStyle())
                             .frame(width: 180)
                             .onSubmit(saveByDesignPassword)
                         Button("Sichern", action: saveByDesignPassword)
@@ -747,7 +814,7 @@ struct ManageEngineSettings: View {
                 HStack(spacing: 8) {
                     SecureField("", text: $token, prompt: Text("Schlüssel einfügen"))
                         .labelsHidden()
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(TagwerkFieldStyle())
                         .multilineTextAlignment(.leading)
                         .frame(width: 220)
                         .onSubmit(saveToken)

@@ -120,6 +120,17 @@ enum DemoData {
         // läuft gerade; zusammen mit dem Eintrag davor 0:42:15
         entries.append(TimeEntry(taskID: vpn.id, start: now.addingTimeInterval(-(32 * minute + 15))))
 
+        // Standardaufgaben, eine davon heute schon genutzt; Mittagspause nach dem Server-Update
+        let organisation = TaskItem(title: "Organisatorisches", sortIndex: 1, createdAt: now.addingTimeInterval(-60 * 86400), isStanding: true)
+        tasks += [
+            organisation,
+            TaskItem(title: "Interne Besprechung", sortIndex: 2, createdAt: now.addingTimeInterval(-60 * 86400), isStanding: true),
+            TaskItem(title: "Weiterbildung", sortIndex: 3, createdAt: now.addingTimeInterval(-60 * 86400), isStanding: true),
+        ]
+        entry(organisation, startsAgo: 140 * minute, minutes: 25)
+        let lunchStart = now.addingTimeInterval(-215 * minute)
+        let breaks = [WorkBreak(start: lunchStart, end: lunchStart.addingTimeInterval(30 * minute), note: "Mittag")]
+
         // Eingang
         tasks += [
             TaskItem(title: "Drucker im Lager", customerID: mueller.id, source: .ticket, externalID: "1241",
@@ -233,7 +244,8 @@ enum DemoData {
 
         return Snapshot(customers: [mueller, stadtwerke, becker], tasks: tasks, entries: entries,
                         pspElements: psps, bookings: bookings,
-                        goals: [goalOffer, goalStoerungen, goalMigration, goalNext], longGoals: [azure])
+                        goals: [goalOffer, goalStoerungen, goalMigration, goalNext], longGoals: [azure],
+                        breaks: breaks)
     }
 
     /// So sieht die englische Aufgabenliste aus ByDesign aus (für Bildschirmfotos): mehrere Activities je Aufgabe.

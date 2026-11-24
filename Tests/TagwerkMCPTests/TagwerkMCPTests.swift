@@ -360,3 +360,71 @@ final class MCPAbsenceTests: XCTestCase {
         XCTAssertThrowsError(try tools.call(name: "abwesenheit_eintragen", arguments: ["art": "homeoffice"]))
     }
 }
+
+final class MCPBreakTests: XCTestCase {
+    private var calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        return calendar
+    }()
+
+    func testBreakStopsTimerAndResumes() throws {
+        var now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 24, hour: 12))!
+        let task = TaskItem(title: "Angebot schreiben", plannedDate: LocalDate(year: 2026, month: 11, day: 24))
+        let running = TimeEntry(taskID: task.id, start: now.addingTimeInterval(-3600))
+        let store = InMemoryStore(Snapshot(tasks: [task], entries: [running]))
+        let tools = TagwerkTools(store: store, calendar: calendar, now: { now })
+
+        let started = try tools.call(name: "pause_starten", arguments: [:])
+        XCTAssertTrue(started.contains("Angebot schreiben"), started)
+        XCTAssertNil(TimerLogic.running(in: try store.load().entries))
+        XCTAssertNotNil(Breaks.running(in: try store.load().breaks))
+
+        now = now.addingTimeInterval(30 * 60)
+        let ended = try tools.call(name: "pause_beenden", arguments: [:])
+        XCTAssertTrue(ended.contains("Angebot schreiben"), ended)
+        let snapshot = try store.load()
+        XCTAssertNil(Breaks.running(in: snapshot.breaks))
+        XCTAssertEqual(TimerLogic.running(in: snapshot.entries)?.taskID, task.id)
+
+        let overview = try tools.call(name: "tagesuebersicht", arguments: [:])
+        XCTAssertTrue(overview.contains("pause_min"), overview)
+    }
+
+    func testAddingBreakCutsWork() throws {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 24, hour: 15))!
+        let day = LocalDate(year: 2026, month: 11, day: 24)
+        let task = TaskItem(title: "Server", plannedDate: day)
+        let start = calendar.date(from: DateComponents(year: 2026, month: 11, day: 24, hour: 11))!
+        let entry = TimeEntry(taskID: task.id, start: start, end: start.addingTimeInterval(3 * 3600))
+        let store = InMemoryStore(Snapshot(tasks: [task], entries: [entry]))
+        let tools = TagwerkTools(store: store, calendar: calendar, now: { now })
+
+        let answer = try tools.call(name: "pause_eintragen", arguments: ["von": "12:00", "dauer_min": 30])
+        XCTAssertTrue(answer.contains("angepasste_zeiteintraege"), answer)
+        let snapshot = try store.load()
+        XCTAssertEqual(snapshot.breaks.count, 1)
+        XCTAssertEqual(snapshot.entries.count, 2)
+        XCTAssertEqual(TimeMath.tracked(on: day, entries: snapshot.entries, now: now, calendar: calendar), 2.5 * 3600)
+        XCTAssertThrowsError(try tools.call(name: "pause_eintragen", arguments: ["von": "25:00", "bis": "26:00"]))
+        XCTAssertThrowsError(try tools.call(name: "pause_eintragen", arguments: ["von": "16:00", "bis": "17:00"]))
+        XCTAssertEqual(try tools.clockTime("1230", on: day), calendar.date(from: DateComponents(year: 2026, month: 11, day: 24, hour: 12, minute: 30)))
+        XCTAssertEqual(try tools.clockTime("9 Uhr", on: day), calendar.date(from: DateComponents(year: 2026, month: 11, day: 24, hour: 9)))
+    }
+
+    func testStandingTasks() throws {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 24, hour: 9))!
+        let store = InMemoryStore()
+        let tools = TagwerkTools(store: store, calendar: calendar, now: { now })
+        let answer = try tools.call(name: "standardaufgaben", arguments: ["anlegen": "Organisatorisches"])
+        XCTAssertTrue(answer.contains("Standardaufgabe"), answer)
+        let task = try XCTUnwrap(try store.load().tasks.first)
+        XCTAssertTrue(task.isStanding)
+        // zweimal anlegen: bleibt eine
+        _ = try tools.call(name: "standardaufgaben", arguments: ["anlegen": "organisatorisches"])
+        XCTAssertEqual(try store.load().tasks.count, 1)
+        XCTAssertThrowsError(try tools.call(name: "aufgabe_aendern", arguments: ["id": String(task.id.uuidString.prefix(8)), "erledigt": true]))
+        let inbox = try tools.call(name: "aufgaben", arguments: ["eingang": true])
+        XCTAssertFalse(inbox.contains("Organisatorisches"), inbox)
+    }
+}

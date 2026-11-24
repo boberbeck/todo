@@ -278,7 +278,7 @@ struct TicketPicker: View {
                 .font(.system(size: 14, weight: .medium))
                 .lineLimit(1)
             TextField("Ticketnummer oder Betreff, auch von Kollegen", text: $query)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(TagwerkFieldStyle())
                 .focused($focused)
                 .onSubmit {
                     if let first = found.first {

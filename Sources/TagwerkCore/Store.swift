@@ -11,6 +11,8 @@ public struct Snapshot: Sendable, Equatable {
     public var longGoals: [LongGoal]
     /// Krank- und Urlaubstage
     public var absences: [Absence]
+    /// Pausen
+    public var breaks: [WorkBreak]
 
     public init(
         customers: [Customer] = [],
@@ -20,7 +22,8 @@ public struct Snapshot: Sendable, Equatable {
         bookings: [Booking] = [],
         goals: [WeeklyGoal] = [],
         longGoals: [LongGoal] = [],
-        absences: [Absence] = []
+        absences: [Absence] = [],
+        breaks: [WorkBreak] = []
     ) {
         self.customers = customers
         self.tasks = tasks
@@ -30,6 +33,7 @@ public struct Snapshot: Sendable, Equatable {
         self.goals = goals
         self.longGoals = longGoals
         self.absences = absences
+        self.breaks = breaks
     }
 }
 
@@ -48,6 +52,8 @@ public protocol Store: AnyObject {
     func deleteLongGoal(id: UUID) throws
     func save(_ absence: Absence) throws
     func deleteAbsence(id: UUID) throws
+    func save(_ workBreak: WorkBreak) throws
+    func deleteBreak(id: UUID) throws
     /// Legt eine Sicherungskopie der Daten an.
     func backup(to url: URL) throws
     /// Löscht die Aufgabe, ihre Zeiteinträge und Buchungen.
@@ -120,6 +126,14 @@ public final class InMemoryStore: Store {
 
     public func deleteAbsence(id: UUID) throws {
         snapshot.absences.removeAll { $0.id == id }
+    }
+
+    public func save(_ workBreak: WorkBreak) throws {
+        upsert(workBreak, into: &snapshot.breaks)
+    }
+
+    public func deleteBreak(id: UUID) throws {
+        snapshot.breaks.removeAll { $0.id == id }
     }
 
     public func backup(to url: URL) throws {}

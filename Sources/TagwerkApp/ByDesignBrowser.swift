@@ -304,7 +304,7 @@ struct ByDesignBrowserView: View {
                 }
                 .help("Neu laden")
                 TextField("Adresse von ByDesign, z. B. https://my123456.sapbydesign.com", text: $address)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(TagwerkFieldStyle())
                     .controlSize(.small)
                     .onSubmit(open)
                 Button("Öffnen", action: open)

@@ -83,7 +83,7 @@ struct NewGoalCard: View {
                     .fixedSize()
                 HStack(spacing: 4) {
                     TextField("Stunden", text: $hours)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(TagwerkFieldStyle())
                         .frame(width: 70)
                     Text("h Ziel (optional)")
                         .foregroundStyle(Theme.secondary)

@@ -5,7 +5,9 @@ import TagwerkCore
 /// Neue Aufgabe direkt im Kalender: erscheint nach Doppelklick in eine freie Stelle, der Titel wird gleich eingetippt.
 /// ↩ legt an (vorbei: als erfasste Zeit, noch offen: als Zeitblock), Esc oder ein leeres Feld bricht ab,
 /// „…“ öffnet „Zeit nachtragen“ für eine bestehende Aufgabe, einen Kunden oder genaue Zeiten.
+/// Ist der Zeitraum schon vorbei, gibt es darunter Abkürzungen: Pause und die Standardaufgaben (z. B. „Organisatorisches“).
 struct NewCalendarItem: View {
+    @Environment(AppModel.self) private var model
     let slot: DateInterval
     let top: CGFloat
     let height: CGFloat
@@ -42,6 +44,21 @@ struct NewCalendarItem: View {
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(Theme.secondary)
                 .lineLimit(1)
+            if isPast {
+                FlowLayout(spacing: 4) {
+                    shortcut("Pause", systemImage: "cup.and.saucer") {
+                        _ = model.addBreak(start: slot.start, end: slot.end)
+                    }
+                    .help("Als Pause eintragen")
+                    ForEach(model.standingTasks.prefix(5)) { task in
+                        shortcut(task.title, systemImage: nil) {
+                            model.addEntry(taskID: task.id, start: slot.start, end: min(slot.end, Date()))
+                        }
+                        .help("Als „\(task.title)“ erfassen")
+                    }
+                }
+                .padding(.top, 2)
+            }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
@@ -71,6 +88,29 @@ struct NewCalendarItem: View {
                 finish()
             }
         }
+    }
+
+    /// Abkürzung unter dem Feld: trägt sofort ein und schließt.
+    private func shortcut(_ title: String, systemImage: String?, action: @escaping () -> Void) -> some View {
+        Button {
+            guard !finished else { return }
+            finished = true
+            action()
+            cancel()
+        } label: {
+            HStack(spacing: 3) {
+                if let systemImage { Image(systemName: systemImage) }
+                Text(title).lineLimit(1)
+            }
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Theme.surfaceRaised))
+            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Theme.border))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.text)
     }
 
     private func finish() {

@@ -343,7 +343,7 @@ struct SAPTaskPicker: View {
         let found = results
         VStack(alignment: .leading, spacing: 8) {
             TextField("Suchen: Nummer, Name, Tätigkeit oder Kunde", text: $query)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(TagwerkFieldStyle())
                 .focused($focused)
                 .onSubmit {
                     if let first = found.first {

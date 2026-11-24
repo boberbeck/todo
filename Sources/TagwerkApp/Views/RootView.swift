@@ -102,6 +102,10 @@ struct RootView: View {
             AbsenceSheet(draft: draft)
                 .tagwerkSheet()
         }
+        .sheet(item: $model.breakDraft) { draft in
+            BreakSheet(draft: draft)
+                .tagwerkSheet()
+        }
         .sheet(item: $model.editingEntry) { entry in
             EditEntrySheet(entry: entry)
                 .tagwerkSheet()
@@ -265,38 +269,75 @@ struct RunningTimerPill: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if let task = model.runningTask {
-            Button {
-                model.openFocus(task.id)
-            } label: {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(Theme.accent)
-                        .frame(width: 7, height: 7)
-                    Text(TimeMath.format(model.tracked(taskID: task.id, now: model.now), showSeconds: true))
-                        .font(.system(.callout, design: .rounded).weight(.medium))
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.text)
-                    Text(task.title)
-                        .lineLimit(1)
-                        .foregroundStyle(Theme.secondary)
-                        .frame(maxWidth: 200, alignment: .leading)
-                    if let pomodoro = model.pomodoro, pomodoro.phase == .work {
-                        Label(PomodoroText.clock(model.pomodoroRemaining), systemImage: "timer")
+        if let pause = model.runningBreak {
+            HStack(spacing: 8) {
+                Button {
+                    model.selection = .focus
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "cup.and.saucer.fill")
+                        Text("Pause \(TimeMath.format(pause.duration(now: model.now), showSeconds: true))")
                             .monospacedDigit()
-                            .foregroundStyle(Theme.accent)
-                            .help("Pomodoro: so lange bis zur Pause")
                     }
+                    .font(.callout)
+                    .foregroundStyle(Theme.text)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Color.white.opacity(0.06)))
+                    .overlay(Capsule().strokeBorder(Theme.border))
                 }
-                .font(.callout)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Capsule().fill(Theme.accent.opacity(0.12)))
-                .overlay(Capsule().strokeBorder(Theme.accent.opacity(0.35)))
+                .buttonStyle(.plain)
+                .help("Pause – im Fokus öffnen")
+                Button {
+                    model.endBreak(resume: true)
+                } label: {
+                    Label(model.taskAfterBreak == nil ? "Pause beenden" : "Weiter", systemImage: model.taskAfterBreak == nil ? "stop.fill" : "play.fill")
+                }
+                .buttonStyle(GhostButtonStyle(prominent: model.taskAfterBreak != nil, small: true))
+                .help(model.taskAfterBreak.map { "Weiter mit „\($0.title)“ (⌘T)" } ?? "Pause beenden")
             }
-            .buttonStyle(.plain)
             .padding(.trailing, 8)
-            .help("Läuft – im Fokus öffnen")
+        } else if let task = model.runningTask {
+            HStack(spacing: 6) {
+                Button {
+                    model.openFocus(task.id)
+                } label: {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Theme.accent)
+                            .frame(width: 7, height: 7)
+                        Text(TimeMath.format(model.tracked(taskID: task.id, now: model.now), showSeconds: true))
+                            .font(.system(.callout, design: .rounded).weight(.medium))
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.text)
+                        Text(task.title)
+                            .lineLimit(1)
+                            .foregroundStyle(Theme.secondary)
+                            .frame(maxWidth: 200, alignment: .leading)
+                        if let pomodoro = model.pomodoro, pomodoro.phase == .work {
+                            Label(PomodoroText.clock(model.pomodoroRemaining), systemImage: "timer")
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.accent)
+                                .help("Pomodoro: so lange bis zur Pause")
+                        }
+                    }
+                    .font(.callout)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Theme.accent.opacity(0.12)))
+                    .overlay(Capsule().strokeBorder(Theme.accent.opacity(0.35)))
+                }
+                .buttonStyle(.plain)
+                .help("Läuft – im Fokus öffnen")
+                Button {
+                    model.startBreak()
+                } label: {
+                    Image(systemName: "cup.and.saucer")
+                }
+                .buttonStyle(IconButtonStyle(size: 28))
+                .help("Pause machen: Timer anhalten, danach mit einem Klick weiter (⇧⌘P)")
+            }
+            .padding(.trailing, 8)
         } else if let pomodoro = model.pomodoro, pomodoro.phase.isBreak || pomodoro.phase == .ready {
             Button {
                 model.selection = .focus
@@ -351,7 +392,8 @@ struct IdlePromptView: View {
 
     var body: some View {
         let task = model.task(prompt.taskID)
-        let others = model.todayTasks.filter { $0.id != prompt.taskID && !$0.isDone }
+        // Heute geplante Aufgaben und Standardaufgaben (z. B. ein Telefonat unter „Organisatorisches“)
+        let others = (model.todayTasks + model.standingTasks).filter { $0.id != prompt.taskID && !$0.isDone }
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 16) {
                 Image(systemName: "cup.and.saucer.fill")
@@ -380,9 +422,10 @@ struct IdlePromptView: View {
                 .fixedSize()
                 .disabled(others.isEmpty)
                 Spacer()
-                Button("Pause abziehen") { model.resolveIdle(.discard) }
+                Button("Als Pause eintragen") { model.resolveIdle(.discard) }
                     .buttonStyle(GhostButtonStyle(prominent: true))
                     .keyboardShortcut(.defaultAction)
+                    .help("Die Zeit zählt nicht und steht als Pause im Kalender; der Timer läuft ab jetzt weiter")
             }
         }
         .padding(24)

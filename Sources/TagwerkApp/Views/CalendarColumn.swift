@@ -179,6 +179,14 @@ struct CalendarColumn: View {
                     .offset(y: top)
             }
 
+            ForEach(model.breaks(on: model.today)) { item in
+                let top = max(0, y(item.start))
+                BreakBlock(item: item, height: y(item.end ?? model.now) - top)
+                    .padding(.leading, labelWidth + 2)
+                    .padding(.trailing, 8)
+                    .offset(y: top)
+            }
+
             ForEach(model.entriesToday) { entry in
                 let top = max(0, y(entry.start))
                 RoundedRectangle(cornerRadius: 2)

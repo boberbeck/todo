@@ -403,7 +403,7 @@ struct SAPSyncSheet: View {
                     Text("Neuer Kunde für \(group.project)")
                         .font(.system(size: 14, weight: .medium))
                     TextField("Name des Kunden", text: $newCustomerName)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(TagwerkFieldStyle())
                         .frame(width: 260)
                         .onSubmit { confirmNewCustomer(for: group.project) }
                     HStack {

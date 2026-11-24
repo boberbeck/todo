@@ -79,7 +79,7 @@ struct CustomersView: View {
             Text("Neuer Kunde")
                 .font(.system(size: 14, weight: .medium))
             TextField("Name", text: $newName)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(TagwerkFieldStyle())
                 .frame(width: 260)
                 .onSubmit(add)
             HStack {
@@ -291,7 +291,7 @@ struct CustomerDetailContent: View {
                 Image(systemName: "ticket")
                     .foregroundStyle(.secondary)
                 TextField("Konto in ManageEngine (ordnet Tickets diesem Kunden zu)", text: $account)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(TagwerkFieldStyle())
                     .frame(maxWidth: 420)
                     .onSubmit(saveAccount)
             }
@@ -311,11 +311,11 @@ struct CustomerDetailContent: View {
                     }
                     HStack(spacing: 8) {
                         TextField("PSP-Element, z. B. Projektaufgabe-ID", text: $newPSPCode)
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(TagwerkFieldStyle())
                             .frame(width: 220)
                             .onSubmit(addPSP)
                         TextField("Bezeichnung (optional)", text: $newPSPTitle)
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(TagwerkFieldStyle())
                             .onSubmit(addPSP)
                         Button("Hinzufügen", action: addPSP)
                             .disabled(newPSPCode.trimmingCharacters(in: .whitespaces).isEmpty)

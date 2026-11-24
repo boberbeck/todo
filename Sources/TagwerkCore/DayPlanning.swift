@@ -12,12 +12,25 @@ public enum DayPlan {
             }
     }
 
-    /// Offene Aufgaben ohne Tag, neueste zuerst.
+    /// Offene Aufgaben ohne Tag, neueste zuerst. Standardaufgaben gehören nicht dazu.
     public static func inbox(_ tasks: [TaskItem]) -> [TaskItem] {
         tasks
-            .filter { $0.plannedDate == nil && !$0.isDone && $0.parentID == nil }
+            .filter { $0.plannedDate == nil && !$0.isDone && $0.parentID == nil && !$0.isStanding }
             .sorted { $0.createdAt > $1.createdAt }
     }
+
+    /// Standardaufgaben (z. B. „Organisatorisches“) in ihrer Reihenfolge.
+    public static func standing(_ tasks: [TaskItem]) -> [TaskItem] {
+        tasks
+            .filter { $0.isStanding && $0.parentID == nil }
+            .sorted { lhs, rhs in
+                if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
+                return lhs.createdAt < rhs.createdAt
+            }
+    }
+
+    /// Vorschläge beim ersten Start: Zeit, die zu keinem Kunden-Auftrag gehört.
+    public static let defaultStandingTitles = ["Organisatorisches", "Interne Besprechung", "Weiterbildung"]
 
     /// Summe der Schätzungen in Minuten.
     public static func plannedMinutes(_ tasks: [TaskItem]) -> Int {
@@ -34,7 +47,7 @@ public enum DayPlan {
         var nextIndex = nextSortIndex(in: tasks.filter { $0.plannedDate == today })
         var changed: [TaskItem] = []
         let stale = tasks
-            .filter { !$0.isDone && $0.parentID == nil && ($0.plannedDate.map { $0 < today } ?? false) }
+            .filter { !$0.isDone && !$0.isStanding && $0.parentID == nil && ($0.plannedDate.map { $0 < today } ?? false) }
             .sorted { ($0.plannedDate!, $0.sortIndex) < ($1.plannedDate!, $1.sortIndex) }
         for var task in stale {
             task.plannedDate = today

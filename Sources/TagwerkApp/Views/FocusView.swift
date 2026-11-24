@@ -34,7 +34,9 @@ struct FocusView: View {
 
     @ViewBuilder
     private var focusContent: some View {
-        if let pomodoro = model.pomodoro, pomodoro.phase.isBreak || pomodoro.phase == .ready {
+        if let pause = model.runningBreak {
+            BreakPane(item: pause)
+        } else if let pomodoro = model.pomodoro, pomodoro.phase.isBreak || pomodoro.phase == .ready {
             PomodoroBreakPane(state: pomodoro)
         } else if let task = model.focusTask {
             FocusTaskPane(task: task)
@@ -138,7 +140,8 @@ struct FocusTaskPane: View {
                     Label("Erledigt", systemImage: "checkmark")
                 }
                 .buttonStyle(GhostButtonStyle())
-                .help("Erledigt (⌘↩), danach kommt die nächste Aufgabe")
+                .disabled(task.isStanding)
+                .help(task.isStanding ? "Standardaufgaben werden nie erledigt" : "Erledigt (⌘↩), danach kommt die nächste Aufgabe")
 
                 Button {
                     model.toggleTimer(for: task.id)
@@ -159,7 +162,12 @@ struct FocusTaskPane: View {
                 .help("Andere Aufgabe von heute in den Fokus holen")
             }
 
-            BackdatedStartMenu(task: task, asButton: true)
+            HStack(spacing: 24) {
+                BackdatedStartMenu(task: task, asButton: true)
+                if running {
+                    StartBreakButton()
+                }
+            }
 
             if !task.isSubtask, !task.isDone, !model.subtasks(of: task.id).isEmpty || showsSubtaskField {
                 VStack(alignment: .trailing, spacing: 6) {
@@ -453,6 +461,7 @@ struct MusicPicker: View {
         .frame(width: 360)
         .padding(20)
         .background(Theme.surfaceFloating)
+        .focusEffectDisabled()
         .presentationBackground(Theme.surfaceFloating)
         .onAppear {
             if music.playlists.isEmpty, music.isDemo { music.loadPlaylists() }
@@ -534,7 +543,7 @@ struct MusicPicker: View {
     private func youtubeList(_ music: FocusMusic) -> some View {
         HStack(spacing: 8) {
             TextField("YouTube-Link einfügen", text: $youtubeDraft)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(TagwerkFieldStyle())
                 .onSubmit { playDraft(music) }
             Button("Abspielen") { playDraft(music) }
                 .buttonStyle(GhostButtonStyle(small: true))

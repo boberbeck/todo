@@ -31,7 +31,7 @@ struct SunShape: Shape {
 }
 
 /// Das Tagesband auf Start: der Arbeitstag als Leiste von Arbeitsbeginn bis Feierabend.
-/// Erfasste Zeit in den Farben der Kunden, geplante Zeitblöcke als Umriss, Termine als ruhige Fläche,
+/// Erfasste Zeit in den Farben der Kunden, geplante Zeitblöcke als Umriss, Termine als ruhige Fläche, Pausen schraffiert,
 /// der Sonnenstand zeigt, wo der Tag gerade steht. Hier sitzt die Farbe der Startseite.
 struct DayBand: View {
     @Environment(AppModel.self) private var model
@@ -69,6 +69,16 @@ struct DayBand: View {
                             BandSegment(kind: .planned, x: scale.x(interval.start), width: scale.width(from: interval.start, to: interval.end), height: barHeight)
                                 .offset(y: sunSpace)
                                 .help("Geplant: \(task.title) · \(Self.clock(interval.start))")
+                        }
+                    }
+
+                    ForEach(model.breaks(on: model.today)) { item in
+                        let start = max(item.start, window.start)
+                        let end = min(item.end ?? now, window.end)
+                        if end > start {
+                            BandSegment(kind: .pause, x: scale.x(start), width: scale.width(from: start, to: end), height: barHeight)
+                                .offset(y: sunSpace)
+                                .help("Pause · \(Self.clock(item.start))–\(item.end.map(Self.clock) ?? "läuft")")
                         }
                     }
 
@@ -189,6 +199,7 @@ private struct BandSegment: View {
         case event
         case planned
         case tracked(Color)
+        case pause
     }
 
     let kind: Kind
@@ -206,6 +217,12 @@ private struct BandSegment: View {
                 shape.strokeBorder(Theme.borderStrong, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
             case .tracked(let color):
                 shape.fill(color)
+            case .pause:
+                ZStack {
+                    shape.fill(Theme.surfaceSunken)
+                    Hatch(color: Theme.secondary.opacity(0.4), spacing: 5)
+                }
+                .clipShape(shape)
             }
         }
         .frame(width: max(2, width), height: height)

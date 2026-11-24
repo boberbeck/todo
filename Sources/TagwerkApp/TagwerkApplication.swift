@@ -11,6 +11,8 @@ struct TagwerkApplication: App {
         Window("Tagwerk", id: "main") {
             RootView()
                 .environment(model)
+                // Kein blauer Systemrahmen um Eingabefelder; Felder zeigen den Fokus selbst
+                .focusEffectDisabled()
                 .frame(minWidth: 960, minHeight: 600)
         }
         .defaultSize(width: 1180, height: 760)
@@ -23,6 +25,7 @@ struct TagwerkApplication: App {
         MenuBarExtra {
             MenuBarContent()
                 .environment(model)
+                .focusEffectDisabled()
         } label: {
             MenuBarLabel(model: model)
         }
@@ -37,6 +40,7 @@ struct TagwerkApplication: App {
         Settings {
             SettingsView()
                 .environment(model)
+                .focusEffectDisabled()
                 .tint(Theme.accent)
                 .preferredColorScheme(.dark)
         }
@@ -77,6 +81,16 @@ struct TagwerkCommands: Commands {
             Button("Zeit nachtragen …") { model.beginTimeEntry(for: model.focusTask?.id) }
                 .keyboardShortcut("t", modifiers: [.command, .option])
             Divider()
+            Button(model.runningBreak == nil ? "Pause machen" : "Pause beenden") {
+                if model.runningBreak == nil {
+                    model.startBreak()
+                } else {
+                    model.endBreak(resume: true)
+                }
+            }
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+            Button("Pause nachtragen …") { model.beginBreakEntry() }
+            Divider()
             Button("SAP-Aufgaben abgleichen …") { model.showsSAPSync = true }
         }
         CommandMenu("Gehe zu") {
@@ -112,6 +126,8 @@ enum Preferences {
     static let planningOnLaunchKey = "showPlanningOnLaunch"
     static let lastPlannedDayKey = "lastPlannedDay"
     static let showInboxKey = "showInbox"
+    /// Standardaufgaben einmal angelegt (danach nicht wieder, auch wenn man sie löscht)
+    static let standingSeededKey = "standingTasksSeeded"
     static let roundingStepKey = "roundingStepMinutes"
     static let roundingModeKey = "roundingMode"
     static let meBaseURLKey = "manageEngineBaseURL"
