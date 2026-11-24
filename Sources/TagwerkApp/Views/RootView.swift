@@ -439,7 +439,7 @@ struct IdlePromptView: View {
             }
         }
         .padding(24)
-        .frame(width: prompt.minutes >= 20 ? 660 : 540)
+        .frame(width: prompt.minutes >= 20 ? 740 : 560)
     }
 }
 

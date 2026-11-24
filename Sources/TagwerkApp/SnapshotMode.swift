@@ -126,7 +126,7 @@ enum SnapshotMode {
         // Neue Aufgabe direkt im Kalender beschriften
         model.selection = .calendar
         try? await Task.sleep(for: .seconds(1.2))
-        model.calendarNewSlot = model.proposedSlot(near: Date().addingTimeInterval(-50 * 60))
+        model.calendarNewSlot = model.proposedSlot(near: Date().addingTimeInterval(-75 * 60))
         try? await Task.sleep(for: .seconds(1.5))
         log("Neue Aufgabe im Kalender: \(model.calendarNewSlot == nil ? "zu" : "offen")")
         await capture(window, name: "kalender-neu", in: directory)
@@ -136,7 +136,7 @@ enum SnapshotMode {
         // Dasselbe im Tageskalender auf Start
         model.selection = .today
         try? await Task.sleep(for: .seconds(1.2))
-        model.calendarNewSlot = model.proposedSlot(near: Date().addingTimeInterval(-50 * 60))
+        model.calendarNewSlot = model.proposedSlot(near: Date().addingTimeInterval(-75 * 60))
         try? await Task.sleep(for: .seconds(1.5))
         await capture(window, name: "start-neu", in: directory)
         model.calendarNewSlot = nil

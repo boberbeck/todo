@@ -120,7 +120,7 @@ enum DemoData {
         // läuft gerade; zusammen mit dem Eintrag davor 0:42:15
         entries.append(TimeEntry(taskID: vpn.id, start: now.addingTimeInterval(-(32 * minute + 15))))
 
-        // Standardaufgaben, eine davon heute schon genutzt; Mittagspause nach dem Server-Update
+        // Standardaufgaben, eine davon heute schon genutzt
         let organisation = TaskItem(title: "Organisatorisches", sortIndex: 1, createdAt: now.addingTimeInterval(-60 * 86400), isStanding: true)
         tasks += [
             organisation,
@@ -128,8 +128,9 @@ enum DemoData {
             TaskItem(title: "Weiterbildung", sortIndex: 3, createdAt: now.addingTimeInterval(-60 * 86400), isStanding: true),
         ]
         entry(organisation, startsAgo: 140 * minute, minutes: 25)
-        let lunchStart = now.addingTimeInterval(-215 * minute)
-        let breaks = [WorkBreak(start: lunchStart, end: lunchStart.addingTimeInterval(30 * minute), note: "Mittag")]
+        // Mittagspause direkt vor der laufenden Aufgabe
+        let lunchStart = now.addingTimeInterval(-62 * minute)
+        let breaks = [WorkBreak(start: lunchStart, end: lunchStart.addingTimeInterval(29 * minute), note: "Mittag")]
 
         // Eingang
         tasks += [
