@@ -10,25 +10,14 @@ struct FocusView: View {
         VStack(spacing: 0) {
             Color.clear.frame(height: 8)
 
-            Group {
-                if let pomodoro = model.pomodoro, pomodoro.phase.isBreak || pomodoro.phase == .ready {
-                    PomodoroBreakPane(state: pomodoro)
-                } else if let task = model.focusTask {
-                    FocusTaskPane(task: task)
-                        .id(task.id)
-                } else {
-                    VStack(spacing: 16) {
-                        Text("Keine Aufgabe für den Fokus")
-                            .font(.system(size: 26, weight: .regular))
-                        Text("Plane auf Start eine Aufgabe für heute ein, dann geht es hier los.")
-                            .foregroundStyle(Theme.secondary)
-                        Button("Zur Startseite") { model.selection = .today }
-                            .buttonStyle(GhostButtonStyle())
-                            .padding(.top, 6)
-                    }
+            // Passt der Inhalt nicht ins Fenster (kleines Fenster, Titelleiste), lässt er sich scrollen statt abgeschnitten zu werden
+            GeometryReader { geometry in
+                ScrollView {
+                    focusContent
+                        .frame(maxWidth: .infinity, minHeight: geometry.size.height)
                 }
+                .scrollIndicators(.hidden)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             VStack(spacing: 16) {
                 FocusMusicBar()
@@ -41,6 +30,26 @@ struct FocusView: View {
         .background(Theme.background)
         .onAppear { model.music.startWatching() }
         .onDisappear { model.music.stopWatching() }
+    }
+
+    @ViewBuilder
+    private var focusContent: some View {
+        if let pomodoro = model.pomodoro, pomodoro.phase.isBreak || pomodoro.phase == .ready {
+            PomodoroBreakPane(state: pomodoro)
+        } else if let task = model.focusTask {
+            FocusTaskPane(task: task)
+                .id(task.id)
+        } else {
+            VStack(spacing: 16) {
+                Text("Keine Aufgabe für den Fokus")
+                    .font(.system(size: 26, weight: .regular))
+                Text("Plane auf Start eine Aufgabe für heute ein, dann geht es hier los.")
+                    .foregroundStyle(Theme.secondary)
+                Button("Zur Startseite") { model.selection = .today }
+                    .buttonStyle(GhostButtonStyle())
+                    .padding(.top, 6)
+            }
+        }
     }
 }
 
