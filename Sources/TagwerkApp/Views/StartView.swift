@@ -18,6 +18,7 @@ struct StartView: View {
                     AbsenceBanner(absence: absence)
                 }
                 DayBand()
+                StandingTaskStrip()
             }
             .padding(.horizontal, 40)
             .padding(.top, 32)
@@ -153,8 +154,6 @@ struct StartTaskColumn: View {
                 for id in ids { model.move(id, to: model.today, before: nil) }
                 return !ids.isEmpty
             }
-
-            StandingTaskStrip()
 
             if !done.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {

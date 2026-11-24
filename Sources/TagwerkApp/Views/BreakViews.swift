@@ -87,6 +87,7 @@ struct BreakSheet: View {
     @State private var to = Date()
     @State private var note = ""
     @State private var confirmsDelete = false
+    @FocusState private var noteFocused: Bool
 
     private var isEditing: Bool { draft.breakID != nil }
 
@@ -130,6 +131,7 @@ struct BreakSheet: View {
                     }
                 }
                 TextField("Notiz", text: $note, prompt: Text("optional, z. B. Mittag"))
+                    .focused($noteFocused)
                 LabeledContent("Dauer") {
                     Text(minutes > 0 ? "\(TimeMath.format(minutes: minutes)) h" : "Ende liegt vor dem Beginn")
                         .monospacedDigit()
@@ -171,6 +173,8 @@ struct BreakSheet: View {
             from = draft.start
             to = draft.end
             note = draft.note
+            // Fokus ins Notizfeld statt auf das Datum (dort wäre sonst gleich ein Teil markiert)
+            DispatchQueue.main.async { noteFocused = true }
         }
         .confirmationDialog("Pause löschen?", isPresented: $confirmsDelete) {
             Button("Löschen", role: .destructive) {
@@ -261,7 +265,7 @@ struct StartBreakButton: View {
 
 // MARK: Standardaufgaben
 
-/// Standardaufgaben auf Start (z. B. „Organisatorisches“): ein Klick startet die Zeit.
+/// Standardaufgaben oben auf Start (z. B. „Organisatorisches“): ein Klick startet die Zeit.
 struct StandingTaskStrip: View {
     @Environment(AppModel.self) private var model
     @State private var addsNew = false
@@ -269,8 +273,10 @@ struct StandingTaskStrip: View {
 
     var body: some View {
         let standing = model.standingTasks
-        VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "Standardaufgaben", detail: "ein Klick startet die Zeit")
+        HStack(alignment: .center, spacing: 16) {
+            SectionLabel(text: "Standardaufgaben")
+                .fixedSize()
+                .help("Immer da, nie erledigt: ein Klick startet die Zeit, noch ein Klick stoppt sie")
             FlowLayout(spacing: 8) {
                 ForEach(standing) { task in
                     StandingChip(task: task)

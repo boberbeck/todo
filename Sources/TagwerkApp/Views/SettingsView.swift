@@ -230,6 +230,9 @@ struct StandingTasksSection: View {
             HStack(spacing: 8) {
                 TextField("", text: $newTitle, prompt: Text("Neue Standardaufgabe, z. B. Interne Besprechung"))
                     .textFieldStyle(TagwerkFieldStyle(small: true))
+                    .labelsHidden()
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .onSubmit(add)
                 Button("Hinzufügen", action: add)
                     .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -255,6 +258,9 @@ private struct StandingTitleField: View {
     var body: some View {
         TextField("", text: $text)
             .textFieldStyle(.plain)
+            .labelsHidden()
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .onAppear { text = task.title }
             .onSubmit { model.setTitle(text, for: task.id) }
             .onDisappear { model.setTitle(text, for: task.id) }

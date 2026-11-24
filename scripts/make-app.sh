@@ -34,6 +34,19 @@ done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 rm -rf "$ICONSET"
 
+# Akzentfarbe der App: Orange statt System-Blau für Fokus, ausgewählte Felder und Standardknöpfe
+# (gilt, solange in den Systemeinstellungen „Akzentfarbe: Mehrfarbig“ eingestellt ist). Braucht Xcode (actool).
+if xcrun --find actool >/dev/null 2>&1; then
+  if xcrun actool Support/Assets.xcassets --compile "$APP/Contents/Resources" --platform macosx \
+      --minimum-deployment-target 14.0 --output-partial-info-plist build/assets-info.plist >/dev/null; then
+    /usr/libexec/PlistBuddy -c "Add :NSAccentColorName string AccentColor" "$APP/Contents/Info.plist"
+  else
+    echo "Akzentfarbe übersprungen (actool fehlgeschlagen)."
+  fi
+else
+  echo "Akzentfarbe übersprungen (actool gibt es nur mit Xcode)."
+fi
+
 # Signieren. Mit einem eigenen Zertifikat „Tagwerk Lokal“ (siehe README) bleibt die Signatur
 # bei jedem Neubau gleich; dann behält macOS die Freigaben für Schlüsselbund, Kalender und Musik.
 # Ohne Zertifikat wird ad hoc signiert, und macOS fragt nach jedem Neubau einmal neu.
