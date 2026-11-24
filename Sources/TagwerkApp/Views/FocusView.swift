@@ -284,7 +284,6 @@ struct FocusTimeBar: View {
 /// Gewählt wird in einem eigenen Fenster mit einem Reiter je Quelle. Bei YouTube steht der Player sichtbar darüber.
 struct FocusMusicBar: View {
     @Environment(AppModel.self) private var model
-    @State private var showsPicker = false
 
     var body: some View {
         let music = model.music
@@ -309,7 +308,7 @@ struct FocusMusicBar: View {
 
             // Ein Klick auf den Titel öffnet die Auswahl
             Button {
-                showsPicker = true
+                openPicker(music)
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     if let title = music.trackTitle, music.state != .stopped {
@@ -345,14 +344,14 @@ struct FocusMusicBar: View {
             .help("Musik wählen")
 
             Button {
-                showsPicker = true
+                openPicker(music)
             } label: {
                 Image(systemName: "music.note.list")
             }
             .buttonStyle(IconButtonStyle(size: 28))
             .help("Musik wählen: Klangwelt, Internetradio, Apple Music oder YouTube")
-            .popover(isPresented: $showsPicker, arrowEdge: .top) {
-                MusicPicker { showsPicker = false }
+            .popover(isPresented: Binding(get: { music.showsPicker }, set: { music.showsPicker = $0 }), arrowEdge: .top) {
+                MusicPicker { music.showsPicker = false }
             }
 
             Button {
@@ -385,6 +384,12 @@ struct FocusMusicBar: View {
         .padding(.vertical, 12)
         .surface(radius: Theme.Radius.card, elevation: .flat)
     }
+
+    /// Öffnet die Auswahl beim Reiter der gerade gewählten Quelle.
+    private func openPicker(_ music: FocusMusic) {
+        music.pickerTab = music.source
+        music.showsPicker = true
+    }
 }
 
 /// Auswahl der Fokus-Musik: oben die Quelle, darunter nur deren Einträge.
@@ -392,7 +397,6 @@ struct MusicPicker: View {
     @Environment(AppModel.self) private var model
     let close: () -> Void
 
-    @State private var tab: MusicSource = .soundscape
     @State private var youtubeDraft = ""
 
     /// Reihenfolge der Reiter: was ohne Einrichtung geht, zuerst
@@ -401,7 +405,7 @@ struct MusicPicker: View {
     var body: some View {
         let music = model.music
         VStack(alignment: .leading, spacing: 12) {
-            Picker("Quelle", selection: $tab) {
+            Picker("Quelle", selection: Binding(get: { music.pickerTab }, set: { music.pickerTab = $0 })) {
                 ForEach(tabs) { source in
                     Text(source.label).tag(source)
                 }
@@ -411,7 +415,7 @@ struct MusicPicker: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
-                    switch tab {
+                    switch music.pickerTab {
                     case .soundscape: soundscapeList(music)
                     case .radio: radioList(music)
                     case .appleMusic: appleMusicList(music)
@@ -431,7 +435,7 @@ struct MusicPicker: View {
                     .buttonStyle(GhostButtonStyle(small: true))
                 }
                 Spacer()
-                Text(Self.footnote(tab))
+                Text(Self.footnote(music.pickerTab))
                     .font(.caption)
                     .foregroundStyle(Theme.tertiary)
                     .lineLimit(2)
@@ -441,7 +445,6 @@ struct MusicPicker: View {
         .padding(16)
         .frame(width: 400)
         .onAppear {
-            tab = music.source
             if music.playlists.isEmpty, music.isDemo { music.loadPlaylists() }
         }
     }

@@ -97,6 +97,22 @@ enum SnapshotMode {
         try? await Task.sleep(for: .seconds(1.2))
         await capture(window, name: "fokus-klangwelt", in: directory)
 
+        // Musikauswahl im Fokus, jeder Reiter einzeln (Beispiel-Verlauf für YouTube)
+        model.music.youtubeHistory = [
+            YouTubeHistoryEntry(link: "https://youtu.be/aaaaaaaaaaa", title: "Ruhiger Jazz zum Arbeiten", lastPlayed: Date().addingTimeInterval(-3 * 3600)),
+            YouTubeHistoryEntry(link: "https://youtu.be/bbbbbbbbbbb", title: "Regen und Klavier, 3 Stunden", lastPlayed: Date().addingTimeInterval(-26 * 3600)),
+            YouTubeHistoryEntry(link: "https://youtu.be/ccccccccccc", title: "Ambient für tiefe Konzentration", lastPlayed: Date().addingTimeInterval(-4 * 86400)),
+        ]
+        model.music.showsPicker = true
+        for (tab, name) in [(MusicSource.soundscape, "musik-klangwelt"), (.radio, "musik-radio"), (.appleMusic, "musik-applemusic"), (.youtube, "musik-youtube")] {
+            model.music.pickerTab = tab
+            try? await Task.sleep(for: .seconds(1.2))
+            let popover = NSApp.windows.first { $0.isVisible && String(describing: type(of: $0)).contains("Popover") }
+            await capture(popover ?? window, name: name, in: directory)
+        }
+        model.music.showsPicker = false
+        try? await Task.sleep(for: .seconds(0.5))
+
         // Aufgabenfenster mit Unteraufgaben
         if let offer = model.todayTasks.first(where: { !model.subtasks(of: $0.id).isEmpty && $0.title.hasPrefix("Angebot") }) {
             model.selection = .today

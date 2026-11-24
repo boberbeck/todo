@@ -24,6 +24,10 @@ final class FocusMusic {
     static let youtubeHistoryKey = "focusMusicYouTubeHistory"
     static let soundscapeKey = "focusSoundscapeSettings"
 
+    /// Auswahlfenster der Musik offen, und welcher Reiter
+    var showsPicker = false
+    var pickerTab: MusicSource = .soundscape
+
     let radio = RadioPlayer()
     let youtube = YouTubePlayer()
     let soundscape = SoundscapePlayer()
