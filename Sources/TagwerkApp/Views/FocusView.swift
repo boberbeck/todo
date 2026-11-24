@@ -404,14 +404,18 @@ struct MusicPicker: View {
 
     var body: some View {
         let music = model.music
-        VStack(alignment: .leading, spacing: 12) {
-            Picker("Quelle", selection: Binding(get: { music.pickerTab }, set: { music.pickerTab = $0 })) {
+        VStack(alignment: .leading, spacing: 16) {
+            // Reiter im Stil der Titelleiste: runde Flächen, gewählt eine Stufe heller, kein Orange
+            HStack(spacing: 4) {
                 ForEach(tabs) { source in
-                    Text(source.label).tag(source)
+                    SourceTab(source: source, selected: music.pickerTab == source) {
+                        music.pickerTab = source
+                    }
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            .padding(4)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.surfaceSunken))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.border))
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
@@ -424,7 +428,10 @@ struct MusicPicker: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollIndicators(.hidden)
             .frame(height: 300)
+
+            Rectangle().fill(Theme.border).frame(height: 1)
 
             HStack {
                 if music.hasSelection {
@@ -442,8 +449,11 @@ struct MusicPicker: View {
                     .multilineTextAlignment(.trailing)
             }
         }
-        .padding(16)
-        .frame(width: 400)
+        // Breite am Inhalt, Abstand außen: so bleibt auch bei runden Fensterecken genug Luft
+        .frame(width: 360)
+        .padding(20)
+        .background(Theme.surfaceFloating)
+        .presentationBackground(Theme.surfaceFloating)
         .onAppear {
             if music.playlists.isEmpty, music.isDemo { music.loadPlaylists() }
         }
@@ -466,7 +476,7 @@ struct MusicPicker: View {
         Text("Passt sich an: gerade \(music.currentMood().description)")
             .font(.caption)
             .foregroundStyle(Theme.tertiary)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 12)
             .padding(.top, 8)
     }
 
@@ -504,7 +514,7 @@ struct MusicPicker: View {
                     .buttonStyle(GhostButtonStyle(small: true))
                     .disabled(music.isLoadingPlaylists)
             }
-            .padding(8)
+            .padding(12)
         } else {
             ForEach(music.playlists, id: \.self) { name in
                 MusicRow(title: name, subtitle: nil, selected: music.source == .appleMusic && name == music.selectedPlaylist) {
@@ -516,7 +526,7 @@ struct MusicPicker: View {
             Button("Liste neu laden") { music.loadPlaylists() }
                 .buttonStyle(GhostButtonStyle(small: true))
                 .padding(.top, 8)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 12)
         }
     }
 
@@ -530,7 +540,7 @@ struct MusicPicker: View {
                 .buttonStyle(GhostButtonStyle(small: true))
                 .disabled(YouTubeLink.parse(youtubeDraft) == nil)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 12)
         .padding(.bottom, 4)
         .onAppear {
             if youtubeDraft.isEmpty { youtubeDraft = FocusMusicBar.clipboardYouTubeLink() ?? "" }
@@ -622,9 +632,43 @@ private struct MusicRow: View {
                 .help("Aus dem Verlauf entfernen")
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(selected ? 0.06 : (hovering ? 0.04 : 0))))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous).fill(Color.white.opacity(selected ? 0.07 : (hovering ? 0.04 : 0))))
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+    }
+}
+
+/// Reiter der Musikauswahl: Symbol und Name, gewählt als hellere runde Fläche.
+private struct SourceTab: View {
+    let source: MusicSource
+    let selected: Bool
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: MusicPicker.icon(source))
+                    .font(.system(size: 11))
+                Text(source == .radio ? "Radio" : source.label)
+                    .lineLimit(1)
+            }
+            .font(.system(size: 12, weight: selected ? .medium : .regular))
+            .foregroundStyle(selected ? Theme.text : (hovering ? Theme.text.opacity(0.85) : Theme.secondary))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background {
+                if selected || hovering {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.white.opacity(selected ? 0.09 : 0.04))
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
         .onHover { hovering = $0 }
     }
 }
@@ -636,10 +680,10 @@ private struct GroupHeader: View {
     var body: some View {
         Text(title)
             .font(.caption.weight(.medium))
-            .foregroundStyle(Theme.secondary)
-            .padding(.horizontal, 8)
+            .foregroundStyle(Theme.tertiary)
+            .padding(.horizontal, 12)
             .padding(.top, 12)
-            .padding(.bottom, 2)
+            .padding(.bottom, 4)
     }
 }
 
