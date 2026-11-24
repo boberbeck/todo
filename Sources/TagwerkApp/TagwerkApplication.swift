@@ -81,7 +81,7 @@ struct TagwerkCommands: Commands {
             Button("Zeit nachtragen …") { model.beginTimeEntry(for: model.focusTask?.id) }
                 .keyboardShortcut("t", modifiers: [.command, .option])
             Divider()
-            Button(model.runningBreak == nil ? "Pause machen" : "Pause beenden") {
+            Button(model.runningBreak == nil ? "Mittagspause starten" : "Mittagspause beenden") {
                 if model.runningBreak == nil {
                     model.startBreak()
                 } else {
@@ -89,7 +89,7 @@ struct TagwerkCommands: Commands {
                 }
             }
             .keyboardShortcut("p", modifiers: [.command, .shift])
-            Button("Pause nachtragen …") { model.beginBreakEntry() }
+            Button("Mittagspause nachtragen …") { model.beginBreakEntry() }
             Divider()
             Button("SAP-Aufgaben abgleichen …") { model.showsSAPSync = true }
         }

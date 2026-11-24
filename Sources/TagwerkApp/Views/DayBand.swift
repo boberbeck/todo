@@ -31,7 +31,7 @@ struct SunShape: Shape {
 }
 
 /// Das Tagesband auf Start: der Arbeitstag als Leiste von Arbeitsbeginn bis Feierabend.
-/// Erfasste Zeit in den Farben der Kunden, geplante Zeitblöcke als Umriss, Termine als ruhige Fläche, Pausen schraffiert,
+/// Erfasste Zeit in den Farben der Kunden, geplante Zeitblöcke als Umriss, Termine als ruhige Fläche, die Mittagspause schraffiert,
 /// der Sonnenstand zeigt, wo der Tag gerade steht. Hier sitzt die Farbe der Startseite.
 struct DayBand: View {
     @Environment(AppModel.self) private var model
@@ -78,7 +78,7 @@ struct DayBand: View {
                         if end > start {
                             BandSegment(kind: .pause, x: scale.x(start), width: scale.width(from: start, to: end), height: barHeight)
                                 .offset(y: sunSpace)
-                                .help("Pause · \(Self.clock(item.start))–\(item.end.map(Self.clock) ?? "läuft")")
+                                .help("Mittagspause · \(Self.clock(item.start))–\(item.end.map(Self.clock) ?? "läuft")")
                         }
                     }
 

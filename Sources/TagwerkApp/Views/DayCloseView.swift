@@ -80,12 +80,12 @@ struct DayCloseView: View {
                 let missing = model.missingBreakMinutes(on: day)
                 if pause >= 60 || missing > 0 {
                     HStack(spacing: 6) {
-                        Label(pause >= 60 ? "\(TimeMath.format(pause)) h Pause, nicht gebucht" : "Keine Pause eingetragen", systemImage: "cup.and.saucer")
+                        Label(pause >= 60 ? "\(TimeMath.format(pause)) h Mittagspause, nicht gebucht" : "Keine Mittagspause eingetragen", systemImage: "fork.knife")
                             .foregroundStyle(Theme.secondary)
                         if missing > 0 {
                             Text("· laut Arbeitszeitgesetz fehlen \(missing) Minuten (Pausen zählen ab 15 Minuten am Stück)")
                                 .foregroundStyle(Theme.warning)
-                            Button("Pause nachtragen …") { model.beginBreakEntry(start: FreeTime.date(on: day, minutes: 12 * 60)) }
+                            Button("Mittagspause nachtragen …") { model.beginBreakEntry(start: FreeTime.date(on: day, minutes: 12 * 60)) }
                                 .buttonStyle(GhostButtonStyle(small: true))
                         }
                     }

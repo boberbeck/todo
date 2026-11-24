@@ -1,6 +1,7 @@
 import Foundation
 
-/// Eine Pause: zählt nicht als Arbeitszeit und wird nirgends gebucht, steht aber im Kalender und im Tagesabschluss.
+/// Eine längere Pause, vor allem die Mittagspause: zählt nicht als Arbeitszeit und wird nirgends gebucht,
+/// steht aber im Kalender und im Tagesabschluss. Kurze Unterbrechungen und Pomodoro-Pausen werden nicht erfasst.
 public struct WorkBreak: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
     public var start: Date
@@ -50,8 +51,8 @@ public struct BreakChange: Equatable, Sendable {
 
 /// Regeln für Pausen: starten, beenden, nachtragen, und was das Arbeitszeitgesetz dazu sagt.
 public enum Breaks {
-    /// Kürzere Pausen gelten als versehentlich und werden verworfen.
-    public static let minimumDuration: TimeInterval = 60
+    /// Kürzere Pausen gelten als versehentlich (oder als kleine Unterbrechung) und werden verworfen.
+    public static let minimumDuration: TimeInterval = 5 * 60
     /// Reste erfasster Zeit, die nach dem Ausschneiden kürzer sind, fallen weg.
     public static let minimumRemainder: TimeInterval = 60
     /// Laut Arbeitszeitgesetz zählen Pausen erst ab 15 Minuten am Stück.
@@ -74,7 +75,7 @@ public enum Breaks {
         return change
     }
 
-    /// Beendet die laufende Pause. Unter einer Minute wird sie verworfen.
+    /// Beendet die laufende Pause. Unter fünf Minuten wird sie verworfen.
     public static func end(breaks: [WorkBreak], at now: Date) -> BreakChange {
         var change = BreakChange()
         guard var current = running(in: breaks) else { return change }

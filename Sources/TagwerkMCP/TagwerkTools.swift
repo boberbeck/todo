@@ -24,8 +24,9 @@ public final class TagwerkTools {
     rücken dabei auf den nächsten Arbeitstag. \
     Standardaufgaben (Werkzeug standardaufgaben, z. B. „Organisatorisches“) sind immer da und werden nie erledigt; \
     Zeit darauf erfasst man mit timer_starten und ihrer ID. \
-    Pausen zählen nicht als Arbeitszeit: pause_starten hält den Timer an, pause_beenden macht (auf Wunsch) mit derselben Aufgabe weiter, \
-    pause_eintragen trägt eine vergessene Pause nach und schneidet sie aus der erfassten Arbeitszeit heraus. \
+    Die Mittagspause (oder eine andere längere Pause) zählt nicht als Arbeitszeit: pause_starten hält den Timer an, \
+    pause_beenden macht (auf Wunsch) mit derselben Aufgabe weiter, pause_eintragen trägt eine vergessene Mittagspause nach \
+    und schneidet sie aus der erfassten Arbeitszeit heraus. Kurze Unterbrechungen und Pomodoro-Pausen werden nicht eingetragen. \
     IDs aus den Antworten sind für Änderungen nötig; die ersten 8 Zeichen reichen. \
     Datumsangaben: heute, morgen, gestern, JJJJ-MM-TT oder TT.MM.JJJJ. Gebucht wird nur in der App selbst.
     """
@@ -186,16 +187,16 @@ public final class TagwerkTools {
             ),
             tool(
                 "pause_starten",
-                "Pause jetzt: hält den laufenden Timer an. Die Pause zählt nicht als Arbeitszeit."
+                "Mittagspause jetzt: hält den laufenden Timer an. Die Pause zählt nicht als Arbeitszeit."
             ),
             tool(
                 "pause_beenden",
-                "Beendet die laufende Pause.",
+                "Beendet die laufende Mittagspause.",
                 properties: ["weiter": flag("Standard true: danach mit der Aufgabe von vor der Pause weiter")]
             ),
             tool(
                 "pause_eintragen",
-                "Eine Pause nachtragen, z. B. die Mittagspause. Erfasste Arbeitszeit in diesem Zeitraum wird dort herausgeschnitten.",
+                "Die Mittagspause (oder eine andere längere Pause, mindestens 5 Minuten) nachtragen. Erfasste Arbeitszeit in diesem Zeitraum wird dort herausgeschnitten.",
                 properties: [
                     "datum": text("Tag, Standard: heute"),
                     "von": text("Beginn als Uhrzeit, z. B. 12:00"),
@@ -795,7 +796,7 @@ public final class TagwerkTools {
         guard end > start else { throw ToolError("Das Ende liegt vor dem Beginn.") }
         guard start < now() else { throw ToolError("Die Pause liegt in der Zukunft.") }
         let change = Breaks.add(start: start, end: end, note: string(arguments, "notiz") ?? "", entries: snapshot.entries, breaks: snapshot.breaks, now: now())
-        guard let saved = change.savedBreaks.first else { throw ToolError("Die Pause ist zu kurz (mindestens eine Minute).") }
+        guard let saved = change.savedBreaks.first else { throw ToolError("Die Pause ist zu kurz (mindestens fünf Minuten).") }
         try persist(change)
         var result: [String: Any] = ["pause": describe(saved)]
         let cut = change.savedEntries.count + change.deletedEntries.count

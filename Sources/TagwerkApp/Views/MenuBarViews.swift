@@ -10,7 +10,7 @@ struct MenuBarLabel: View {
         if let task = model.runningTask {
             Text("▶ \(TimeMath.format(model.tracked(taskID: task.id, now: model.now))) \(String(task.title.prefix(20)))")
         } else if let pause = model.runningBreak {
-            Text("☕ \(TimeMath.format(pause.duration(now: model.now)))")
+            Text("Mittag \(TimeMath.format(pause.duration(now: model.now)))")
         } else {
             Image(systemName: "checklist")
         }
@@ -24,7 +24,7 @@ struct MenuBarContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let pause = model.runningBreak {
-                Text("Pause")
+                Text("Mittagspause")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(TimeMath.format(pause.duration(now: model.now), showSeconds: true))
@@ -47,7 +47,7 @@ struct MenuBarContent: View {
                     .font(.title2.monospacedDigit())
                 HStack {
                     Button("Stoppen") { model.stopTimer() }
-                    Button("Pause") { model.startBreak() }
+                    Button("Mittagspause") { model.startBreak() }
                     if !task.isStanding {
                         Button("Erledigt") { model.complete(task.id) }
                     }

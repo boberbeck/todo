@@ -52,10 +52,10 @@ struct WeekCalendarView: View {
                     Button {
                         model.beginBreakEntry()
                     } label: {
-                        Label("Pause nachtragen", systemImage: "cup.and.saucer")
+                        Label("Mittagspause nachtragen", systemImage: "fork.knife")
                     }
                     .buttonStyle(GhostButtonStyle())
-                    .help("Pause eintragen; Arbeit, die in dieser Zeit erfasst ist, wird herausgenommen")
+                    .help("Mittagspause eintragen; Arbeit, die in dieser Zeit erfasst ist, wird herausgenommen")
                     Spacer(minLength: 16)
                     HStack(spacing: 6) {
                         Button {
@@ -136,7 +136,7 @@ struct WeekCalendarView: View {
                     .help(absence.note.isEmpty ? absence.label : "\(absence.label): \(absence.note)")
             } else {
                 let pause = model.breakTotal(on: day)
-                Text("\(TimeMath.format(model.tracked(on: day))) h\(pause >= 60 ? " · Pause \(TimeMath.format(pause))" : "")")
+                Text("\(TimeMath.format(model.tracked(on: day))) h\(pause >= 60 ? " · Mittag \(TimeMath.format(pause))" : "")")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(Theme.tertiary)
                     .lineLimit(1)

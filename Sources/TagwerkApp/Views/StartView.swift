@@ -93,10 +93,10 @@ struct StartView: View {
         if events > 0 { parts.append(events == 1 ? "1 Termin" : "\(events) Termine") }
         if let running = model.runningTask { parts.append("läuft: \(running.title)") }
         if let pause = model.runningBreak {
-            parts.append("Pause seit \(pause.start.formatted(date: .omitted, time: .shortened))")
+            parts.append("Mittagspause seit \(pause.start.formatted(date: .omitted, time: .shortened))")
         } else {
             let pauses = model.breakTotal(on: model.today)
-            if pauses >= 60 { parts.append("\(TimeMath.format(pauses)) h Pause") }
+            if pauses >= 60 { parts.append("\(TimeMath.format(pauses)) h Mittagspause") }
         }
         return parts.joined(separator: " · ")
     }
@@ -235,11 +235,11 @@ struct DayActions: View {
         HStack(spacing: 8) {
             Menu {
                 if model.runningBreak != nil {
-                    Button("Pause beenden") { model.endBreak(resume: true) }
+                    Button("Mittagspause beenden") { model.endBreak(resume: true) }
                 } else {
-                    Button("Pause machen") { model.startBreak() }
+                    Button("Mittagspause starten") { model.startBreak() }
                 }
-                Button("Pause nachtragen …") { model.beginBreakEntry() }
+                Button("Mittagspause nachtragen …") { model.beginBreakEntry() }
                 Button("Zeit nachtragen …") { model.beginTimeEntry() }
                 Divider()
                 Section("Abwesend") {
@@ -255,7 +255,7 @@ struct DayActions: View {
             .menuIndicator(.hidden)
             .buttonStyle(GhostButtonStyle())
             .fixedSize()
-            .help("Pause, vergessene Zeit oder Krank- und Urlaubstage eintragen")
+            .help("Mittagspause, vergessene Zeit oder Krank- und Urlaubstage eintragen")
             Button {
                 model.selection = .planning
             } label: {

@@ -175,7 +175,7 @@ enum SnapshotMode {
             try? await Task.sleep(for: .seconds(0.5))
         }
 
-        // Pause nachtragen (die letzte halbe Stunde: schneidet die laufende Arbeit an)
+        // Mittagspause nachtragen (heute schon eine da: die letzte halbe Stunde, schneidet die laufende Arbeit an)
         model.selection = .today
         model.beginBreakEntry()
         try? await Task.sleep(for: .seconds(1.5))
@@ -183,7 +183,7 @@ enum SnapshotMode {
         model.breakDraft = nil
         try? await Task.sleep(for: .seconds(0.8))
 
-        // Pause läuft: Fokus und Leiste oben, danach weiter mit derselben Aufgabe
+        // Mittagspause läuft: Fokus und Leiste oben, danach weiter mit derselben Aufgabe
         if model.runningEntry != nil {
             model.startBreak()
             model.selection = .focus

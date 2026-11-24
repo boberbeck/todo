@@ -5,7 +5,7 @@ import TagwerkCore
 /// Neue Aufgabe direkt im Kalender: erscheint nach Doppelklick in eine freie Stelle, der Titel wird gleich eingetippt.
 /// ↩ legt an (vorbei: als erfasste Zeit, noch offen: als Zeitblock), Esc oder ein leeres Feld bricht ab,
 /// „…“ öffnet „Zeit nachtragen“ für eine bestehende Aufgabe, einen Kunden oder genaue Zeiten.
-/// Ist der Zeitraum schon vorbei, gibt es darunter Abkürzungen: Pause und die Standardaufgaben (z. B. „Organisatorisches“).
+/// Ist der Zeitraum schon vorbei, gibt es darunter Abkürzungen: Mittagspause und die Standardaufgaben (z. B. „Organisatorisches“).
 struct NewCalendarItem: View {
     @Environment(AppModel.self) private var model
     let slot: DateInterval
@@ -46,10 +46,10 @@ struct NewCalendarItem: View {
                 .lineLimit(1)
             if isPast {
                 FlowLayout(spacing: 4) {
-                    shortcut("Pause", systemImage: "cup.and.saucer") {
-                        _ = model.addBreak(start: slot.start, end: slot.end)
+                    shortcut("Mittagspause", systemImage: "fork.knife") {
+                        _ = model.addBreak(start: slot.start, end: slot.end, note: "Mittag")
                     }
-                    .help("Als Pause eintragen")
+                    .help("Als Mittagspause eintragen")
                     ForEach(model.standingTasks.prefix(5)) { task in
                         shortcut(task.title, systemImage: nil) {
                             model.addEntry(taskID: task.id, start: slot.start, end: min(slot.end, Date()))

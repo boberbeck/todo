@@ -275,8 +275,8 @@ struct RunningTimerPill: View {
                     model.selection = .focus
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "cup.and.saucer.fill")
-                        Text("Pause \(TimeMath.format(pause.duration(now: model.now), showSeconds: true))")
+                        Image(systemName: "fork.knife")
+                        Text("Mittagspause \(TimeMath.format(pause.duration(now: model.now), showSeconds: true))")
                             .monospacedDigit()
                     }
                     .font(.callout)
@@ -287,14 +287,14 @@ struct RunningTimerPill: View {
                     .overlay(Capsule().strokeBorder(Theme.border))
                 }
                 .buttonStyle(.plain)
-                .help("Pause – im Fokus öffnen")
+                .help("Mittagspause – im Fokus öffnen")
                 Button {
                     model.endBreak(resume: true)
                 } label: {
-                    Label(model.taskAfterBreak == nil ? "Pause beenden" : "Weiter", systemImage: model.taskAfterBreak == nil ? "stop.fill" : "play.fill")
+                    Label(model.taskAfterBreak == nil ? "Beenden" : "Weiter", systemImage: model.taskAfterBreak == nil ? "stop.fill" : "play.fill")
                 }
                 .buttonStyle(GhostButtonStyle(prominent: model.taskAfterBreak != nil, small: true))
-                .help(model.taskAfterBreak.map { "Weiter mit „\($0.title)“ (⌘T)" } ?? "Pause beenden")
+                .help(model.taskAfterBreak.map { "Weiter mit „\($0.title)“ (⌘T)" } ?? "Mittagspause beenden")
             }
             .padding(.trailing, 8)
         } else if let task = model.runningTask {
@@ -332,10 +332,10 @@ struct RunningTimerPill: View {
                 Button {
                     model.startBreak()
                 } label: {
-                    Image(systemName: "cup.and.saucer")
+                    Image(systemName: "fork.knife")
                 }
                 .buttonStyle(IconButtonStyle(size: 28))
-                .help("Pause machen: Timer anhalten, danach mit einem Klick weiter (⇧⌘P)")
+                .help("Mittagspause: Timer anhalten, danach mit einem Klick weiter (⇧⌘P)")
             }
             .padding(.trailing, 8)
         } else if let pomodoro = model.pomodoro, pomodoro.phase.isBreak || pomodoro.phase == .ready {
@@ -422,14 +422,24 @@ struct IdlePromptView: View {
                 .fixedSize()
                 .disabled(others.isEmpty)
                 Spacer()
-                Button("Als Pause eintragen") { model.resolveIdle(.discard) }
-                    .buttonStyle(GhostButtonStyle(prominent: true))
-                    .keyboardShortcut(.defaultAction)
-                    .help("Die Zeit zählt nicht und steht als Pause im Kalender; der Timer läuft ab jetzt weiter")
+                if prompt.minutes >= 20 {
+                    // Länger weg: vermutlich die Mittagspause
+                    Button("Nur abziehen") { model.resolveIdle(.discard) }
+                        .help("Die Zeit zählt nicht, eingetragen wird nichts; der Timer läuft ab jetzt weiter")
+                    Button("Als Mittagspause eintragen") { model.resolveIdle(.discard, asLunchBreak: true) }
+                        .buttonStyle(GhostButtonStyle(prominent: true))
+                        .keyboardShortcut(.defaultAction)
+                        .help("Die Zeit zählt nicht und steht als Mittagspause im Kalender; der Timer läuft ab jetzt weiter")
+                } else {
+                    Button("Pause abziehen") { model.resolveIdle(.discard) }
+                        .buttonStyle(GhostButtonStyle(prominent: true))
+                        .keyboardShortcut(.defaultAction)
+                        .help("Die Zeit zählt nicht; kurze Pausen werden nicht eingetragen")
+                }
             }
         }
         .padding(24)
-        .frame(width: 540)
+        .frame(width: prompt.minutes >= 20 ? 660 : 540)
     }
 }
 

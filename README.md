@@ -16,7 +16,7 @@ Aufbau: dunkel und ruhig, oben die Leiste mit Start, Plan, Kalender, Fokus, Kund
 | Aufgabe öffnen | ⓘ beim Darüberfahren, Rechtsklick › „Öffnen …“ oder im Fokus „Aufgabe öffnen“: ein Fenster mit Titel, Planung, Kunde, Ziel, SAP-Aufgabe, Ticket, Work Log Type, Unteraufgaben (umbenennen, Timer, löschen), Notizen, Bearbeitung und allen Zeiteinträgen. Doppelklick auf eine Aufgabe öffnet weiter den Fokus, Doppelklick auf eine Unteraufgabe benennt sie um. |
 | Unteraufgaben | Beim Darüberfahren über eine Aufgabe das Listen-Symbol neben ▶, Rechtsklick › „Unteraufgabe hinzufügen“ oder im Fokus „Unteraufgaben“; geht in Start, Eingang, Woche und bei den Kunden. Claude legt sie über MCP mit `unteraufgabe_von` an. Jede Unteraufgabe hat ihren eigenen Timer und kann ein eigenes Ticket haben; Kunde, SAP-Aufgabe und Ticket erbt sie sonst von der Aufgabe darüber. Im Tagesabschluss steht sie als eigene Zeile („Aufgabe: Unteraufgabe“). |
 | Zeit nachtragen | Vergessen, den Timer zu starten? Auf Start „Eintragen“ › „Zeit nachtragen …“, ⌥⌘T, Rechtsklick auf eine Aufgabe › „Zeit nachtragen …“ oder im Fokus „Vergessen zu starten?“. Dort startet der Timer auch rückwirkend („läuft schon seit 15 Minuten“ oder „seit dem letzten Eintrag“), ohne sich mit erfassten Zeiten zu überschneiden. |
-| Pausen | Oben rechts die Tasse neben dem laufenden Timer (oder ⇧⌘P, im Fokus „Pause machen“): der Timer hält an, die Pause läuft mit, „Weiter“ startet dieselbe Aufgabe wieder. Vergessene Pausen trägst du auf Start unter „Eintragen“ › „Pause nachtragen …“, im Kalender oder per Doppelklick in eine freie Stelle („Pause“) nach; Arbeit, die in dieser Zeit erfasst war, wird dort herausgeschnitten. Pausen stehen schraffiert im Kalender und im Tagesband, zählen nicht als Arbeitszeit und werden nicht gebucht. Der Tagesabschluss sagt, wenn nach dem Arbeitszeitgesetz Pause fehlt (ab 6 Stunden 30 Minuten, ab 9 Stunden 45 Minuten, je mindestens 15 Minuten am Stück). Bei Leerlauf trägt „Als Pause eintragen“ die Zeit gleich als Pause ein. |
+| Mittagspause | Gedacht für die richtige Pause, wenn du länger weg bist; kurze Unterbrechungen und Pomodoro-Pausen werden nicht eingetragen (bei Pomodoro hält nur die Zeit an). Oben rechts das Besteck neben dem laufenden Timer (oder ⇧⌘P, im Fokus „Mittagspause“): der Timer hält an, die Mittagspause läuft mit, „Weiter“ startet dieselbe Aufgabe wieder. Vergessen? Auf Start unter „Eintragen“ › „Mittagspause nachtragen …“ (Vorschlag 12:00–12:30), im Kalender oder per Doppelklick in eine freie Stelle; Arbeit, die in dieser Zeit erfasst war, wird dort herausgeschnitten. Die Mittagspause steht schraffiert im Kalender und im Tagesband, zählt nicht als Arbeitszeit und wird nicht gebucht. Der Tagesabschluss sagt, wenn nach dem Arbeitszeitgesetz Pause fehlt (ab 6 Stunden 30 Minuten, ab 9 Stunden 45 Minuten). |
 | Standardaufgaben | Aufgaben wie „Organisatorisches“, „Interne Besprechung“ oder „Weiterbildung“: immer da, nie erledigt, nicht im Eingang. Auf Start unter „Standardaufgaben“ startet ein Klick die Zeit (noch ein Klick stoppt), daneben steht, wie viel es heute war. Rechtsklick › Details legt Kunde, SAP-Aufgabe und Tätigkeit fest, damit sie im Tagesabschluss richtig gebucht werden. Im Kalender stehen sie nach einem Doppelklick in eine vergangene Stelle zur Wahl, beim Nachtragen ganz oben. Anlegen und umbenennen mit „+“ auf Start oder in Einstellungen › Allgemein. |
 | Krank und Urlaub | Auf Start „Eintragen“ › Abwesend: „Heute krank“, halber Tag, mehrere Tage oder Urlaub (nur Arbeitstage). Im Kalender per Rechtsklick auf einen Tag. Das Wochenziel wird um diese Tage kleiner, offene Aufgaben rücken auf den nächsten Arbeitstag, Start zeigt einen Hinweis mit „Austragen“. Über Claude: „Trag mich heute krank ein“. In SAP ByDesign trägst du die Abwesenheit selbst ein. |
 | Ticket zuordnen | Jede eigene Aufgabe oder Unteraufgabe lässt sich einem Ticket zuordnen (Rechtsklick › „Ticket zuordnen“ oder der Ticket-Knopf im Fokus). Gesucht wird nach Nummer oder Betreff, auf Wunsch direkt in ManageEngine über alle Techniker (auch Tickets von Kollegen). Die Zeit geht dann zusätzlich als Worklog an das Ticket. |
@@ -30,13 +30,13 @@ Aufbau: dunkel und ruhig, oben die Leiste mit Start, Plan, Kalender, Fokus, Kund
 | Fokus | Vollbild mit einer Aufgabe, großem Timer, Erledigt und Nächste. Arbeitsart, PSP-Element und Bearbeitung klappen unten auf. Dazu Musik aus Apple Music, Internetradio, YouTube oder der eigenen Klangwelt: startet mit dem Timer und hält mit ihm an. |
 | Kunden | Kennzahlen und eine Karte je Kunde mit Stunden dieser Woche und im Monat. Im Kunden: lokale Todos, PSP-Elemente, ManageEngine-Konto. |
 | Rückblick | Stunden gegen das Wochenziel, Tagesdurchschnitt, Anteil Kundenarbeit, Stunden je Tag und je Kunde, Verlauf der letzten Wochen, Wochenziele, Export als CSV. |
-| Leerlauf | Läuft der Timer und kommt länger keine Eingabe, fragt Tagwerk nach der Rückkehr: Zeit behalten, als Pause eintragen oder einer anderen Aufgabe geben (auch einer Standardaufgabe). |
+| Leerlauf | Läuft der Timer und kommt länger keine Eingabe, fragt Tagwerk nach der Rückkehr: Zeit behalten, abziehen oder einer anderen Aufgabe geben (auch einer Standardaufgabe). Ab 20 Minuten gibt es zusätzlich „Als Mittagspause eintragen“. |
 | Schnell erfassen | ⌃⌥ Leertaste öffnet von überall ein kleines Fenster für neue Aufgaben. |
 | Mails | Mails aus Outlook (oder .eml-Dateien) in den Eingang ziehen; Betreff und Absender werden übernommen. |
 | Sicherung | Täglich eine Kopie der Datenbank, die letzten 14 bleiben. |
 | SAP-Abgleich | Die Aufgabenliste aus ByDesign (deutsch oder englisch) wird zu PSP-Elementen bei den Kunden, je Aufgabe und Tätigkeit (Activity) ein Eintrag. Neue kommen dazu, geänderte Bezeichnungen werden übernommen, verschwundene auf Wunsch deaktiviert. |
 | Claude | Ein MCP-Server liegt in der App. Claude Desktop und Claude Code können damit Aufgaben, Timer, Zeiten und den Stand des Tagesabschlusses lesen und ändern. Gebucht wird weiter nur in Tagwerk. |
-| Menüleiste | Laufende Zeit, Stoppen, Pause, Erledigt, eine andere Aufgabe oder Standardaufgabe starten. |
+| Menüleiste | Laufende Zeit, Stoppen, Mittagspause, Erledigt, eine andere Aufgabe oder Standardaufgabe starten. |
 
 Außerdem:
 
@@ -156,7 +156,7 @@ Alle Daten liegen lokal in `~/Library/Application Support/Tagwerk/tagwerk.sqlite
 | ⌘↩ | Fokus-Aufgabe erledigt |
 | ⌘1 bis ⌘7 | Start, Plan, Kalender, Fokus, Kunden, Ziele, Rückblick |
 | ⌥⌘T | Zeit nachtragen |
-| ⇧⌘P | Pause machen oder beenden (danach weiter mit derselben Aufgabe) |
+| ⇧⌘P | Mittagspause starten oder beenden (danach weiter mit derselben Aufgabe) |
 | ⌘0 | Tag planen |
 | ⌘9 | Tag abschließen |
 | Esc | Fokus verlassen |

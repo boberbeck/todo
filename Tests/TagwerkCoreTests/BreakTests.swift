@@ -30,7 +30,7 @@ final class BreakTests: XCTestCase {
 
     func testEndDiscardsAccidentalBreak() {
         let current = WorkBreak(start: at(12))
-        let short = Breaks.end(breaks: [current], at: at(12).addingTimeInterval(20))
+        let short = Breaks.end(breaks: [current], at: at(12, 3))
         XCTAssertEqual(short.deletedBreaks.map(\.id), [current.id])
         let lunch = Breaks.end(breaks: [current], at: at(12, 30))
         XCTAssertEqual(lunch.savedBreaks.first?.end, at(12, 30))

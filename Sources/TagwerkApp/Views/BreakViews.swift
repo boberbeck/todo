@@ -23,7 +23,7 @@ struct Hatch: View {
     }
 }
 
-/// Eine Pause im Kalender: schraffierte Fläche, Doppelklick bearbeitet.
+/// Die Mittagspause im Kalender: schraffierte Fläche, Doppelklick bearbeitet.
 struct BreakBlock: View {
     @Environment(AppModel.self) private var model
     let item: WorkBreak
@@ -33,8 +33,8 @@ struct BreakBlock: View {
         let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
         HStack(alignment: .top, spacing: 4) {
             if height > 15 {
-                Image(systemName: "cup.and.saucer")
-                Text(height > 30 ? "Pause · \(range)" : "Pause")
+                Image(systemName: "fork.knife")
+                Text(height > 30 ? "Mittagspause · \(range)" : "Mittagspause")
                     .monospacedDigit()
                     .lineLimit(1)
             }
@@ -58,13 +58,13 @@ struct BreakBlock: View {
         .onTapGesture(count: 2) { model.editBreak(item) }
         .contextMenu {
             if item.isRunning {
-                Button("Pause beenden") { model.endBreak(resume: true) }
+                Button("Mittagspause beenden") { model.endBreak(resume: true) }
             }
-            Button("Pause bearbeiten …") { model.editBreak(item) }
+            Button("Mittagspause bearbeiten …") { model.editBreak(item) }
             Divider()
-            Button("Pause löschen", role: .destructive) { model.deleteBreak(item.id) }
+            Button("Mittagspause löschen", role: .destructive) { model.deleteBreak(item.id) }
         }
-        .help("Pause \(range)\(item.note.isEmpty ? "" : " · \(item.note)") · Doppelklick bearbeitet")
+        .help("Mittagspause \(range)\(item.note.isEmpty ? "" : " · \(item.note)") · Doppelklick bearbeitet")
     }
 
     private var range: String {
@@ -76,7 +76,7 @@ struct BreakBlock: View {
     }
 }
 
-/// Pause nachtragen oder bearbeiten. Arbeit, die in diesem Zeitraum erfasst ist, wird herausgenommen.
+/// Mittagspause nachtragen oder bearbeiten. Arbeit, die in diesem Zeitraum erfasst ist, wird herausgenommen.
 struct BreakSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -100,9 +100,9 @@ struct BreakSheet: View {
 
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(isEditing ? "Pause bearbeiten" : "Pause nachtragen")
+                Text(isEditing ? "Mittagspause bearbeiten" : "Mittagspause nachtragen")
                     .font(Theme.title)
-                Text("Pausen zählen nicht als Arbeitszeit und werden nicht gebucht.")
+                Text("Zählt nicht als Arbeitszeit und wird nicht gebucht. Kurze Pausen, etwa zwischen Pomodoros, trägst du nicht ein.")
                     .font(.callout)
                     .foregroundStyle(Theme.secondary)
             }
@@ -122,15 +122,16 @@ struct BreakSheet: View {
                 if !isEditing {
                     LabeledContent("Schnell") {
                         HStack(spacing: 6) {
-                            Button("Mittag 12–12:30") { set(day: Date(), fromMinutes: 12 * 60, minutes: 30) }
-                            ForEach([15, 30, 45], id: \.self) { length in
+                            Button("12:00–12:30") { set(day: day, fromMinutes: 12 * 60, minutes: 30) }
+                            Button("12:00–13:00") { set(day: day, fromMinutes: 12 * 60, minutes: 60) }
+                            ForEach([30, 60], id: \.self) { length in
                                 Button("letzte \(length) Min") { lastMinutes(length) }
                             }
                         }
                         .buttonStyle(GhostButtonStyle(small: true))
                     }
                 }
-                TextField("Notiz", text: $note, prompt: Text("optional, z. B. Mittag"))
+                TextField("Notiz", text: $note, prompt: Text("optional"))
                     .focused($noteFocused)
                 LabeledContent("Dauer") {
                     Text(minutes > 0 ? "\(TimeMath.format(minutes: minutes)) h" : "Ende liegt vor dem Beginn")
@@ -163,7 +164,8 @@ struct BreakSheet: View {
                 }
                 .buttonStyle(GhostButtonStyle(prominent: true))
                 .keyboardShortcut(.defaultAction)
-                .disabled(minutes < 1)
+                .disabled(minutes < 5)
+                .help(minutes < 5 ? "Mindestens fünf Minuten" : "")
             }
         }
         .padding(24)
@@ -176,7 +178,7 @@ struct BreakSheet: View {
             // Fokus ins Notizfeld statt auf das Datum (dort wäre sonst gleich ein Teil markiert)
             DispatchQueue.main.async { noteFocused = true }
         }
-        .confirmationDialog("Pause löschen?", isPresented: $confirmsDelete) {
+        .confirmationDialog("Mittagspause löschen?", isPresented: $confirmsDelete) {
             Button("Löschen", role: .destructive) {
                 if let id = draft.breakID { model.deleteBreak(id) }
                 dismiss()
@@ -205,17 +207,17 @@ struct BreakSheet: View {
     }
 }
 
-/// Fokus während einer Pause: wie lange schon, und mit einem Klick weiter.
+/// Fokus während der Mittagspause: wie lange schon, und mit einem Klick weiter.
 struct BreakPane: View {
     @Environment(AppModel.self) private var model
     let item: WorkBreak
 
     var body: some View {
         VStack(spacing: 20) {
-            Image(systemName: "cup.and.saucer")
+            Image(systemName: "fork.knife")
                 .font(.system(size: 30, weight: .light))
                 .foregroundStyle(Theme.secondary)
-            Text("Pause")
+            Text("Mittagspause")
                 .font(.system(size: 32, weight: .medium))
             VStack(spacing: 6) {
                 Text(TimeMath.format(item.duration(now: model.now), showSeconds: true))
@@ -234,11 +236,11 @@ struct BreakPane: View {
                             .frame(maxWidth: 320)
                     }
                     .buttonStyle(GhostButtonStyle(prominent: true))
-                    .help("Pause beenden und weiter (⌘T)")
+                    .help("Mittagspause beenden und weiter (⌘T)")
                 }
-                Button("Pause beenden") { model.endBreak(resume: false) }
+                Button("Beenden") { model.endBreak(resume: false) }
                     .buttonStyle(GhostButtonStyle())
-                    .help("Pause beenden, ohne einen Timer zu starten")
+                    .help("Mittagspause beenden, ohne einen Timer zu starten")
             }
             .padding(.top, 4)
         }
@@ -246,7 +248,7 @@ struct BreakPane: View {
     }
 }
 
-/// „Pause machen“: hält den Timer an; im Fokus und auf Start.
+/// „Mittagspause“: hält den Timer an (im Fokus). Pomodoro-Pausen sind etwas anderes und werden nicht eingetragen.
 struct StartBreakButton: View {
     @Environment(AppModel.self) private var model
 
@@ -254,12 +256,12 @@ struct StartBreakButton: View {
         Button {
             model.startBreak()
         } label: {
-            Label("Pause machen", systemImage: "cup.and.saucer")
+            Label("Mittagspause", systemImage: "fork.knife")
                 .font(.callout)
         }
         .buttonStyle(.plain)
         .foregroundStyle(Theme.tertiary)
-        .help("Timer anhalten und Pause erfassen; danach mit einem Klick weiter")
+        .help("Timer anhalten und die Mittagspause erfassen; danach mit einem Klick weiter (⇧⌘P)")
     }
 }
 

@@ -140,7 +140,7 @@ struct GeneralSettings: View {
             } header: {
                 Text("Pausen")
             } footer: {
-                SettingsFootnote("Läuft ein Timer und du warst länger weg, fragt Tagwerk, ob die Zeit zählt oder als Pause eingetragen wird. Pausen machst du sonst oben rechts (Tasse neben dem Timer) oder mit ⇧⌘P; nachtragen geht auf Start unter „Eintragen“ und im Kalender.")
+                SettingsFootnote("Läuft ein Timer und du warst länger weg, fragt Tagwerk, ob die Zeit zählt. Ab 20 Minuten kannst du sie gleich als Mittagspause eintragen; kurze Unterbrechungen und Pomodoro-Pausen werden nie eingetragen. Die Mittagspause startest du oben rechts (Besteck neben dem Timer) oder mit ⇧⌘P, nachtragen geht auf Start unter „Eintragen“ und im Kalender.")
             }
 
             StandingTasksSection()

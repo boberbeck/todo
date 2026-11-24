@@ -35,7 +35,7 @@ final class AppModel {
     private(set) var absences: [Absence] = []
     /// Pausen (zählen nicht als Arbeitszeit)
     private(set) var breaks: [WorkBreak] = []
-    /// Offenes Fenster „Pause nachtragen“ oder „Pause bearbeiten“
+    /// Offenes Fenster „Mittagspause nachtragen“ oder „Mittagspause bearbeiten“
     var breakDraft: BreakDraft?
     /// Offenes Fenster „Abwesenheit eintragen“
     var absenceDraft: AbsenceDraft?
@@ -1064,19 +1064,20 @@ final class AppModel {
         Breaks.missingMinutes(worked: tracked(on: day), countedMinutes: Breaks.countedMinutes(on: day, breaks: breaks, now: now))
     }
 
-    /// Pause jetzt: hält den Timer an und merkt sich die Aufgabe; „Weiter“ startet sie danach wieder.
+    /// Mittagspause jetzt: hält den Timer an und merkt sich die Aufgabe; „Weiter“ startet sie danach wieder.
+    /// (Pomodoro-Pausen laufen getrennt davon und werden nicht eingetragen.)
     func startBreak() {
         guard runningBreak == nil else { return }
         pomodoro = nil
         apply(Breaks.start(entries: entries, breaks: breaks, at: Date()))
-        AppLog.info("Pause", "Pause begonnen")
+        AppLog.info("Pause", "Mittagspause begonnen")
     }
 
     /// Pause beenden; mit `resume` geht es mit der Aufgabe von vorher weiter.
     func endBreak(resume: Bool) {
         guard let current = runningBreak else { return }
         apply(Breaks.end(breaks: breaks, at: Date()))
-        AppLog.info("Pause", "Pause beendet nach \(Int(current.duration() / 60)) Min")
+        AppLog.info("Pause", "Mittagspause beendet nach \(Int(current.duration() / 60)) Min")
         if resume, let id = current.resumeTaskID, let task = self.task(id), !task.isDone {
             startTimer(id)
         }
@@ -1121,11 +1122,20 @@ final class AppModel {
         return entries.reduce(0) { $0 + TimeMath.overlap(of: $1, with: interval, now: now) }
     }
 
-    /// Öffnet „Pause nachtragen“: die letzte halbe Stunde, im Kalender der gewählte Zeitraum.
+    /// Öffnet „Mittagspause nachtragen“. Vorschlag: 12:00–12:30, wenn das vorbei ist und heute noch keine eingetragen ist,
+    /// sonst die letzte halbe Stunde; mit `start` (Kalender, Tagesabschluss) ab dort.
     func beginBreakEntry(start: Date? = nil, minutes: Int = 30) {
-        let end = start.map { $0.addingTimeInterval(TimeInterval(minutes * 60)) } ?? FreeTime.snapNearest(Date(), stepMinutes: 5)
-        let begin = start ?? end.addingTimeInterval(TimeInterval(-minutes * 60))
-        breakDraft = BreakDraft(start: begin, end: end)
+        let now = Date()
+        let noon = FreeTime.date(on: today, minutes: 12 * 60)
+        let begin: Date
+        if let start {
+            begin = start
+        } else if breaks(on: today).isEmpty, noon.addingTimeInterval(TimeInterval(minutes * 60)) <= now {
+            begin = noon
+        } else {
+            begin = FreeTime.snapNearest(now, stepMinutes: 5).addingTimeInterval(TimeInterval(-minutes * 60))
+        }
+        breakDraft = BreakDraft(start: begin, end: begin.addingTimeInterval(TimeInterval(minutes * 60)), note: "Mittag")
     }
 
     func editBreak(_ item: WorkBreak) {
@@ -2218,14 +2228,15 @@ final class AppModel {
         }
     }
 
-    func resolveIdle(_ decision: IdleDecision) {
+    /// `asLunchBreak`: die abgezogene Zeit war die Mittagspause und steht dann als Pause im Kalender.
+    /// Sonst wird sie nur abgezogen (kurze Unterbrechungen werden nicht eingetragen).
+    func resolveIdle(_ decision: IdleDecision, asLunchBreak: Bool = false) {
         guard let prompt = idlePrompt else { return }
         idlePrompt = nil
         let now = Date()
         apply(TimerLogic.resolveIdle(entries: entries, idleStart: prompt.start, now: now, decision: decision))
-        // Abgezogene Zeit steht als Pause im Kalender
-        if decision == .discard {
-            addBreak(start: prompt.start, end: now)
+        if asLunchBreak, decision == .discard {
+            addBreak(start: prompt.start, end: now, note: "Mittag")
         }
     }
 
@@ -2491,7 +2502,7 @@ final class AppModel {
     }
 }
 
-/// Fenster „Pause nachtragen“ oder „Pause bearbeiten“.
+/// Fenster „Mittagspause nachtragen“ oder „Mittagspause bearbeiten“.
 struct BreakDraft: Identifiable {
     let id = UUID()
     var start: Date
