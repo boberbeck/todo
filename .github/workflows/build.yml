@@ -193,13 +193,31 @@ jobs:
           Beim ersten Öffnen blockt macOS die App, weil sie nicht von Apple beglaubigt ist:
           Systemeinstellungen › Datenschutz & Sicherheit › „Dennoch öffnen“.
           Oder im Terminal: xattr -dr com.apple.quarantine /Applications/Tagwerk.app"
-          # GitHub antwortet manchmal kurz mit Fehler 500; dann ohne Release dazustehen wäre schlecht (die App findet kein Update).
+          # GitHub antwortet manchmal mit Fehler 500/502, legt das Release aber trotzdem an (oder lässt einen Entwurf liegen).
+          # Daher: vor jedem Versuch alle Releases und Entwürfe mit dem Tag „aktuell“ samt Tag entfernen, und nach einem
+          # Fehler nachsehen, ob das Release mit diesem Stand und beiden Dateien schon vollständig da ist.
+          release_ok() {
+            local info
+            info=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/aktuell" \
+              --jq '.target_commitish + " " + ([.assets[] | select(.state == "uploaded") | .name] | sort | join(","))' 2>/dev/null) || return 1
+            [ "$info" = "$GITHUB_SHA Tagwerk.dmg,Tagwerk.zip" ]
+          }
+          clean_up() {
+            for id in $(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.tag_name == "aktuell") | .id' 2>/dev/null); do
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id" >/dev/null 2>&1 || true
+            done
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/aktuell" >/dev/null 2>&1 || true
+          }
           for attempt in 1 2 3 4 5; do
-            gh release delete aktuell --yes --cleanup-tag 2>/dev/null || true
+            clean_up
             if gh release create aktuell build/Tagwerk.dmg build/Tagwerk.zip --prerelease --target "$GITHUB_SHA" --title "Tagwerk – aktueller Stand" --notes "$NOTES"; then
               exit 0
             fi
-            echo "Release anlegen fehlgeschlagen (Versuch $attempt), neuer Versuch in $((attempt * 20)) Sekunden"
+            echo "Release anlegen meldet einen Fehler (Versuch $attempt), prüfe in $((attempt * 20)) Sekunden"
             sleep $((attempt * 20))
+            if release_ok; then
+              echo "Release ist trotz Fehlermeldung vollständig da"
+              exit 0
+            fi
           done
           exit 1
