@@ -141,3 +141,19 @@ final class StandingTaskTests: XCTestCase {
         XCTAssertEqual(try store.load().tasks.first?.isStanding, true)
     }
 }
+
+final class TimeCarvingTests: XCTestCase {
+    func testCarveSplitsShortensAndDeletes() {
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        func at(_ minutes: Double) -> Date { base.addingTimeInterval(minutes * 60) }
+        let task = UUID()
+        let running = TimeEntry(taskID: task, start: at(0))
+        let inside = TimeEntry(taskID: UUID(), start: at(20), end: at(25))
+        // „45m Telefonat“ um 60: die letzten 45 Minuten
+        let carved = TimeCarving.carve([running, inside], from: at(15), to: at(60), now: at(60))
+        XCTAssertEqual(carved.deleted.map(\.id), [inside.id])
+        XCTAssertEqual(carved.saved.count, 1, "der laufende Eintrag endet am Schnitt; danach bliebe nichts")
+        XCTAssertEqual(carved.saved.first?.end, at(15))
+        XCTAssertTrue(TimeCarving.carve([running], from: at(60), to: at(50), now: at(60)).saved.isEmpty)
+    }
+}

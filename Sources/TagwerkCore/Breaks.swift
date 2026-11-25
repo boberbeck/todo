@@ -129,35 +129,9 @@ public enum Breaks {
         change.savedBreaks.append(merged)
 
         // Arbeitszeit ausschneiden
-        let cutStart = merged.start
-        let cutEnd = merged.end ?? now
-        for entry in entries {
-            let entryEnd = entry.end ?? now
-            guard entry.start < cutEnd, entryEnd > cutStart else { continue }
-            let before = cutStart.timeIntervalSince(entry.start)
-            let after = entryEnd.timeIntervalSince(cutEnd)
-            let keepsBefore = before >= minimumRemainder
-            let keepsAfter = after >= minimumRemainder
-
-            switch (keepsBefore, keepsAfter) {
-            case (false, false):
-                change.deletedEntries.append(entry)
-            case (true, false):
-                var shortened = entry
-                shortened.end = cutStart
-                change.savedEntries.append(shortened)
-            case (false, true):
-                var later = entry
-                later.start = cutEnd
-                change.savedEntries.append(later)
-            case (true, true):
-                var first = entry
-                first.end = cutStart
-                change.savedEntries.append(first)
-                // Der zweite Teil übernimmt das Ende; ein laufender Timer läuft dort weiter.
-                change.savedEntries.append(TimeEntry(taskID: entry.taskID, start: cutEnd, end: entry.end, note: entry.note))
-            }
-        }
+        let carved = TimeCarving.carve(entries, from: merged.start, to: merged.end ?? now, now: now)
+        change.savedEntries = carved.saved
+        change.deletedEntries = carved.deleted
         return change
     }
 
@@ -195,5 +169,43 @@ public enum Breaks {
     /// Fehlt Pause? Gibt die fehlenden Minuten zurück (0 = alles gut).
     public static func missingMinutes(worked: TimeInterval, countedMinutes: Int) -> Int {
         max(0, requiredMinutes(worked: worked) - countedMinutes)
+    }
+}
+
+/// Schneidet einen Zeitraum aus erfasster Zeit heraus: Einträge darin werden gekürzt, geteilt oder gelöscht.
+/// Für Mittagspausen und für nachgetragene Zeit, die eine andere Aufgabe überlagert (sonst zählte sie doppelt).
+public enum TimeCarving {
+    /// Reste, die kürzer sind, fallen weg.
+    public static let minimumRemainder: TimeInterval = 60
+
+    public static func carve(_ entries: [TimeEntry], from cutStart: Date, to cutEnd: Date, now: Date) -> (saved: [TimeEntry], deleted: [TimeEntry]) {
+        var saved: [TimeEntry] = []
+        var deleted: [TimeEntry] = []
+        guard cutEnd > cutStart else { return (saved, deleted) }
+        for entry in entries {
+            let entryEnd = entry.end ?? now
+            guard entry.start < cutEnd, entryEnd > cutStart else { continue }
+            let keepsBefore = cutStart.timeIntervalSince(entry.start) >= minimumRemainder
+            let keepsAfter = entryEnd.timeIntervalSince(cutEnd) >= minimumRemainder
+            switch (keepsBefore, keepsAfter) {
+            case (false, false):
+                deleted.append(entry)
+            case (true, false):
+                var shortened = entry
+                shortened.end = cutStart
+                saved.append(shortened)
+            case (false, true):
+                var later = entry
+                later.start = cutEnd
+                saved.append(later)
+            case (true, true):
+                var first = entry
+                first.end = cutStart
+                saved.append(first)
+                // Der zweite Teil übernimmt das Ende; ein laufender Timer läuft dort weiter.
+                saved.append(TimeEntry(taskID: entry.taskID, start: cutEnd, end: entry.end, note: entry.note))
+            }
+        }
+        return (saved, deleted)
     }
 }

@@ -192,6 +192,43 @@ enum SnapshotMode {
             try? await Task.sleep(for: .seconds(0.5))
         }
 
+        // Befehlszeile: ohne Eingabe (Timer läuft), mit Eingabe, dann ausgeführt. Jeder Befehl wird im Protokoll geprüft.
+        model.selection = .today
+        try? await Task.sleep(for: .seconds(0.8))
+        model.openCommandBar()
+        try? await Task.sleep(for: .seconds(1.5))
+        await capture(window, name: "befehlszeile", in: directory)
+        model.commandQuery = "45m Telefonat Müller"
+        try? await Task.sleep(for: .seconds(1.2))
+        await capture(window, name: "befehlszeile-nachtragen", in: directory)
+        model.commandQuery = "seit 9:30 Angebot"
+        try? await Task.sleep(for: .seconds(1.2))
+        await capture(window, name: "befehlszeile-seit", in: directory)
+        model.commandQuery = "morgen Rechnung prüfen 30m"
+        try? await Task.sleep(for: .seconds(1.2))
+        await capture(window, name: "befehlszeile-anlegen", in: directory)
+        model.showsCommandBar = false
+
+        for query in ["45m Telefonat Müller", "morgen Rechnung prüfen 30m", "Mittag", "weiter", "orga", "vpn", "fertig", "kalender"] {
+            let suggestions = model.commandSuggestions(for: query)
+            guard let first = suggestions.first else {
+                log("Befehl „\(query)“: kein Vorschlag")
+                continue
+            }
+            let entriesBefore = model.entries.count
+            let tasksBefore = model.tasks.count
+            model.perform(first.action)
+            try? await Task.sleep(for: .seconds(0.6))
+            log("Befehl „\(query)“ → \(first.title): Aufgaben \(tasksBefore)→\(model.tasks.count), Einträge \(entriesBefore)→\(model.entries.count), läuft: \(model.runningTask?.title ?? (model.runningBreak != nil ? "Mittagspause" : "nichts")), Seite: \(String(describing: model.selection ?? .today)), Hinweis: \(model.toast?.text ?? "-")")
+            if query == "45m Telefonat Müller" {
+                model.selection = .today
+                try? await Task.sleep(for: .seconds(1.2))
+                await capture(window, name: "befehlszeile-ergebnis", in: directory)
+            }
+        }
+        model.selection = .today
+        try? await Task.sleep(for: .seconds(0.5))
+
         // Einstellungen, jeder Tab einzeln
         openSettings()
         try? await Task.sleep(for: .seconds(1.5))

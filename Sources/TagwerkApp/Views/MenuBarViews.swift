@@ -82,6 +82,11 @@ struct MenuBarContent: View {
                 Divider()
             }
 
+            Button("Befehlszeile … (⌘K)") {
+                openWindow(id: "main")
+                NSApp.activate()
+                model.openCommandBar()
+            }
             Button("Tagwerk öffnen") {
                 openWindow(id: "main")
                 NSApp.activate()

@@ -83,6 +83,30 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.15), value: model.detailTaskID)
+        // Befehlszeile (⌘K) über allem; ein Klick daneben schließt sie
+        .overlay {
+            if model.showsCommandBar {
+                ZStack(alignment: .top) {
+                    Color.black.opacity(0.45)
+                        .contentShape(Rectangle())
+                        .onTapGesture { model.showsCommandBar = false }
+                    CommandBar()
+                        .padding(.top, 72)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: model.showsCommandBar)
+        // Rückmeldung nach einem Befehl
+        .overlay(alignment: .bottom) {
+            if let toast = model.toast {
+                ToastView(toast: toast)
+                    .padding(.bottom, 28)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .id(toast.id)
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.toast)
         .sheet(item: $model.timeEntryDraft) { draft in
             AddTimeSheet(draft: draft)
                 .tagwerkSheet()
@@ -199,10 +223,11 @@ struct TopBarTabs: View {
     }
 }
 
-/// Rechts in der Titelleiste: Update-Hinweis, laufender Timer, Einstellungen.
+/// Rechts in der Titelleiste: Befehlszeile, Update-Hinweis, laufender Timer, Einstellungen.
 struct TopBarTrailing: View {
     var body: some View {
         HStack(spacing: 8) {
+            CommandBarButton()
             UpdatePill()
             RunningTimerPill()
             SettingsLink {
@@ -302,7 +327,7 @@ struct RunningTimerPill: View {
                         Text(task.title)
                             .lineLimit(1)
                             .foregroundStyle(Theme.secondary)
-                            .frame(maxWidth: 200, alignment: .leading)
+                            .frame(maxWidth: 160, alignment: .leading)
                         if let pomodoro = model.pomodoro, pomodoro.phase == .work {
                             Label(PomodoroText.clock(model.pomodoroRemaining), systemImage: "timer")
                                 .monospacedDigit()

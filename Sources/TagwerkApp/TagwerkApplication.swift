@@ -86,6 +86,9 @@ struct TagwerkCommands: Commands {
             Button("Mittagspause nachtragen …") { model.beginBreakEntry() }
         }
         CommandMenu("Gehe zu") {
+            Button("Befehlszeile …") { model.openCommandBar() }
+                .keyboardShortcut("k", modifiers: .command)
+            Divider()
             Button("Start") { model.selection = .today }
                 .keyboardShortcut("1", modifiers: .command)
             Button("Woche planen") { model.selection = .week }

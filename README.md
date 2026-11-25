@@ -12,6 +12,7 @@ Aufbau: dunkel und ruhig, oben die Leiste mit Start, Plan, Kalender, Fokus, Kund
 
 | Bereich | Was geht |
 | --- | --- |
+| Befehlszeile | ⌘K oder „Was jetzt?“ oben rechts: eine Zeile für alles. Man tippt in normalem Deutsch, was man tut, darunter steht, was ↩ macht (↑↓ wählt, Esc schließt). „vpn“ startet „VPN-Störung prüfen“ (ein laufender Timer endet), „45m Telefonat Müller“ trägt die letzten 45 Minuten nach (neue erledigte Aufgabe beim Kunden Müller; lief ein Timer, wird die Zeit dort herausgeschnitten und er läuft danach weiter), „seit 9:30 Angebot“ startet rückwirkend, „morgen Bericht 30m“, „Freitag …“ oder „später …“ legt an, „Mittag“, „weiter“, „fertig“ und „stopp“ tun, was sie sagen, „Kalender“ oder „Feierabend“ springt dorthin. Ohne Eingabe schlägt sie das Naheliegende vor: laufende Aufgabe erledigen, Mittagspause, die nächsten Aufgaben, Standardaufgaben. Unten bestätigt eine kurze Meldung, was passiert ist. |
 | Start | Großes Datum, Stunden heute und diese Woche. Links die Aufgaben von heute (neue oben oder unten einfügen, per Ziehen sortieren), darunter die Erledigt-Liste und der Eingang. Rechts der Tageskalender, an der Kante breiter ziehbar; die Lupen machen die Stunden höher. |
 | Aufgabe öffnen | ⓘ beim Darüberfahren, Rechtsklick › „Öffnen …“ oder im Fokus „Aufgabe öffnen“: ein Fenster mit Titel, Planung, Kunde, Ziel, Ticket, Work Log Type, Unteraufgaben (umbenennen, Timer, löschen), Notizen, Bearbeitung und allen Zeiteinträgen. Doppelklick auf eine Aufgabe öffnet weiter den Fokus, Doppelklick auf eine Unteraufgabe benennt sie um. |
 | Unteraufgaben | Beim Darüberfahren über eine Aufgabe das Listen-Symbol neben ▶, Rechtsklick › „Unteraufgabe hinzufügen“ oder im Fokus „Unteraufgaben“; geht in Start, Eingang, Woche und bei den Kunden. Claude legt sie über MCP mit `unteraufgabe_von` an. Jede Unteraufgabe hat ihren eigenen Timer und kann ein eigenes Ticket haben; Kunde und Ticket erbt sie sonst von der Aufgabe darüber. Im Tagesabschluss steht sie als eigene Zeile („Aufgabe: Unteraufgabe“). |
@@ -141,6 +142,7 @@ Alle Daten liegen lokal in `~/Library/Application Support/Tagwerk/tagwerk.sqlite
 
 | Kürzel | Aktion |
 | --- | --- |
+| ⌘K | Befehlszeile: starten, nachtragen, anlegen, Mittagspause, springen |
 | ⌘N | Neue Aufgabe (auf Start) |
 | ⌘T | Timer der Fokus-Aufgabe starten oder stoppen |
 | ⌘↩ | Fokus-Aufgabe erledigt |

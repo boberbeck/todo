@@ -34,6 +34,11 @@ final class AppModel {
     private(set) var absences: [Absence] = []
     /// Pausen (zählen nicht als Arbeitszeit)
     private(set) var breaks: [WorkBreak] = []
+    /// Befehlszeile (⌘K) offen, mit ihrer Eingabe
+    var showsCommandBar = false
+    var commandQuery = ""
+    /// Kurze Rückmeldung unten im Fenster, z. B. nach einem Befehl
+    private(set) var toast: Toast?
     /// Offenes Fenster „Mittagspause nachtragen“ oder „Mittagspause bearbeiten“
     var breakDraft: BreakDraft?
     /// Offenes Fenster „Abwesenheit eintragen“
@@ -1156,6 +1161,131 @@ final class AppModel {
         }
     }
 
+    // MARK: Befehlszeile
+
+    /// Vorschläge für die Eingabe in der Befehlszeile.
+    func commandSuggestions(for query: String) -> [CommandSuggestion] {
+        QuickCommand.suggestions(for: query, in: CommandContext(
+            tasks: tasks,
+            customers: activeCustomers,
+            today: today,
+            runningTaskID: runningEntry?.taskID,
+            lunchRunning: runningBreak != nil,
+            now: Date()
+        ))
+    }
+
+    func openCommandBar(with query: String = "") {
+        commandQuery = query
+        showsCommandBar = true
+    }
+
+    /// Führt einen Befehl aus und sagt kurz, was passiert ist.
+    func perform(_ action: CommandAction) {
+        showsCommandBar = false
+        switch action {
+        case .start(let id):
+            startTimer(id)
+            showToast("Läuft: \(task(id)?.title ?? "Aufgabe")", symbol: "play.fill")
+        case .startNew(let title, let customerID):
+            guard let created = addTask(title: title, customerID: customerID, plannedDate: today) else { return }
+            startTimer(created.id)
+            showToast("Neu und läuft: \(created.title)", symbol: "play.fill")
+        case .startSince(let taskID, let title, let customerID, let since):
+            guard let id = taskID ?? addTask(title: title, customerID: customerID, plannedDate: today)?.id else { return }
+            startTimer(id, since: since)
+            let start = runningEntry?.start ?? since
+            showToast("„\(task(id)?.title ?? title)“ läuft seit \(start.formatted(date: .omitted, time: .shortened))", symbol: "play.circle")
+        case .log(let taskID, let title, let customerID, let minutes):
+            logUntilNow(taskID: taskID, title: title, customerID: customerID, minutes: minutes)
+        case .add(let title, let customerID, let day, let estimate):
+            guard let created = addTask(title: title, customerID: customerID, plannedDate: day) else { return }
+            if let estimate { setEstimate(estimate, for: created.id) }
+            let when = QuickCommand.dayLabel(day, today: today, calendar: .current)
+            showToast(day == nil ? "Im Eingang: \(created.title)" : "Für \(when): \(created.title)", symbol: day == nil ? "tray.and.arrow.down" : "plus.circle")
+        case .stop:
+            let title = runningTask?.title
+            stopTimer()
+            showToast(title.map { "Gestoppt: \($0)" } ?? "Timer gestoppt", symbol: "stop.fill")
+        case .complete(let id):
+            let title = task(id)?.title ?? "Aufgabe"
+            complete(id)
+            showToast("Erledigt: \(title)", symbol: "checkmark.circle.fill")
+        case .focus(let id):
+            openFocus(id)
+        case .startLunch:
+            startBreak()
+            showToast("Mittagspause. Guten Appetit!", symbol: "fork.knife")
+        case .endLunch:
+            endBreak(resume: true)
+            showToast(runningTask.map { "Weiter mit „\($0.title)“" } ?? "Mittagspause beendet", symbol: "play.fill")
+        case .open(let destination):
+            switch destination {
+            case .start: selection = .today
+            case .plan: selection = .week
+            case .calendar: selection = .calendar
+            case .focus: selection = .focus
+            case .customers: selection = .customers
+            case .goals: selection = .goals
+            case .review: selection = .review
+            case .planning: selection = .planning
+            case .close: selection = .close
+            }
+        }
+    }
+
+    /// Zeit, die gerade zu Ende gegangen ist, nachtragen. Überlagerte Zeit anderer Einträge wird dort herausgeschnitten
+    /// (sonst zählte sie doppelt); lief ein Timer, läuft er ab jetzt weiter.
+    private func logUntilNow(taskID: UUID?, title: String, customerID: UUID?, minutes: Int) {
+        let end = Date()
+        let start = end.addingTimeInterval(TimeInterval(-minutes * 60))
+        let resumeID = runningEntry?.taskID
+        var target = taskID.flatMap { task($0) }
+        if target == nil {
+            target = addTask(title: title, customerID: customerID, plannedDate: today)
+        }
+        guard let target else { return }
+
+        let carved = TimeCarving.carve(entries, from: start, to: end, now: end)
+        do {
+            for entry in carved.deleted {
+                try store.deleteEntry(id: entry.id)
+                entries.removeAll { $0.id == entry.id }
+            }
+            for entry in carved.saved {
+                try store.save(entry)
+                replace(entry)
+            }
+        } catch {
+            report(error)
+        }
+        addEntry(taskID: target.id, start: start, end: end)
+        if taskID == nil, var done = task(target.id) {
+            done.status = .done
+            done.completedAt = end
+            persist(done)
+        }
+        // Lief vorher ein Timer (für eine andere Aufgabe), läuft er ab jetzt weiter
+        if let resumeID, resumeID != target.id, runningEntry == nil {
+            apply(TimerLogic.start(taskID: resumeID, entries: entries, at: Date()))
+        }
+        AppLog.info("Befehl", "\(minutes) Min nachgetragen\(carved.saved.count + carved.deleted.count > 0 ? ", überlagerte Zeit herausgeschnitten" : "")")
+        showToast("\(TimeMath.format(minutes: minutes)) h auf „\(target.title)“ nachgetragen", symbol: "clock.badge.checkmark")
+    }
+
+    func showToast(_ text: String, symbol: String) {
+        let next = Toast(text: text, symbol: symbol)
+        toast = next
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3.5))
+            if self?.toast?.id == next.id { self?.toast = nil }
+        }
+    }
+
+    func dismissToast() {
+        toast = nil
+    }
+
     // MARK: Woche und Kalender
 
     func dayTasks(_ day: LocalDate) -> [TaskItem] { DayPlan.tasks(for: day, in: tasks) }
@@ -2225,6 +2355,13 @@ final class AppModel {
         lastError = String(describing: error)
         AppLog.error("App", String(describing: error))
     }
+}
+
+/// Kurze Rückmeldung unten im Fenster.
+struct Toast: Identifiable, Equatable {
+    let id = UUID()
+    let text: String
+    let symbol: String
 }
 
 /// Fenster „Mittagspause nachtragen“ oder „Mittagspause bearbeiten“.
