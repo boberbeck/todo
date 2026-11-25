@@ -1,7 +1,7 @@
 import Foundation
 
 /// Protokoll für die Fehlersuche: ~/Library/Logs/Tagwerk/tagwerk.log.
-/// Steht drin, was beim SAP-Abruf, mit ManageEngine, Kalender, Claude und Updates passiert ist.
+/// Steht drin, was mit ManageEngine, Kalender, Claude und Updates passiert ist.
 /// Nie Passwörter, Schlüssel oder Tokens hineinschreiben.
 enum AppLog {
     enum Level: String {

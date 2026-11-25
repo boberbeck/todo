@@ -1,18 +1,12 @@
 import Foundation
 
-/// Wohin eine Zeit gebucht wird.
+/// Wohin eine Zeit gebucht wird: als Worklog ins Ticket in ManageEngine.
 public enum BookingTarget: String, Codable, CaseIterable, Sendable, Identifiable {
-    case sap
     case manageEngine
 
     public var id: String { rawValue }
 
-    public var label: String {
-        switch self {
-        case .sap: return "SAP"
-        case .manageEngine: return "ManageEngine"
-        }
-    }
+    public var label: String { "ManageEngine" }
 }
 
 public enum BookingStatus: String, Codable, Sendable {
@@ -22,8 +16,6 @@ public enum BookingStatus: String, Codable, Sendable {
     case failed
     /// vom Zielsystem bestätigt (z. B. Worklog angelegt)
     case confirmed
-    /// von Hand übertragen und abgehakt (SAP ohne Schnittstelle)
-    case entered
     /// bewusst ausgelassen, z. B. kein Worklog im Ticket (dort ist er freiwillig)
     case skipped
 
@@ -32,12 +24,11 @@ public enum BookingStatus: String, Codable, Sendable {
         case .pending: return "offen"
         case .failed: return "Fehler"
         case .confirmed: return "gebucht"
-        case .entered: return "eingetragen"
         case .skipped: return "ohne Worklog"
         }
     }
 
-    public var isDone: Bool { self == .confirmed || self == .entered || self == .skipped }
+    public var isDone: Bool { self == .confirmed || self == .skipped }
 }
 
 /// Eine Buchung: Zeit einer Aufgabe an einem Tag für ein Zielsystem.
@@ -48,8 +39,6 @@ public struct Booking: Identifiable, Hashable, Codable, Sendable {
     public var target: BookingTarget
     public var minutes: Int
     public var description: String
-    public var pspElement: String?
-    public var workType: WorkType?
     /// interne Ticket-ID in ManageEngine
     public var ticketKey: String?
     public var status: BookingStatus
@@ -58,8 +47,6 @@ public struct Booking: Identifiable, Hashable, Codable, Sendable {
     public var lastError: String?
     public var attempts: Int
     public var updatedAt: Date
-    /// Tätigkeit aus SAP (Activity); ohne sie bestimmt die Arbeitsart die Leistung.
-    public var activity: String?
 
     public init(
         id: UUID = UUID(),
@@ -68,15 +55,12 @@ public struct Booking: Identifiable, Hashable, Codable, Sendable {
         target: BookingTarget,
         minutes: Int,
         description: String,
-        pspElement: String? = nil,
-        workType: WorkType? = nil,
         ticketKey: String? = nil,
         status: BookingStatus = .pending,
         reference: String? = nil,
         lastError: String? = nil,
         attempts: Int = 0,
-        updatedAt: Date = Date(),
-        activity: String? = nil
+        updatedAt: Date = Date()
     ) {
         self.id = id
         self.taskID = taskID
@@ -84,40 +68,28 @@ public struct Booking: Identifiable, Hashable, Codable, Sendable {
         self.target = target
         self.minutes = minutes
         self.description = description
-        self.pspElement = pspElement
-        self.workType = workType
         self.ticketKey = ticketKey
         self.status = status
         self.reference = reference
         self.lastError = lastError
         self.attempts = attempts
         self.updatedAt = updatedAt
-        self.activity = activity
     }
 }
 
-/// Was vor dem Buchen noch fehlt.
+/// Was vor dem Worklog noch fehlt.
 public enum BookingIssue: String, Hashable, Sendable, CaseIterable {
-    case missingPSP
-    case missingWorkType
     case missingDescription
     case missingTicketKey
 
     public var message: String {
         switch self {
-        case .missingPSP: return "PSP-Element fehlt"
-        case .missingWorkType: return "Arbeitsart oder SAP-Tätigkeit fehlt (legt die Leistung fest)"
         case .missingDescription: return "Beschreibung der Bearbeitung fehlt"
         case .missingTicketKey: return "Ticket in ManageEngine nicht gefunden (Nummer prüfen oder neu zuordnen)"
         }
     }
 
-    public var target: BookingTarget {
-        switch self {
-        case .missingPSP, .missingWorkType: return .sap
-        case .missingDescription, .missingTicketKey: return .manageEngine
-        }
-    }
+    public var target: BookingTarget { .manageEngine }
 }
 
 public struct BookingRules: Equatable, Sendable {
@@ -130,7 +102,7 @@ public struct BookingRules: Equatable, Sendable {
     }
 }
 
-/// Eine Zeile im Tagesabschluss: eine Aufgabe, ihre Zeit an diesem Tag und wohin sie geht.
+/// Eine Zeile im Tagesabschluss: eine Aufgabe, ihre Zeit an diesem Tag und ob ein Worklog ins Ticket geht.
 public struct BookingLine: Identifiable, Equatable, Sendable {
     public var id: UUID { task.id }
     public var task: TaskItem
@@ -151,14 +123,14 @@ public struct BookingLine: Identifiable, Equatable, Sendable {
         bookings[target]?.status
     }
 
-    /// Alle Ziele erledigt?
+    /// Alle Ziele erledigt? (Ohne Ticket gibt es nichts zu senden.)
     public var isDone: Bool {
         targets.allSatisfy { bookings[$0]?.status.isDone ?? false }
     }
 
     /// Nach dem Buchen wurde die Zeit noch geändert.
     public var changedAfterBooking: Bool {
-        bookings.values.contains { ($0.status == .confirmed || $0.status == .entered) && $0.minutes != minutes }
+        bookings.values.contains { $0.status == .confirmed && $0.minutes != minutes }
     }
 
     /// Hinweise, die noch offen sind: Ziele, die erledigt oder ausgelassen sind, zählen nicht mehr.
@@ -166,19 +138,10 @@ public struct BookingLine: Identifiable, Equatable, Sendable {
         issues.filter { !(bookings[$0.target]?.status.isDone ?? false) }
     }
 
-    /// Titel für Kommentar und Worklog; bei Unteraufgaben mit der übergeordneten Aufgabe davor.
+    /// Titel für Worklog und Liste; bei Unteraufgaben mit der übergeordneten Aufgabe davor.
     public var displayTitle: String {
         guard let parentTitle, !parentTitle.isEmpty else { return task.title }
         return "\(parentTitle): \(task.title)"
-    }
-
-    /// Text für SAP: Ticketnummer vorweg, dann die Beschreibung.
-    public var sapComment: String {
-        let text = task.workDescription.isEmpty ? displayTitle : task.workDescription
-        if let number = task.linkedTicketNumber {
-            return "#\(number) \(text)"
-        }
-        return text
     }
 
     /// Text für den Worklog in ManageEngine.
@@ -210,10 +173,8 @@ public enum DailyClose {
                 guard seconds > 0 else { return nil }
                 let parent = stored.parentID.flatMap { byID[$0] }
                 let task = stored.resolved(parent: parent)
-                let targets: [BookingTarget] = task.hasTicket ? [.sap, .manageEngine] : [.sap]
+                let targets: [BookingTarget] = task.hasTicket ? [.manageEngine] : []
                 var issues: [BookingIssue] = []
-                if task.pspElement == nil { issues.append(.missingPSP) }
-                if task.workType == nil, (task.sapActivity ?? "").isEmpty { issues.append(.missingWorkType) }
                 if targets.contains(.manageEngine) {
                     if task.workDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         issues.append(.missingDescription)
@@ -253,10 +214,7 @@ public enum DailyClose {
                 description: ""
             )
             booking.minutes = effectiveMinutes
-            booking.description = target == .sap ? line.sapComment : line.worklogDescription
-            booking.pspElement = line.task.pspElement
-            booking.workType = line.task.workType
-            booking.activity = line.task.sapActivity
+            booking.description = line.worklogDescription
             booking.ticketKey = line.task.linkedTicketKey
             if booking.status != .failed {
                 booking.status = .pending
@@ -276,11 +234,8 @@ public enum BookingQueue {
             day: line.day,
             target: target,
             minutes: minutes,
-            description: target == .manageEngine ? line.worklogDescription : line.sapComment,
-            pspElement: line.task.pspElement,
-            workType: line.task.workType,
-            ticketKey: line.task.linkedTicketKey,
-            activity: line.task.sapActivity
+            description: line.worklogDescription,
+            ticketKey: line.task.linkedTicketKey
         )
         booking.status = .skipped
         booking.minutes = minutes
@@ -303,7 +258,7 @@ public enum BookingQueue {
                 return true
             case .failed:
                 return now >= booking.updatedAt.addingTimeInterval(retryDelay(attempts: booking.attempts))
-            case .confirmed, .entered, .skipped:
+            case .confirmed, .skipped:
                 return false
             }
         }
@@ -326,18 +281,11 @@ public enum BookingQueue {
         copy.updatedAt = now
         return copy
     }
-
-    public static func entered(_ booking: Booking, now: Date) -> Booking {
-        var copy = booking
-        copy.status = .entered
-        copy.lastError = nil
-        copy.updatedAt = now
-        return copy
-    }
 }
 
-/// Übertragungsliste für SAP ByDesign, solange es keine Schnittstelle gibt.
-public enum SAPTransfer {
+/// Liste des Tages zum Kopieren, z. B. um Zeiten in ein anderes System abzutippen.
+/// Tabulator-getrennt, damit sie in Excel oder Numbers gleich in Spalten landet.
+public enum DayList {
     /// Stunden mit Komma, z. B. "1,25".
     public static func hours(_ minutes: Int) -> String {
         let value = Double(minutes) / 60
@@ -345,34 +293,35 @@ public enum SAPTransfer {
         return text.replacingOccurrences(of: ".", with: ",")
     }
 
-    /// Leistung für SAP: die Tätigkeit aus SAP, sonst was zur Arbeitsart eingestellt ist.
-    public static func service(for booking: Booking, serviceFor: (WorkType?) -> String) -> String {
-        if let activity = booking.activity?.trimmingCharacters(in: .whitespaces), !activity.isEmpty {
-            return activity
-        }
-        return serviceFor(booking.workType)
-    }
-
-    /// Semikolon-getrennt für Excel (deutsch): Datum;PSP-Element;Leistung;Stunden;Kommentar
-    public static func csv(_ bookings: [Booking], serviceFor: (WorkType?) -> String) -> String {
-        var lines = ["Datum;PSP-Element;Leistung;Stunden;Kommentar"]
-        for booking in bookings.sorted(by: { ($0.day, $0.pspElement ?? "") < ($1.day, $1.pspElement ?? "") }) {
-            let date = String(format: "%02d.%02d.%04d", booking.day.day, booking.day.month, booking.day.year)
-            let fields = [
+    /// Datum, Aufgabe, Kunde, Ticket, Stunden, Beschreibung; `minutes` ersetzt die gerundete Zeit einer Zeile.
+    public static func text(
+        _ lines: [BookingLine],
+        minutes: [UUID: Int] = [:],
+        customerName: (UUID?) -> String?
+    ) -> String {
+        var rows = [["Datum", "Aufgabe", "Kunde", "Ticket", "Stunden", "Beschreibung"]]
+        for line in lines {
+            let date = String(format: "%02d.%02d.%04d", line.day.day, line.day.month, line.day.year)
+            rows.append([
                 date,
-                booking.pspElement ?? "",
-                service(for: booking, serviceFor: serviceFor),
-                hours(booking.minutes),
-                booking.description,
-            ]
-            lines.append(fields.map(escape).joined(separator: ";"))
+                line.displayTitle,
+                customerName(line.task.customerID) ?? "",
+                line.task.linkedTicketNumber.map { "#\($0)" } ?? "",
+                hours(minutes[line.id] ?? line.minutes),
+                line.task.workDescription,
+            ])
         }
-        return lines.joined(separator: "\n") + "\n"
+        return rows
+            .map { $0.map(clean).joined(separator: "\t") }
+            .joined(separator: "\n") + "\n"
     }
 
-    private static func escape(_ field: String) -> String {
-        let needsQuotes = field.contains(";") || field.contains("\"") || field.contains("\n")
-        guard needsQuotes else { return field }
-        return "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    /// Tabulatoren und Zeilenumbrüche würden die Spalten verschieben.
+    private static func clean(_ field: String) -> String {
+        field
+            .replacingOccurrences(of: "\t", with: " ")
+            .components(separatedBy: .newlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 }

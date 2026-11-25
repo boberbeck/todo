@@ -92,8 +92,10 @@ struct FocusTaskPane: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
                     .frame(maxWidth: 760)
-                BookingSummary(task: task)
-                    .padding(.top, 2)
+                if model.resolved(task).hasTicket {
+                    BookingSummary(task: task)
+                        .padding(.top, 2)
+                }
                 if let goal = model.longGoal(model.resolved(task).longGoalID) {
                     let progress = model.progress(of: goal)
                     Button {
@@ -215,8 +217,6 @@ struct FocusTaskPane: View {
                 if showsDetails {
                     VStack(alignment: .leading, spacing: 10) {
                         FlowLayout(spacing: 8) {
-                            WorkTypeMenu(task: task)
-                            PSPMenu(task: task)
                             TicketMenu(task: task)
                             if model.resolved(task).hasTicket {
                                 WorklogTypeMenu(task: task)
@@ -256,11 +256,10 @@ struct FocusTaskPane: View {
         }
     }
 
-    /// „Wartung · CPSO8643-1 · Bearbeitung“
+    /// „Ticket #1234 · Bearbeitung“
     private var detailSummary: String {
         var parts: [String] = []
-        parts.append(task.workType?.label ?? "Arbeitsart wählen")
-        parts.append(model.pspLabel(for: task) ?? "SAP-Aufgabe wählen")
+        parts.append(model.resolved(task).linkedTicketNumber.map { "Ticket #\($0)" } ?? "Ticket zuordnen")
         parts.append(task.workDescription.isEmpty ? "Bearbeitung notieren" : "Bearbeitung")
         return parts.joined(separator: " · ")
     }

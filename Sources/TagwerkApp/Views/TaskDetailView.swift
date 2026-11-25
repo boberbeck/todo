@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import TagwerkCore
 
-/// Eine Aufgabe mit allem: Titel, Planung, Buchung (SAP, Ticket), Ziel, Unteraufgaben, Notizen und erfasste Zeiten.
+/// Eine Aufgabe mit allem: Titel, Planung, Ticket, Ziel, Unteraufgaben, Notizen und erfasste Zeiten.
 /// Öffnet sich per Doppelklick; alles lässt sich hier ändern.
 struct TaskDetailView: View {
     @Environment(AppModel.self) private var model
@@ -13,7 +13,6 @@ struct TaskDetailView: View {
     @State private var title = ""
     @State private var notes = ""
     @State private var workDescription = ""
-    @State private var showsSAPPicker = false
     @State private var showsTicketPicker = false
     @State private var timeDraft: TimeEntryDraft?
     @State private var confirmsDelete = false
@@ -107,36 +106,6 @@ struct TaskDetailView: View {
                 }
 
                 Section {
-                    LabeledContent("SAP-Aufgabe") {
-                        Button {
-                            showsSAPPicker = true
-                        } label: {
-                            Text(sapLabel(task, effective: effective))
-                                .foregroundStyle(effective.pspElement == nil ? Theme.warning : Color.primary)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.trailing)
-                        }
-                        .buttonStyle(.borderless).foregroundStyle(Theme.accent)
-                        .popover(isPresented: $showsSAPPicker, arrowEdge: .bottom) {
-                            SAPTaskPicker(selectedCode: task.pspElement, selectedActivity: task.sapActivity) { psp, customCode in
-                                if let psp {
-                                    model.setSAPTask(psp, for: task.id)
-                                } else {
-                                    model.setPSPElement(customCode ?? "", for: task.id)
-                                }
-                                showsSAPPicker = false
-                            }
-                        }
-                    }
-                    Picker(effective.sapActivity == nil ? "Arbeitsart" : "Arbeitsart (optional)", selection: Binding(
-                        get: { task.workType },
-                        set: { model.setWorkType($0, for: task.id) }
-                    )) {
-                        Text(effective.workType.map { "Keine (geerbt: \($0.label))" } ?? "Keine").tag(WorkType?.none)
-                        ForEach(WorkType.allCases) { type in
-                            Text(type.label).tag(WorkType?.some(type))
-                        }
-                    }
                     LabeledContent("Ticket") {
                         if task.source == .ticket {
                             Text("#\(task.externalID ?? "?") · \(model.ticketTitle(for: task) ?? task.title)")
@@ -167,14 +136,10 @@ struct TaskDetailView: View {
                             }
                         }
                     }
-                    LabeledContent("Gebucht wird in") {
-                        Text(effective.bookingTargets)
-                            .foregroundStyle(.secondary)
-                    }
                 } header: {
-                    Text("Buchung")
+                    Text("Ticket")
                 } footer: {
-                    Text(task.isSubtask ? "Was hier leer ist, erbt die Unteraufgabe von „\(model.parent(of: task)?.title ?? "")“." : "SAP ist Pflicht, der Worklog im Ticket freiwillig.")
+                    Text(task.isSubtask ? "Ohne eigenes Ticket gilt das der Aufgabe „\(model.parent(of: task)?.title ?? "")“." : "Mit Ticket geht die Zeit im Tagesabschluss als Worklog dorthin; der Worklog ist freiwillig.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -205,7 +170,7 @@ struct TaskDetailView: View {
                 } header: {
                     Text("Bearbeitung")
                 } footer: {
-                    Text("Wird zum Text für den Worklog und zum SAP-Kommentar.")
+                    Text("Wird zum Text für den Worklog im Ticket.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -360,11 +325,6 @@ struct TaskDetailView: View {
         return options
     }
 
-    private func sapLabel(_ task: TaskItem, effective: TaskItem) -> String {
-        guard let label = model.pspLabel(for: task) else { return "Wählen (fehlt noch)" }
-        return task.pspElement == nil ? "\(label) (geerbt)" : label
-    }
-
     private func ticketLabel(_ task: TaskItem, effective: TaskItem) -> String {
         guard let number = effective.linkedTicketNumber else { return "Zuordnen …" }
         let title = model.ticketTitle(for: task).map { " · \($0)" } ?? ""
@@ -426,7 +386,7 @@ struct SubtaskEditRow: View {
                 Image(systemName: "info.circle")
             }
             .buttonStyle(.borderless)
-            .help("Unteraufgabe öffnen (SAP-Aufgabe, Ticket, Zeiten)")
+            .help("Unteraufgabe öffnen (Ticket, Zeiten)")
             Button {
                 model.delete(task.id)
             } label: {

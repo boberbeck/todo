@@ -93,13 +93,12 @@ final class MCPServerTests: XCTestCase {
         let customer = Customer(name: "Müller Logistik", colorIndex: 1)
         let (server, store) = makeServer(Snapshot(customers: [customer]))
 
-        let added = try call(server, "aufgabe_anlegen", ["titel": "Backup prüfen 45m", "kunde": "müller", "datum": "heute", "arbeitsart": "Wartung"])
+        let added = try call(server, "aufgabe_anlegen", ["titel": "Backup prüfen 45m", "kunde": "müller", "datum": "heute"])
         XCTAssertFalse(added.isError, added.text)
         let task = try XCTUnwrap(try store.load().tasks.first)
         XCTAssertEqual(task.title, "Backup prüfen")
         XCTAssertEqual(task.estimateMinutes, 45)
         XCTAssertEqual(task.customerID, customer.id)
-        XCTAssertEqual(task.workType, .wartung)
         XCTAssertEqual(task.plannedDate, LocalDate(year: 2026, month: 11, day: 19))
 
         let overview = try call(server, "tagesuebersicht")
@@ -128,10 +127,10 @@ final class MCPServerTests: XCTestCase {
         let task = TaskItem(title: "Server tauschen", plannedDate: LocalDate(year: 2026, month: 11, day: 19))
         let (server, store) = makeServer(Snapshot(tasks: [task]))
         let shortID = String(task.id.uuidString.prefix(8))
-        let result = try call(server, "aufgabe_aendern", ["id": shortID, "psp": "CPSO8643-12", "beschreibung": "Platten getauscht", "datum": "eingang", "erledigt": true])
+        let result = try call(server, "aufgabe_aendern", ["id": shortID, "notizen": "Platten liegen im Lager", "beschreibung": "Platten getauscht", "datum": "eingang", "erledigt": true])
         XCTAssertFalse(result.isError, result.text)
         let saved = try XCTUnwrap(try store.load().tasks.first)
-        XCTAssertEqual(saved.pspElement, "CPSO8643-12")
+        XCTAssertEqual(saved.notes, "Platten liegen im Lager")
         XCTAssertEqual(saved.workDescription, "Platten getauscht")
         XCTAssertNil(saved.plannedDate)
         XCTAssertTrue(saved.isDone)
@@ -159,7 +158,7 @@ final class MCPServerTests: XCTestCase {
 
     func testTimeReportSumsPerCustomer() throws {
         let customer = Customer(name: "Becker & Partner", colorIndex: 2)
-        let task = TaskItem(title: "Beratung", customerID: customer.id, workType: .beratung, pspElement: "CPSO8643-1")
+        let task = TaskItem(title: "Beratung", customerID: customer.id)
         let monday = calendar.date(from: DateComponents(year: 2026, month: 11, day: 16, hour: 9))!
         let entries = [
             TimeEntry(taskID: task.id, start: monday, end: monday.addingTimeInterval(90 * 60)),
@@ -174,8 +173,8 @@ final class MCPServerTests: XCTestCase {
         XCTAssertEqual(report.json["summe_min"] as? Int, 120)
         let perCustomer = try XCTUnwrap(report.json["je_kunde"] as? [[String: Any]])
         XCTAssertEqual(perCustomer.first?["kunde"] as? String, "Becker & Partner")
-        let perPSP = try XCTUnwrap(report.json["je_psp"] as? [[String: Any]])
-        XCTAssertEqual(perPSP.first?["psp"] as? String, "CPSO8643-1")
+        let perTask = try XCTUnwrap(report.json["je_aufgabe"] as? [[String: Any]])
+        XCTAssertEqual(perTask.first?["aufgabe"] as? String, "Beratung")
     }
 
     func testDayCloseShowsMissingFields() throws {
@@ -187,7 +186,7 @@ final class MCPServerTests: XCTestCase {
         XCTAssertEqual(lines.count, 1)
         XCTAssertEqual(lines.first?["minuten"] as? Int, 30)
         let missing = try XCTUnwrap(lines.first?["fehlt"] as? [String])
-        XCTAssertTrue(missing.contains(BookingIssue.missingPSP.message))
+        XCTAssertTrue(missing.contains(BookingIssue.missingDescription.message))
         XCTAssertEqual(close.json["offen_manageengine"] as? Int, 1)
     }
 
@@ -212,7 +211,7 @@ final class MCPServerTests: XCTestCase {
 }
 
 final class MCPSubtaskTests: XCTestCase {
-    func testSubtaskWithTicketAndActivity() throws {
+    func testSubtaskWithTicket() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
         let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 10))!
@@ -225,15 +224,12 @@ final class MCPSubtaskTests: XCTestCase {
             "titel": "Regeln exportieren",
             "unteraufgabe_von": String(parent.id.uuidString.prefix(8)),
             "ticket": "#1240",
-            "psp": "CPSO8643-6",
-            "taetigkeit": "Consulting",
         ])
         let subtask = try XCTUnwrap(try store.load().tasks.first { $0.title == "Regeln exportieren" })
         XCTAssertEqual(subtask.parentID, parent.id)
         XCTAssertNil(subtask.plannedDate)
         XCTAssertEqual(subtask.ticketNumber, "1240")
         XCTAssertEqual(subtask.ticketKey, "100124", "interne ID vom Ticket in Tagwerk")
-        XCTAssertEqual(subtask.sapActivity, "Consulting")
         XCTAssertTrue(text.contains("unteraufgabe_von"), text)
 
         let inbox = try tools.call(name: "aufgaben", arguments: ["eingang": true])

@@ -57,7 +57,7 @@ enum Theme {
     static let done = Color(red: 0.298, green: 0.765, blue: 0.541)
     static let warning = Color(red: 0.878, green: 0.690, blue: 0.290)
     static let danger = Color(red: 0.898, green: 0.282, blue: 0.302)
-    /// Tickets (ManageEngine): kühler Gegenton zum warmen SAP
+    /// Tickets (ManageEngine): kühler Gegenton zum warmen Orange
     static let info = Color(red: 0.58, green: 0.68, blue: 1.0)
 
     static var accentGradient: LinearGradient {
@@ -354,7 +354,7 @@ private struct IconButtonBody: View {
     }
 }
 
-/// Meta-Angabe wie SAP-Aufgabe oder Ticket: ruhiger Text mit Symbol, keine Pille.
+/// Meta-Angabe wie ein Ticket: ruhiger Text mit Symbol, keine Pille.
 /// Fehlt etwas (`warning`), steht ein kleiner Punkt davor. Beim Darüberfahren eine leichte Fläche (anklickbar).
 struct Chip: View {
     enum Tone {
@@ -635,7 +635,7 @@ struct TaskCard: View {
                     CardMeta(task: task, compact: compact)
                     SubtaskToggle(task: task)
                 }
-                if !compact, !task.isDone {
+                if !compact, !task.isDone, model.resolved(task).hasTicket {
                     BookingSummary(task: task)
                 }
                 if model.expandedTaskIDs.contains(task.id) {
@@ -746,13 +746,12 @@ struct CardMeta: View {
         if task.source == .mail { parts.append("Mail") }
         if !compact, let start = task.scheduledStart, !task.isDone { parts.append(start.formatted(date: .omitted, time: .shortened)) }
         if let estimate = task.estimateMinutes, compact || task.isDone { parts.append("\(TimeMath.format(minutes: estimate)) h") }
-        if !compact, let workType = task.workType { parts.append(workType.label) }
         return parts
     }
 }
 
 /// Reiht Elemente nebeneinander und bricht in die nächste Zeile um, wenn der Platz nicht reicht
-/// (z. B. Arbeitsart, SAP-Aufgabe, Ticket mit langen Namen).
+/// (z. B. Ticket und Ziel mit langen Namen).
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
     var lineSpacing: CGFloat = 8

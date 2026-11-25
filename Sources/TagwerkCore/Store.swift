@@ -5,7 +5,6 @@ public struct Snapshot: Sendable, Equatable {
     public var customers: [Customer]
     public var tasks: [TaskItem]
     public var entries: [TimeEntry]
-    public var pspElements: [PSPElement]
     public var bookings: [Booking]
     public var goals: [WeeklyGoal]
     public var longGoals: [LongGoal]
@@ -18,7 +17,6 @@ public struct Snapshot: Sendable, Equatable {
         customers: [Customer] = [],
         tasks: [TaskItem] = [],
         entries: [TimeEntry] = [],
-        pspElements: [PSPElement] = [],
         bookings: [Booking] = [],
         goals: [WeeklyGoal] = [],
         longGoals: [LongGoal] = [],
@@ -28,7 +26,6 @@ public struct Snapshot: Sendable, Equatable {
         self.customers = customers
         self.tasks = tasks
         self.entries = entries
-        self.pspElements = pspElements
         self.bookings = bookings
         self.goals = goals
         self.longGoals = longGoals
@@ -43,7 +40,6 @@ public protocol Store: AnyObject {
     func save(_ customer: Customer) throws
     func save(_ task: TaskItem) throws
     func save(_ entry: TimeEntry) throws
-    func save(_ psp: PSPElement) throws
     func save(_ booking: Booking) throws
     func save(_ goal: WeeklyGoal) throws
     func deleteGoal(id: UUID) throws
@@ -59,7 +55,6 @@ public protocol Store: AnyObject {
     /// Löscht die Aufgabe, ihre Zeiteinträge und Buchungen.
     func deleteTask(id: UUID) throws
     func deleteEntry(id: UUID) throws
-    func deletePSP(id: UUID) throws
     /// Ändert sich, wenn ein anderes Programm (z. B. der MCP-Server) Daten geschrieben hat.
     /// `nil`, wenn der Speicher das nicht erkennen kann.
     func changeToken() -> Int?
@@ -88,10 +83,6 @@ public final class InMemoryStore: Store {
 
     public func save(_ entry: TimeEntry) throws {
         upsert(entry, into: &snapshot.entries)
-    }
-
-    public func save(_ psp: PSPElement) throws {
-        upsert(psp, into: &snapshot.pspElements)
     }
 
     public func save(_ booking: Booking) throws {
@@ -148,8 +139,6 @@ public final class InMemoryStore: Store {
         snapshot.entries.removeAll { $0.id == id }
     }
 
-    public func deletePSP(id: UUID) throws {
-        snapshot.pspElements.removeAll { $0.id == id }
     }
 
     private func upsert<T: Identifiable>(_ item: T, into list: inout [T]) {

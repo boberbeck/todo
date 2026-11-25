@@ -10,15 +10,13 @@ public struct ToolError: Error, CustomStringConvertible {
 }
 
 /// Die Werkzeuge, die Claude über MCP nutzen kann. Arbeiten direkt auf der Tagwerk-Datenbank.
-/// Buchungen nach ManageEngine oder SAP gibt es hier bewusst nicht; die bleiben in der App.
+/// Worklogs nach ManageEngine gibt es hier bewusst nicht; die bleiben in der App.
 public final class TagwerkTools {
     public static let instructions = """
     Tagwerk ist die Aufgaben- und Zeiterfassungs-App des Nutzers (Mac). Aufgaben gehören optional zu einem Kunden, \
-    haben einen geplanten Tag (sonst liegen sie im Eingang), eine Schätzung in Minuten, eine Arbeitsart \
-    (Wartung, Störung, Projekt, Beratung) und ein PSP-Element für SAP. Es läuft höchstens ein Timer. \
-    Aufgaben können Unteraufgaben haben (aufgabe_anlegen mit unteraufgabe_von); diese erben Kunde, PSP-Element, \
-    Tätigkeit und Ticket. Eigene Aufgaben lassen sich einem Ticket aus ManageEngine zuordnen (Parameter ticket), \
-    zum PSP-Element gehört die Tätigkeit (Activity) aus SAP (Parameter taetigkeit). \
+    haben einen geplanten Tag (sonst liegen sie im Eingang) und eine Schätzung in Minuten. Es läuft höchstens ein Timer. \
+    Aufgaben können Unteraufgaben haben (aufgabe_anlegen mit unteraufgabe_von); diese erben Kunde und Ticket. \
+    Eigene Aufgaben lassen sich einem Ticket aus ManageEngine zuordnen (Parameter ticket); die Zeit geht dann als Worklog dorthin. \
     Lange Ziele (z. B. „AZ-305 bestehen“, Werkzeug ziele) haben Zieldatum und Stundenziel; Aufgaben zahlen über den Parameter ziel darauf ein. \
     Krank- und Urlaubstage trägt abwesenheit_eintragen ein (auch mehrere Tage, nur Arbeitstage); offene Aufgaben dieser Tage \
     rücken dabei auf den nächsten Arbeitstag. \
@@ -76,9 +74,6 @@ public final class TagwerkTools {
                     "datum": text("Geplanter Tag, z. B. heute; leer = Eingang"),
                     "schaetzung_min": number("Geschätzte Dauer in Minuten"),
                     "notizen": text("Notizen"),
-                    "arbeitsart": choice(WorkType.allCases.map(\.label), "Art der Arbeit, legt die Leistung in SAP fest"),
-                    "psp": text("PSP-Element in SAP ByDesign"),
-                    "taetigkeit": text("Tätigkeit (Activity) aus SAP zum PSP-Element"),
                     "ticket": text("Ticketnummer aus ManageEngine; die Zeit geht dann auch als Worklog dorthin"),
                     "unteraufgabe_von": text("ID der übergeordneten Aufgabe; dann ist dies eine Unteraufgabe"),
                     "ziel": text("Langes Ziel, auf das die Aufgabe einzahlt (Titel oder ID, siehe „ziele“)"),
@@ -87,19 +82,16 @@ public final class TagwerkTools {
             ),
             tool(
                 "aufgabe_aendern",
-                "Eine Aufgabe ändern: Titel, Notiz, Tag, Schätzung, Arbeitsart, PSP-Element mit Tätigkeit, Ticket, Beschreibung der Bearbeitung, Kunde oder erledigt.",
+                "Eine Aufgabe ändern: Titel, Notiz, Tag, Schätzung, Ticket, Ziel, Beschreibung der Bearbeitung, Kunde oder erledigt.",
                 properties: [
                     "id": text("ID der Aufgabe (die ersten 8 Zeichen reichen)"),
                     "titel": text("Neuer Titel"),
                     "notizen": text("Neue Notizen"),
                     "datum": text("Neuer Tag; „eingang“ nimmt die Aufgabe aus dem Plan"),
                     "schaetzung_min": number("Schätzung in Minuten, 0 entfernt sie"),
-                    "arbeitsart": choice(WorkType.allCases.map(\.label) + ["keine"], "Arbeitsart"),
-                    "psp": text("PSP-Element; leer entfernt es"),
-                    "taetigkeit": text("Tätigkeit (Activity) aus SAP; leer entfernt sie"),
                     "ticket": text("Ticketnummer zuordnen; leer entfernt die Zuordnung"),
                     "ziel": text("Langes Ziel (Titel oder ID); leer entfernt die Zuordnung"),
-                    "beschreibung": text("Beschreibung der Bearbeitung (Text für Worklog und SAP)"),
+                    "beschreibung": text("Beschreibung der Bearbeitung (Text für den Worklog im Ticket)"),
                     "kunde": text("Kundenname; leer entfernt den Kunden"),
                     "erledigt": flag("true = erledigt, false = wieder offen"),
                 ],
@@ -117,7 +109,7 @@ public final class TagwerkTools {
             ),
             tool(
                 "zeitauswertung",
-                "Erfasste Zeit in einem Zeitraum (Standard: diese Woche), summiert je Tag, Kunde, PSP-Element und Arbeitsart.",
+                "Erfasste Zeit in einem Zeitraum (Standard: diese Woche), summiert je Tag, Kunde und Aufgabe.",
                 properties: [
                     "von": text("Erster Tag"),
                     "bis": text("Letzter Tag"),
@@ -126,12 +118,12 @@ public final class TagwerkTools {
             ),
             tool(
                 "tagesabschluss",
-                "Was für einen Tag zu buchen ist: gerundete Zeit je Aufgabe, Status für SAP und ManageEngine und was noch fehlt.",
+                "Tagesabschluss: gerundete Zeit je Aufgabe, Status der Worklogs in ManageEngine und was dafür noch fehlt.",
                 properties: ["datum": text("Tag, Standard: heute")]
             ),
             tool(
                 "kunden",
-                "Alle Kunden mit PSP-Elementen, ManageEngine-Konto, offenen Aufgaben und Stunden im laufenden Monat."
+                "Alle Kunden mit ManageEngine-Konto, offenen Aufgaben und Stunden im laufenden Monat."
             ),
             tool(
                 "wochenziele",
@@ -344,13 +336,10 @@ public final class TagwerkTools {
             customerID: customer?.id ?? parent?.customerID,
             plannedDate: plannedDate,
             estimateMinutes: int(arguments, "schaetzung_min") ?? parsed.minutes,
-            workType: try string(arguments, "arbeitsart").map { try workType($0) },
-            pspElement: string(arguments, "psp"),
             sortIndex: parent.map { parent in DayPlan.nextSortIndex(in: DayPlan.subtasks(of: parent.id, in: snapshot.tasks)) }
                 ?? DayPlan.nextSortIndex(in: snapshot.tasks.filter { $0.plannedDate == plannedDate && $0.parentID == nil }),
             createdAt: now(),
-            parentID: parent?.id,
-            sapActivity: sapActivityArgument(arguments)
+            parentID: parent?.id
         )
         if let number = string(arguments, "ticket") {
             assignTicket(number, to: &task, in: snapshot)
@@ -381,18 +370,6 @@ public final class TagwerkTools {
             }
         }
         if let estimate = int(arguments, "schaetzung_min") { task.estimateMinutes = estimate > 0 ? estimate : nil }
-        if arguments["arbeitsart"] != nil {
-            if let value = string(arguments, "arbeitsart"), value.lowercased() != "keine" {
-                task.workType = try workType(value)
-            } else {
-                task.workType = nil
-            }
-        }
-        if arguments["psp"] != nil {
-            task.pspElement = string(arguments, "psp")
-            if task.pspElement == nil { task.sapActivity = nil }
-        }
-        if arguments["taetigkeit"] != nil { task.sapActivity = sapActivityArgument(arguments) }
         if arguments["ticket"] != nil {
             if let number = string(arguments, "ticket") {
                 assignTicket(number, to: &task, in: snapshot)
@@ -470,8 +447,7 @@ public final class TagwerkTools {
         }
 
         var perCustomer: [String: TimeInterval] = [:]
-        var perPSP: [String: TimeInterval] = [:]
-        var perWorkType: [String: TimeInterval] = [:]
+        var perTask: [String: TimeInterval] = [:]
         var details: [[String: Any]] = []
         var total: TimeInterval = 0
         for entry in snapshot.entries.sorted(by: { $0.start < $1.start }) {
@@ -481,8 +457,7 @@ public final class TagwerkTools {
             let task = entry.taskID.flatMap { tasksByID[$0] }
             let customer = task?.customerID.flatMap { customersByID[$0] }?.name ?? "Ohne Kunde"
             perCustomer[customer, default: 0] += seconds
-            perPSP[task?.pspElement ?? "ohne PSP", default: 0] += seconds
-            perWorkType[task?.workType?.label ?? "ohne Arbeitsart", default: 0] += seconds
+            perTask[task?.title ?? "ohne Aufgabe", default: 0] += seconds
             if bool(arguments, "details") == true {
                 details.append([
                     "datum": LocalDate(entry.start, calendar: calendar).string,
@@ -502,8 +477,7 @@ public final class TagwerkTools {
             "summe": TimeMath.format(total) + " h",
             "je_tag": perDay,
             "je_kunde": ranked(perCustomer, key: "kunde"),
-            "je_psp": ranked(perPSP, key: "psp"),
-            "je_arbeitsart": ranked(perWorkType, key: "arbeitsart"),
+            "je_aufgabe": ranked(perTask, key: "aufgabe"),
         ]
         if bool(arguments, "details") == true {
             result["eintraege"] = details
@@ -525,22 +499,19 @@ public final class TagwerkTools {
                 "ziele": line.targets.map { target in
                     ["ziel": target.label, "status": line.status(for: target)?.label ?? "offen"]
                 },
-                "sap_kommentar": line.sapComment,
             ]
-            if let psp = line.task.pspElement { entry["psp"] = psp }
-            if let workType = line.task.workType { entry["arbeitsart"] = workType.label }
+            if let number = line.task.linkedTicketNumber { entry["ticket"] = number }
+            if !line.task.workDescription.isEmpty { entry["beschreibung"] = line.task.workDescription }
             if !line.openIssues.isEmpty { entry["fehlt"] = line.openIssues.map(\.message) }
             if line.changedAfterBooking { entry["hinweis"] = "Zeit nach dem Buchen geändert" }
             return entry
         }
-        let openSAP = lines.filter { !($0.status(for: .sap)?.isDone ?? false) }.count
         let openME = lines.filter { $0.targets.contains(.manageEngine) && !($0.status(for: .manageEngine)?.isDone ?? false) }.count
         return json([
             "datum": day.string,
             "rundung_min": rules.roundingStep,
             "summe_min": lines.reduce(0) { $0 + $1.minutes },
             "zeilen": described,
-            "offen_sap": openSAP,
             "offen_manageengine": openME,
         ])
     }
@@ -563,13 +534,6 @@ public final class TagwerkTools {
                     "name": customer.name,
                     "offene_aufgaben": snapshot.tasks.filter { $0.customerID == customer.id && !$0.isDone }.count,
                     "minuten_im_monat": minutes(monthSeconds),
-                    "psp_elemente": snapshot.pspElements
-                        .filter { $0.customerID == customer.id }
-                        .map { psp -> [String: Any] in
-                            var entry: [String: Any] = ["code": psp.code, "titel": psp.title, "aktiv": psp.isActive]
-                            if let activity = psp.activity { entry["taetigkeit"] = activity }
-                            return entry
-                        },
                 ]
                 if let account = customer.manageEngineAccount { entry["manageengine_konto"] = account }
                 return entry
@@ -888,9 +852,6 @@ public final class TagwerkTools {
         ]
     }
 
-    private func sapActivityArgument(_ arguments: [String: Any]) -> String? {
-        string(arguments, "taetigkeit")
-    }
 
     /// Ordnet ein Ticket über seine Nummer zu. Die interne ID kommt von einem Ticket, das schon in Tagwerk liegt.
     private func assignTicket(_ rawNumber: String, to task: inout TaskItem, in snapshot: Snapshot) {
@@ -924,9 +885,6 @@ public final class TagwerkTools {
         }
         if let start = task.scheduledStart { entry["zeitblock"] = clock(start) }
         if let estimate = task.estimateMinutes { entry["schaetzung_min"] = estimate }
-        if let workType = task.workType { entry["arbeitsart"] = workType.label }
-        if let psp = effective.pspElement { entry["psp"] = psp }
-        if let activity = effective.sapActivity { entry["taetigkeit"] = activity }
         if let goal = effective.longGoalID.flatMap({ id in snapshot.longGoals.first { $0.id == id } }) { entry["ziel"] = goal.title }
         if !task.workDescription.isEmpty { entry["beschreibung"] = task.workDescription }
         if !task.notes.isEmpty { entry["notizen"] = task.notes }
@@ -960,16 +918,6 @@ public final class TagwerkTools {
             throw ToolError("Kein Kunde „\(name)“. Vorhanden: \(known.isEmpty ? "keine" : known).")
         }
         throw ToolError("„\(name)“ passt auf mehrere Kunden: \(matches.map(\.name).joined(separator: ", ")).")
-    }
-
-    func workType(_ value: String) throws -> WorkType {
-        let key = value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
-        if let match = WorkType.allCases.first(where: {
-            $0.rawValue == key || $0.label.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) == key
-        }) {
-            return match
-        }
-        throw ToolError("Unbekannte Arbeitsart „\(value)“. Erlaubt: \(WorkType.allCases.map(\.label).joined(separator: ", ")).")
     }
 
     /// `nil` = kein Datum angegeben.
@@ -1058,7 +1006,7 @@ public final class TagwerkTools {
     /// Text aus den Argumenten. HTML-Zeichen wie „&lt;“, die Claude manchmal mitschickt, werden zu „<“.
     private func rawString(_ arguments: [String: Any], _ key: String) -> String? {
         switch arguments[key] {
-        case let text as String: return HTMLTable.decodeEntities(text)
+        case let text as String: return HTMLText.decodeEntities(text)
         case let number as Int: return String(number)
         default: return nil
         }

@@ -362,11 +362,12 @@ public final class SQLiteStore: Store {
             ))
         }
 
+        // Ältere Spalten (Arbeitsart, PSP-Element, SAP-Tätigkeit) bleiben in der Datei, werden aber nicht mehr gelesen.
         let tasks = try prepare("""
         SELECT id, title, notes, customer_id, source, external_id, external_url, planned_date,
-               estimate_minutes, work_type, psp_element, work_description, status, completed_at,
+               estimate_minutes, work_description, status, completed_at,
                sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type,
-               parent_id, ticket_number, ticket_key, sap_activity, long_goal_id, ticket_title, is_standing
+               parent_id, ticket_number, ticket_key, long_goal_id, ticket_title, is_standing
         FROM task;
         """)
         while try tasks.step() {
@@ -381,25 +382,22 @@ public final class SQLiteStore: Store {
                 externalURL: tasks.text(6),
                 plannedDate: tasks.text(7).flatMap { LocalDate(string: $0) },
                 estimateMinutes: tasks.int(8),
-                workType: tasks.text(9).flatMap { WorkType(rawValue: $0) },
-                pspElement: tasks.text(10),
-                workDescription: tasks.text(11) ?? "",
-                status: TaskStatus(rawValue: tasks.text(12) ?? "") ?? .open,
-                completedAt: tasks.date(13),
-                sortIndex: tasks.double(14) ?? 0,
-                createdAt: tasks.date(15) ?? Date(),
-                scheduledStart: tasks.date(16),
-                calendarEventID: tasks.text(17),
-                externalKey: tasks.text(18),
-                goalID: tasks.uuid(19),
-                worklogType: tasks.text(20),
-                parentID: tasks.uuid(21),
-                ticketNumber: tasks.text(22),
-                ticketKey: tasks.text(23),
-                sapActivity: tasks.text(24),
-                longGoalID: tasks.uuid(25),
-                ticketTitle: tasks.text(26),
-                isStanding: (tasks.int(27) ?? 0) != 0
+                workDescription: tasks.text(9) ?? "",
+                status: TaskStatus(rawValue: tasks.text(10) ?? "") ?? .open,
+                completedAt: tasks.date(11),
+                sortIndex: tasks.double(12) ?? 0,
+                createdAt: tasks.date(13) ?? Date(),
+                scheduledStart: tasks.date(14),
+                calendarEventID: tasks.text(15),
+                externalKey: tasks.text(16),
+                goalID: tasks.uuid(17),
+                worklogType: tasks.text(18),
+                parentID: tasks.uuid(19),
+                ticketNumber: tasks.text(20),
+                ticketKey: tasks.text(21),
+                longGoalID: tasks.uuid(22),
+                ticketTitle: tasks.text(23),
+                isStanding: (tasks.int(24) ?? 0) != 0
             ))
         }
 
@@ -415,23 +413,10 @@ public final class SQLiteStore: Store {
             ))
         }
 
-        let psps = try prepare("SELECT id, customer_id, code, title, is_active, last_used_at, activity FROM psp_element;")
-        while try psps.step() {
-            guard let id = psps.uuid(0), let customerID = psps.uuid(1) else { continue }
-            snapshot.pspElements.append(PSPElement(
-                id: id,
-                customerID: customerID,
-                code: psps.text(2) ?? "",
-                title: psps.text(3) ?? "",
-                isActive: (psps.int(4) ?? 1) != 0,
-                lastUsedAt: psps.date(5),
-                activity: psps.text(6)
-            ))
-        }
-
+        // Frühere SAP-Buchungen (Ziel „sap“) gibt es nicht mehr; sie werden übersprungen.
         let bookings = try prepare("""
-        SELECT id, task_id, day, target, minutes, description, psp_element, work_type, ticket_key,
-               status, reference, last_error, attempts, updated_at, activity
+        SELECT id, task_id, day, target, minutes, description, ticket_key,
+               status, reference, last_error, attempts, updated_at
         FROM booking;
         """)
         while try bookings.step() {
@@ -446,15 +431,12 @@ public final class SQLiteStore: Store {
                 target: target,
                 minutes: bookings.int(4) ?? 0,
                 description: bookings.text(5) ?? "",
-                pspElement: bookings.text(6),
-                workType: bookings.text(7).flatMap { WorkType(rawValue: $0) },
-                ticketKey: bookings.text(8),
-                status: bookings.text(9).flatMap { BookingStatus(rawValue: $0) } ?? .pending,
-                reference: bookings.text(10),
-                lastError: bookings.text(11),
-                attempts: bookings.int(12) ?? 0,
-                updatedAt: bookings.date(13) ?? Date(),
-                activity: bookings.text(14)
+                ticketKey: bookings.text(6),
+                status: bookings.text(7).flatMap { BookingStatus(rawValue: $0) } ?? .pending,
+                reference: bookings.text(8),
+                lastError: bookings.text(9),
+                attempts: bookings.int(10) ?? 0,
+                updatedAt: bookings.date(11) ?? Date()
             ))
         }
 
@@ -543,10 +525,10 @@ public final class SQLiteStore: Store {
     public func save(_ task: TaskItem) throws {
         try run("""
         INSERT INTO task (id, title, notes, customer_id, source, external_id, external_url, planned_date,
-                          estimate_minutes, work_type, psp_element, work_description, status, completed_at,
+                          estimate_minutes, work_description, status, completed_at,
                           sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type,
-                          parent_id, ticket_number, ticket_key, sap_activity, long_goal_id, ticket_title, is_standing)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          parent_id, ticket_number, ticket_key, long_goal_id, ticket_title, is_standing)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             notes = excluded.notes,
@@ -556,8 +538,6 @@ public final class SQLiteStore: Store {
             external_url = excluded.external_url,
             planned_date = excluded.planned_date,
             estimate_minutes = excluded.estimate_minutes,
-            work_type = excluded.work_type,
-            psp_element = excluded.psp_element,
             work_description = excluded.work_description,
             status = excluded.status,
             completed_at = excluded.completed_at,
@@ -570,7 +550,6 @@ public final class SQLiteStore: Store {
             parent_id = excluded.parent_id,
             ticket_number = excluded.ticket_number,
             ticket_key = excluded.ticket_key,
-            sap_activity = excluded.sap_activity,
             long_goal_id = excluded.long_goal_id,
             ticket_title = excluded.ticket_title,
             is_standing = excluded.is_standing;
@@ -584,8 +563,6 @@ public final class SQLiteStore: Store {
             .optionalText(task.externalURL),
             .optionalText(task.plannedDate?.string),
             .optionalInt(task.estimateMinutes),
-            .optionalText(task.workType?.rawValue),
-            .optionalText(task.pspElement),
             .text(task.workDescription),
             .text(task.status.rawValue),
             .optionalDouble(task.completedAt?.timeIntervalSince1970),
@@ -599,7 +576,6 @@ public final class SQLiteStore: Store {
             .optionalText(task.parentID?.uuidString),
             .optionalText(task.ticketNumber),
             .optionalText(task.ticketKey),
-            .optionalText(task.sapActivity),
             .optionalText(task.longGoalID?.uuidString),
             .optionalText(task.ticketTitle),
             .int(task.isStanding ? 1 : 0),
@@ -624,40 +600,15 @@ public final class SQLiteStore: Store {
         ])
     }
 
-    public func save(_ psp: PSPElement) throws {
-        try run("""
-        INSERT INTO psp_element (id, customer_id, code, title, is_active, last_used_at, activity)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            customer_id = excluded.customer_id,
-            code = excluded.code,
-            title = excluded.title,
-            is_active = excluded.is_active,
-            last_used_at = excluded.last_used_at,
-            activity = excluded.activity;
-        """, [
-            .text(psp.id.uuidString),
-            .text(psp.customerID.uuidString),
-            .text(psp.code),
-            .text(psp.title),
-            .int(psp.isActive ? 1 : 0),
-            .optionalDouble(psp.lastUsedAt?.timeIntervalSince1970),
-            .optionalText(psp.activity),
-        ])
-    }
-
     public func save(_ booking: Booking) throws {
         try run("""
-        INSERT INTO booking (id, task_id, day, target, minutes, description, psp_element, work_type, ticket_key,
-                             status, reference, last_error, attempts, updated_at, activity)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO booking (id, task_id, day, target, minutes, description, ticket_key,
+                             status, reference, last_error, attempts, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             minutes = excluded.minutes,
             description = excluded.description,
-            psp_element = excluded.psp_element,
-            work_type = excluded.work_type,
             ticket_key = excluded.ticket_key,
-            activity = excluded.activity,
             status = excluded.status,
             reference = excluded.reference,
             last_error = excluded.last_error,
@@ -670,15 +621,12 @@ public final class SQLiteStore: Store {
             .text(booking.target.rawValue),
             .int(booking.minutes),
             .text(booking.description),
-            .optionalText(booking.pspElement),
-            .optionalText(booking.workType?.rawValue),
             .optionalText(booking.ticketKey),
             .text(booking.status.rawValue),
             .optionalText(booking.reference),
             .optionalText(booking.lastError),
             .int(booking.attempts),
             .double(booking.updatedAt.timeIntervalSince1970),
-            .optionalText(booking.activity),
         ])
     }
 
@@ -803,10 +751,6 @@ public final class SQLiteStore: Store {
         }
         let escaped = url.path.replacingOccurrences(of: "'", with: "''")
         try exec("VACUUM INTO '\(escaped)';")
-    }
-
-    public func deletePSP(id: UUID) throws {
-        try run("DELETE FROM psp_element WHERE id = ?;", [.text(id.uuidString)])
     }
 
     public func deleteTask(id: UUID) throws {
@@ -943,7 +887,7 @@ final class Statement {
 
 /// Änderungen seit einem Zeitpunkt, als Grundlage für einen Abgleich zwischen Geräten.
 public struct StoreChanges: Equatable, Sendable {
-    public static let tables = ["customer", "task", "time_entry", "psp_element", "booking", "weekly_goal", "long_goal", "absence", "work_break"]
+    public static let tables = ["customer", "task", "time_entry", "booking", "weekly_goal", "long_goal", "absence", "work_break"]
 
     public struct Deletion: Equatable, Sendable {
         public var entity: String

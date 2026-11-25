@@ -34,13 +34,6 @@ struct RootView: View {
         .foregroundStyle(Theme.text)
         .tint(Theme.accent)
         .preferredColorScheme(.dark)
-        .onChange(of: model.sapAutoFetchRequest) {
-            openWindow(id: "bydesign")
-            // Im Hintergrund lassen, damit es nicht stört
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                NSApp.windows.first { $0.title == "SAP ByDesign" }?.orderBack(nil)
-            }
-        }
         .onChange(of: model.selection) { old, new in
             if new == .focus, old != .focus { model.focusReturn = old }
         }
@@ -52,10 +45,6 @@ struct RootView: View {
         }
         .sheet(item: $model.idlePrompt) { prompt in
             IdlePromptView(prompt: prompt)
-                .tagwerkSheet()
-        }
-        .sheet(isPresented: $model.showsSAPSync, onDismiss: { model.sapSyncRows = nil }) {
-            SAPSyncSheet(initialRows: model.sapSyncRows)
                 .tagwerkSheet()
         }
         .sheet(isPresented: Binding(

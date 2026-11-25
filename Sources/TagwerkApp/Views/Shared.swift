@@ -33,11 +33,11 @@ struct CustomerDot: View {
     }
 }
 
-/// "Ticket #1234 · Kunde A · Störung"
+/// "Ticket #1234 · Kunde A · Wochenziel"
 struct TaskMetaLine: View {
     @Environment(AppModel.self) private var model
     let task: TaskItem
-    /// Arbeitsart und PSP-Element mit anzeigen (im Fokus stehen sie als eigene Felder daneben).
+    /// Wochenziel mit anzeigen.
     var showsBooking = true
 
     var body: some View {
@@ -48,14 +48,6 @@ struct TaskMetaLine: View {
                 Text("·")
                 CustomerDot(colorIndex: customer.colorIndex, size: 6)
                 Text(customer.name)
-            }
-            if showsBooking, let workType = task.workType {
-                Text("·")
-                Text(workType.label)
-            }
-            if showsBooking, let psp = model.pspLabel(for: task) {
-                Text("·")
-                Text("SAP \(psp)")
             }
             if showsBooking, let goal = model.goal(task.goalID) {
                 Text("·")
@@ -73,27 +65,6 @@ struct TaskMetaLine: View {
             return task.source == .ticket ? "Ticket #\(number)" : "\(task.source.label) · Ticket #\(number)"
         }
         return task.source.label
-    }
-}
-
-struct WorkTypeMenu: View {
-    @Environment(AppModel.self) private var model
-    let task: TaskItem
-
-    var body: some View {
-        Menu {
-            ForEach(WorkType.allCases) { workType in
-                Button(workType.label) { model.setWorkType(workType, for: task.id) }
-            }
-            Divider()
-            Button("Keine Arbeitsart") { model.setWorkType(nil, for: task.id) }
-        } label: {
-            Text(task.workType?.label ?? "Arbeitsart wählen")
-        }
-        .menuStyle(.button)
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .fixedSize()
     }
 }
 
@@ -136,29 +107,6 @@ struct TaskContextMenu: View {
             Button("Ohne Kunde") { model.setCustomer(nil, for: task.id) }
             ForEach(model.activeCustomers) { customer in
                 Button(customer.name) { model.setCustomer(customer.id, for: task.id) }
-            }
-        }
-        Menu("Arbeitsart") {
-            ForEach(WorkType.allCases) { workType in
-                Button(workType.label) { model.setWorkType(workType, for: task.id) }
-            }
-            Divider()
-            Button("Keine") { model.setWorkType(nil, for: task.id) }
-        }
-        Menu("SAP-Aufgabe") {
-            ForEach(model.activeCustomers) { customer in
-                let psps = model.psps(for: customer.id)
-                if !psps.isEmpty {
-                    Menu(customer.name) {
-                        ForEach(psps) { psp in
-                            Button(psp.label) { model.setSAPTask(psp, for: task.id) }
-                        }
-                    }
-                }
-            }
-            if task.pspElement != nil {
-                Divider()
-                Button("Keine SAP-Aufgabe") { model.setPSPElement("", for: task.id) }
             }
         }
         if task.source != .ticket {
@@ -288,160 +236,6 @@ struct ColorChooser: View {
                 .buttonStyle(.plain)
             }
         }
-    }
-}
-
-/// PSP-Element wählen: zuletzt genutzte Elemente des Kunden zuerst, sonst frei eingeben.
-struct PSPMenu: View {
-    @Environment(AppModel.self) private var model
-    let task: TaskItem
-
-    @State private var showsPicker = false
-
-    var body: some View {
-        Button {
-            showsPicker = true
-        } label: {
-            Text(label)
-                .lineLimit(1)
-        }
-        .buttonStyle(GhostButtonStyle(small: true))
-        .controlSize(.small)
-        .fixedSize()
-        .popover(isPresented: $showsPicker, arrowEdge: .bottom) {
-            SAPTaskPicker(selectedCode: task.pspElement, selectedActivity: task.sapActivity) { psp, customCode in
-                if let psp {
-                    model.setSAPTask(psp, for: task.id)
-                } else {
-                    model.setPSPElement(customCode ?? "", for: task.id)
-                }
-                showsPicker = false
-            }
-        }
-        .help("SAP-Aufgabe (PSP-Element), gilt für alle Zeiten dieser Aufgabe")
-    }
-
-    private var label: String {
-        guard let label = model.pspLabel(for: task) else { return "SAP-Aufgabe wählen" }
-        return task.pspElement == nil ? "\(label) (geerbt)" : label
-    }
-}
-
-/// Suche über alle SAP-Aufgaben (PSP-Elemente) aller Kunden, nach Nummer, Name, Tätigkeit oder Kunde.
-/// Wählt man eine, übernimmt die Aufgabe auch deren Kunden; für Internes reicht so „Team Sitzung“.
-struct SAPTaskPicker: View {
-    @Environment(AppModel.self) private var model
-    let selectedCode: String?
-    var selectedActivity: String? = nil
-    /// (gewähltes PSP-Element, sonst eine von Hand eingetippte Nummer; beides nil = keine SAP-Aufgabe)
-    let onSelect: (PSPElement?, String?) -> Void
-
-    @State private var query = ""
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        let found = results
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("Suchen: Nummer, Name, Tätigkeit oder Kunde", text: $query)
-                .textFieldStyle(TagwerkFieldStyle())
-                .focused($focused)
-                .onSubmit {
-                    if let first = found.first {
-                        onSelect(first, nil)
-                    } else if SAPImport.looksLikeTaskID(query.trimmingCharacters(in: .whitespaces)) {
-                        onSelect(nil, query.trimmingCharacters(in: .whitespaces))
-                    }
-                }
-            if model.pspElements.isEmpty {
-                Text("Noch keine SAP-Aufgaben. Hol sie unter Kunden › SAP-Abgleich.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 6)
-            }
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(found) { psp in
-                        Button {
-                            onSelect(psp, nil)
-                        } label: {
-                            HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Text(psp.title.isEmpty ? psp.code : psp.title)
-                                            .lineLimit(1)
-                                        if let activity = psp.activity, !activity.isEmpty, activity != psp.title {
-                                            Text(activity)
-                                                .font(.caption.weight(.medium))
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 1)
-                                                .background(Capsule().fill(Theme.accent.opacity(0.18)))
-                                                .lineLimit(1)
-                                        }
-                                    }
-                                    Text(detail(for: psp))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                                Spacer()
-                                if psp.matches(code: selectedCode, activity: selectedActivity) {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(Theme.accent)
-                                }
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    let typed = query.trimmingCharacters(in: .whitespaces)
-                    if found.isEmpty, SAPImport.looksLikeTaskID(typed) {
-                        Button("„\(typed)“ übernehmen") { onSelect(nil, typed) }
-                            .padding(8)
-                    }
-                }
-            }
-            .frame(height: 280)
-            if selectedCode != nil {
-                Divider()
-                Button("Keine SAP-Aufgabe") { onSelect(nil, nil) }
-                    .buttonStyle(.borderless)
-            }
-        }
-        .padding(12)
-        .frame(width: 440)
-        .onAppear { focused = true }
-    }
-
-    private func detail(for psp: PSPElement) -> String {
-        var parts = [psp.code]
-        if let activity = psp.activity, !activity.isEmpty, activity != psp.title { parts.append(activity) }
-        if let customer = model.customer(psp.customerID) { parts.append(customer.name) }
-        return parts.joined(separator: " · ")
-    }
-
-    private var results: [PSPElement] {
-        let words = query.lowercased()
-            .folding(options: .diacriticInsensitive, locale: nil)
-            .split(separator: " ")
-            .map(String.init)
-        return model.pspElements
-            .filter(\.isActive)
-            .filter { psp in
-                guard !words.isEmpty else { return true }
-                let haystack = [psp.code, psp.title, psp.activity ?? "", model.customer(psp.customerID)?.name ?? ""]
-                    .joined(separator: " ")
-                    .lowercased()
-                    .folding(options: .diacriticInsensitive, locale: nil)
-                return words.allSatisfy { haystack.contains($0) }
-            }
-            .sorted { lhs, rhs in
-                let left = lhs.lastUsedAt ?? .distantPast
-                let right = rhs.lastUsedAt ?? .distantPast
-                if left != right { return left > right }
-                return lhs.label.localizedStandardCompare(rhs.label) == .orderedAscending
-            }
     }
 }
 

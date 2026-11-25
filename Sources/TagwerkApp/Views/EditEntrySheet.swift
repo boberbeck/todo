@@ -106,7 +106,7 @@ struct EditEntrySheet: View {
         }
     }
 
-    /// Schon gebucht (Worklog gesendet oder in SAP abgehakt)? Dann muss nach der Änderung neu gebucht werden.
+    /// Schon gebucht (Worklog gesendet)? Dann muss nach der Änderung neu gebucht werden.
     private var wasBooked: Bool {
         let entryDay = LocalDate(entry.start)
         return model.bookings.contains { $0.taskID == entry.taskID && $0.day == entryDay && $0.status.isDone }

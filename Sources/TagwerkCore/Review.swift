@@ -255,7 +255,7 @@ public enum TimeExport {
         timeFormatter.locale = Locale(identifier: "de_DE")
         timeFormatter.dateFormat = "HH:mm"
 
-        var lines = ["Datum;Beginn;Ende;Minuten;Kunde;Aufgabe;Quelle;Ticket;Arbeitsart;PSP-Element;Beschreibung"]
+        var lines = ["Datum;Beginn;Ende;Minuten;Kunde;Aufgabe;Quelle;Ticket;Beschreibung"]
         for entry in entries.sorted(by: { $0.start < $1.start }) {
             let task = entry.taskID.flatMap { taskByID[$0] }
             let customer = task?.customerID.flatMap { customerByID[$0] }
@@ -269,8 +269,6 @@ public enum TimeExport {
                 task?.title ?? "",
                 task?.source.label ?? "",
                 task?.linkedTicketNumber ?? "",
-                task?.workType?.label ?? "",
-                task?.pspElement ?? "",
                 task?.workDescription ?? "",
             ]
             lines.append(fields.map(escape).joined(separator: ";"))

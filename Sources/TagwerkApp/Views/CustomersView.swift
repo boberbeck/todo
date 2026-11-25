@@ -14,22 +14,14 @@ struct CustomersView: View {
         let shown = showsArchived ? archived : active
         let monthTotal = active.reduce(0) { $0 + model.trackedThisMonth(customerID: $1.id) }
         let openCount = active.reduce(0) { $0 + model.openTaskCount(for: $1.id) }
-        let pspCount = model.pspElements.filter(\.isActive).count
 
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 PageHeader(
                     title: "Kunden",
-                    subtitle: "\(TimeMath.format(monthTotal)) h diesen Monat · \(openCount) offene Aufgaben · \(pspCount) PSP-Elemente"
+                    subtitle: "\(TimeMath.format(monthTotal)) h diesen Monat · \(openCount) offene Aufgaben"
                 ) {
                     HStack(spacing: 10) {
-                        Button {
-                            model.showsSAPSync = true
-                        } label: {
-                            Label("SAP-Abgleich", systemImage: "arrow.triangle.2.circlepath")
-                        }
-                        .buttonStyle(GhostButtonStyle())
-                        .help("Projektaufgaben aus SAP ByDesign als PSP-Elemente übernehmen")
                         Button {
                             showsNewCustomer = true
                         } label: {
@@ -136,7 +128,6 @@ struct CustomerListHeader: View {
             CustomerColumn.header("Diese Woche", width: CustomerColumn.hours)
             CustomerColumn.header("Monat", width: CustomerColumn.hours)
             CustomerColumn.header("Offen", width: CustomerColumn.count)
-            CustomerColumn.header("PSP", width: CustomerColumn.count)
             Color.clear.frame(width: 12)
         }
         .font(.caption)
@@ -156,7 +147,7 @@ enum CustomerColumn {
     }
 }
 
-/// Ein Kunde als Zeile: Stunden dieser Woche und im Monat, offene Aufgaben, PSP-Elemente.
+/// Ein Kunde als Zeile: Stunden dieser Woche und im Monat, offene Aufgaben.
 struct CustomerRow: View {
     @Environment(AppModel.self) private var model
     let customer: Customer
@@ -187,7 +178,6 @@ struct CustomerRow: View {
                 number("\(TimeMath.format(week)) h", width: CustomerColumn.hours, primary: true)
                 number("\(TimeMath.format(model.trackedThisMonth(customerID: customer.id))) h", width: CustomerColumn.hours)
                 number("\(model.openTaskCount(for: customer.id))", width: CustomerColumn.count)
-                number("\(model.psps(for: customer.id).count)", width: CustomerColumn.count)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.tertiary)
@@ -233,8 +223,6 @@ struct CustomerDetailContent: View {
     @State private var name = ""
     @State private var account = ""
     @State private var showDone = false
-    @State private var newPSPCode = ""
-    @State private var newPSPTitle = ""
 
     var body: some View {
         let open = model.customerTasks(customer.id, done: false)
@@ -249,8 +237,6 @@ struct CustomerDetailContent: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(Theme.secondary)
                 Spacer()
-                SAPSyncButton()
-                    .buttonStyle(GhostButtonStyle())
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -300,27 +286,6 @@ struct CustomerDetailContent: View {
             .padding(.bottom, 12)
 
             List {
-                Section("PSP-Elemente") {
-                    let psps = model.psps(for: customer.id, includeInactive: true)
-                    if psps.isEmpty {
-                        Text("Noch keine PSP-Elemente. Leg die an, auf die du für diesen Kunden buchst.")
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(psps) { psp in
-                        PSPRow(psp: psp)
-                    }
-                    HStack(spacing: 8) {
-                        TextField("PSP-Element, z. B. Projektaufgabe-ID", text: $newPSPCode)
-                            .textFieldStyle(TagwerkFieldStyle())
-                            .frame(width: 220)
-                            .onSubmit(addPSP)
-                        TextField("Bezeichnung (optional)", text: $newPSPTitle)
-                            .textFieldStyle(TagwerkFieldStyle())
-                            .onSubmit(addPSP)
-                        Button("Hinzufügen", action: addPSP)
-                            .disabled(newPSPCode.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                }
                 Section("Offen (\(open.count))") {
                     if open.isEmpty {
                         Text("Keine offenen Todos.")
@@ -351,13 +316,6 @@ struct CustomerDetailContent: View {
         .onDisappear {
             saveName()
             saveAccount()
-        }
-    }
-
-    private func addPSP() {
-        if model.addPSP(customerID: customer.id, code: newPSPCode, title: newPSPTitle) != nil {
-            newPSPCode = ""
-            newPSPTitle = ""
         }
     }
 
@@ -434,60 +392,5 @@ struct CustomerTaskRow: View {
         guard let date = task.plannedDate else { return "nicht eingeplant" }
         if date == model.today { return "heute" }
         return "geplant für \(date.startDate().formatted(date: .abbreviated, time: .omitted))"
-    }
-}
-
-struct PSPRow: View {
-    @Environment(AppModel.self) private var model
-    let psp: PSPElement
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(psp.code)
-                .font(.body.monospaced())
-                .foregroundStyle(psp.isActive ? Color.primary : Color.secondary)
-            Text(psp.title)
-                .foregroundStyle(.secondary)
-            Spacer()
-            if let used = psp.lastUsedAt {
-                Text("zuletzt \(used.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if !psp.isActive {
-                Text("inaktiv")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Toggle("aktiv", isOn: Binding(
-                get: { psp.isActive },
-                set: { active in
-                    var changed = psp
-                    changed.isActive = active
-                    model.update(changed)
-                }
-            ))
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .controlSize(.small)
-            .help("Inaktive Elemente erscheinen nicht mehr in der Auswahl")
-        }
-        .contextMenu {
-            Button("Löschen", role: .destructive) { model.deletePSP(psp.id) }
-        }
-    }
-}
-
-/// Öffnet den Abgleich mit SAP ByDesign.
-struct SAPSyncButton: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        Button {
-            model.showsSAPSync = true
-        } label: {
-            Label("SAP-Abgleich", systemImage: "arrow.triangle.2.circlepath")
-        }
-        .help("Projektaufgaben aus SAP ByDesign als PSP-Elemente übernehmen")
     }
 }

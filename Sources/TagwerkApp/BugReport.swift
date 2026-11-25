@@ -53,9 +53,8 @@ enum BugReport {
             "Ort: \(Bundle.main.bundleURL.path)",
             "Kalender: \(calendar)",
             "ManageEngine: \(model.canUseManageEngine ? "eingerichtet" : "nicht eingerichtet")\(model.ticketSyncMessage.map { " · zuletzt: \($0)" } ?? "")",
-            "SAP ByDesign: \(UserDefaults.standard.string(forKey: Preferences.bydesignURLKey).map { $0.isEmpty ? "keine Adresse" : "Adresse eingetragen" } ?? "keine Adresse")\(model.sapAutoStatus.map { " · \($0)" } ?? "")",
             "Claude unterwegs: \(model.remote.isEnabled ? "an" : "aus") · Pomodoro: \(model.isPomodoroEnabled ? "an" : "aus")",
-            "Daten: \(model.tasks.count) Aufgaben, \(model.entries.count) Zeiteinträge, \(model.pspElements.count) SAP-Aufgaben, \(model.customers.count) Kunden",
+            "Daten: \(model.tasks.count) Aufgaben, \(model.entries.count) Zeiteinträge, \(model.customers.count) Kunden",
         ]
         return lines.joined(separator: "\n")
     }

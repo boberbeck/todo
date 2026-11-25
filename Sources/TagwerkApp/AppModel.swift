@@ -26,7 +26,6 @@ final class AppModel {
     private(set) var customers: [Customer] = []
     private(set) var tasks: [TaskItem] = []
     private(set) var entries: [TimeEntry] = []
-    private(set) var pspElements: [PSPElement] = []
     private(set) var bookings: [Booking] = []
     private(set) var goals: [WeeklyGoal] = []
     /// Lange Ziele über Wochen (z. B. „AZ-305 bestehen“)
@@ -41,14 +40,6 @@ final class AppModel {
     var absenceDraft: AbsenceDraft?
     /// Erkannte Pause während eines laufenden Timers, wartet auf eine Entscheidung.
     var idlePrompt: IdlePrompt?
-    /// Zeigt den Abgleich mit SAP ByDesign. `sapSyncRows` füllt ihn vorab (Vorschau, Bildschirmfotos).
-    var showsSAPSync = false
-    var sapSyncRows: [SAPTaskRow]?
-    /// Bittet die Oberfläche, das ByDesign-Fenster für den automatischen Abruf zu öffnen.
-    var sapAutoFetchRequest = 0
-    /// Läuft gerade ein automatischer Abruf im ByDesign-Fenster?
-    var sapAutoFetchActive = false
-    private(set) var sapAutoStatus: String?
     private(set) var inboxMessage: String?
     private(set) var lastTicketSync: Date?
     private(set) var ticketSyncMessage: String?
@@ -129,7 +120,10 @@ final class AppModel {
         lastPlannedDay = UserDefaults.standard.string(forKey: Preferences.lastPlannedDayKey).flatMap { LocalDate(string: $0) }
         reload()
         rollOverOpenTasks()
-        if !SnapshotMode.usesDemoData { seedStandingTasksIfNeeded() }
+        if !SnapshotMode.usesDemoData {
+            seedStandingTasksIfNeeded()
+            SAPCleanup.runOnce()
+        }
         calendarAccess = calendar.access
         calendar.onChange = { [weak self] in
             self?.refreshEvents()
@@ -376,46 +370,6 @@ final class AppModel {
         }
     }
 
-    func setWorkType(_ workType: WorkType?, for id: UUID) {
-        guard var task = self.task(id), task.workType != workType else { return }
-        task.workType = workType
-        persist(task)
-    }
-
-    /// PSP-Element setzen, mit der Tätigkeit aus SAP (eine Aufgabe kann mehrere Tätigkeiten haben).
-    func setPSPElement(_ value: String, activity: String? = nil, for id: UUID) {
-        let cleaned = value.trimmingCharacters(in: .whitespaces)
-        let newValue: String? = cleaned.isEmpty ? nil : cleaned
-        let newActivity: String? = newValue == nil ? nil : activity.flatMap { $0.isEmpty ? nil : $0 }
-        guard var task = self.task(id), task.pspElement != newValue || task.sapActivity != newActivity else { return }
-        task.pspElement = newValue
-        task.sapActivity = newActivity
-        persist(task)
-        if let code = newValue,
-           var psp = pspElements.first(where: { $0.matches(code: code, activity: newActivity) })
-            ?? pspElements.first(where: { $0.code == code && $0.customerID == task.customerID }) {
-            psp.lastUsedAt = Date()
-            save(psp)
-        }
-    }
-
-    /// Das PSP-Element einer Aufgabe (Nummer und Tätigkeit), bei Unteraufgaben auch geerbt.
-    func psp(for task: TaskItem) -> PSPElement? {
-        let effective = resolved(task)
-        guard let code = effective.pspElement else { return nil }
-        return pspElements.first(where: { $0.matches(code: code, activity: effective.sapActivity) })
-            ?? pspElements.first(where: { $0.code == code && (effective.sapActivity ?? "").isEmpty })
-    }
-
-    /// „CPSO8643-5 · Firewall · Beratung“ oder nur die Nummer, wenn sie nicht bekannt ist.
-    func pspLabel(for task: TaskItem) -> String? {
-        let effective = resolved(task)
-        guard let code = effective.pspElement else { return nil }
-        if let psp = psp(for: task) { return psp.label }
-        if let activity = effective.sapActivity, !activity.isEmpty { return "\(code) · \(activity)" }
-        return code
-    }
-
     /// Öffnet das Aufgabenfenster mit allen Angaben (Doppelklick auf eine Aufgabe).
     func openDetail(_ id: UUID) {
         detailTaskID = id
@@ -451,12 +405,6 @@ final class AppModel {
         persist(task)
     }
 
-    /// SAP-Aufgabe mit Tätigkeit setzen; der Kunde kommt von der Aufgabe mit (für Internes z. B. „Intern“).
-    func setSAPTask(_ psp: PSPElement, for id: UUID) {
-        setCustomer(psp.customerID, for: id)
-        setPSPElement(psp.code, activity: psp.activity, for: id)
-    }
-
     /// Kunde setzen. Unteraufgaben mit dem bisherigen Kunden ziehen mit.
     func setCustomer(_ customerID: UUID?, for id: UUID) {
         guard var task = self.task(id), task.customerID != customerID else { return }
@@ -475,7 +423,7 @@ final class AppModel {
 
     func parent(of task: TaskItem) -> TaskItem? { task.parentID.flatMap { self.task($0) } }
 
-    /// Aufgabe mit allem, was sie von der übergeordneten erbt (Kunde, SAP-Aufgabe, Ticket …).
+    /// Aufgabe mit allem, was sie von der übergeordneten erbt (Kunde, Ticket …).
     func resolved(_ task: TaskItem) -> TaskItem { task.resolved(parent: parent(of: task)) }
 
     /// Legt eine Unteraufgabe an. Eine Ebene reicht: Unteraufgaben einer Unteraufgabe hängen an der obersten Aufgabe.
@@ -518,9 +466,6 @@ final class AppModel {
         guard var task = self.task(id), task.parentID != nil else { return }
         let effective = resolved(task)
         task.parentID = nil
-        task.workType = effective.workType
-        task.pspElement = effective.pspElement
-        task.sapActivity = effective.sapActivity
         task.ticketNumber = effective.ticketNumber
         task.ticketKey = effective.ticketKey
         task.ticketTitle = effective.ticketTitle
@@ -988,10 +933,6 @@ final class AppModel {
     /// Was beim letzten Erfassen eines Termins mit diesem Titel gewählt wurde.
     struct EventAssignment: Codable, Equatable {
         var customerID: UUID?
-        var pspElement: String?
-        var workType: WorkType?
-        /// Tätigkeit aus SAP zum PSP-Element
-        var activity: String?
     }
 
     private static let eventAssignmentsKey = "eventAssignments"
@@ -1015,7 +956,7 @@ final class AppModel {
         event.displayTitle.lowercased().trimmingCharacters(in: .whitespaces)
     }
 
-    /// Termin als erfasste Zeit übernehmen, mit Kunde, PSP-Element und Arbeitsart für SAP.
+    /// Termin als erfasste Zeit übernehmen, mit Kunde.
     /// Ohne Angaben gilt, was beim letzten Termin mit gleichem Titel gewählt wurde.
     func logEvent(_ event: CalendarEvent, title: String? = nil, assignment: EventAssignment? = nil) {
         guard !isLogged(event) else { return }
@@ -1029,12 +970,9 @@ final class AppModel {
             externalID: event.id,
             plannedDate: LocalDate(event.start),
             estimateMinutes: event.minutes,
-            workType: chosen?.workType,
-            pspElement: chosen?.pspElement,
             status: .done,
             completedAt: event.end,
-            sortIndex: DayPlan.nextSortIndex(in: todayTasks),
-            sapActivity: chosen?.pspElement == nil ? nil : chosen?.activity
+            sortIndex: DayPlan.nextSortIndex(in: todayTasks)
         )
         persist(task)
         let entry = TimeEntry(taskID: task.id, start: event.start, end: event.end)
@@ -1503,160 +1441,6 @@ final class AppModel {
         }
     }
 
-    // MARK: PSP-Elemente
-
-    /// Aktive PSP-Elemente eines Kunden, zuletzt genutzte zuerst.
-    func psps(for customerID: UUID?, includeInactive: Bool = false) -> [PSPElement] {
-        guard let customerID else { return [] }
-        return pspElements
-            .filter { $0.customerID == customerID && (includeInactive || $0.isActive) }
-            .sorted { lhs, rhs in
-                if lhs.isActive != rhs.isActive { return lhs.isActive }
-                let left = lhs.lastUsedAt ?? .distantPast
-                let right = rhs.lastUsedAt ?? .distantPast
-                if left != right { return left > right }
-                return lhs.code.localizedStandardCompare(rhs.code) == .orderedAscending
-            }
-    }
-
-    @discardableResult
-    func addPSP(customerID: UUID, code rawCode: String, title: String) -> PSPElement? {
-        let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !code.isEmpty else { return nil }
-        let psp = PSPElement(customerID: customerID, code: code, title: title.trimmingCharacters(in: .whitespacesAndNewlines))
-        save(psp)
-        return psp
-    }
-
-    func update(_ psp: PSPElement) {
-        save(psp)
-    }
-
-    func deletePSP(_ id: UUID) {
-        do {
-            try store.deletePSP(id: id)
-            pspElements.removeAll { $0.id == id }
-        } catch {
-            report(error)
-        }
-    }
-
-    // MARK: Abgleich mit SAP
-
-    var hasByDesignPassword: Bool {
-        _ = settingsVersion
-        return Keychain.exists(account: Preferences.bydesignPasswordAccount)
-    }
-
-    func setByDesignPassword(_ password: String) {
-        Keychain.set(password, account: Preferences.bydesignPasswordAccount)
-        settingsChanged()
-    }
-
-    /// Benutzer und Passwort für die Anmeldung im ByDesign-Fenster, falls hinterlegt.
-    func byDesignCredentials() -> (user: String, password: String)? {
-        let user = UserDefaults.standard.string(forKey: Preferences.bydesignUserKey)?.trimmingCharacters(in: .whitespaces) ?? ""
-        guard !user.isEmpty, let password = Keychain.get(account: Preferences.bydesignPasswordAccount), !password.isEmpty else { return nil }
-        return (user, password)
-    }
-
-    var canAutoFetchSAP: Bool {
-        let defaults = UserDefaults.standard
-        return defaults.bool(forKey: Preferences.bydesignAutoFetchKey)
-            && !(defaults.string(forKey: Preferences.bydesignTaskListURLKey) ?? "").isEmpty
-            && !(defaults.string(forKey: Preferences.bydesignUserKey) ?? "").isEmpty
-            && Keychain.exists(account: Preferences.bydesignPasswordAccount)
-    }
-
-    /// Einmal am Tag beim Start: Aufgaben aus ByDesign holen.
-    func autoFetchSAPIfDue() {
-        guard SnapshotMode.directory == nil, canAutoFetchSAP else { return }
-        let last = UserDefaults.standard.string(forKey: Preferences.bydesignLastAutoFetchKey).flatMap(LocalDate.init(string:))
-        guard last != today else { return }
-        UserDefaults.standard.set(today.string, forKey: Preferences.bydesignLastAutoFetchKey)
-        startSAPAutoFetch()
-    }
-
-    /// Öffnet das ByDesign-Fenster, meldet sich an und holt die gemerkte Aufgabenliste.
-    func startSAPAutoFetch() {
-        sapAutoFetchActive = true
-        sapAutoStatus = "Holt gerade die Aufgaben aus ByDesign …"
-        sapAutoFetchRequest += 1
-    }
-
-    /// Ergebnis des automatischen Abrufs übernehmen: Aufgaben bekannter Projekte direkt,
-    /// neue Projekte warten im SAP-Abgleich auf eine Zuordnung.
-    func applySAPAutomatically(_ rows: [SAPTaskRow]) {
-        let stamp = Date().formatted(date: .abbreviated, time: .shortened)
-        guard !rows.isEmpty else {
-            sapAutoStatus = "\(stamp): Keine Aufgaben gefunden. Ist die gemerkte Liste noch richtig?"
-            return
-        }
-        let plan = sapImportPlan(rows)
-        var choices: [String: SAPCustomerChoice] = [:]
-        var unassigned = 0
-        for group in plan.groups {
-            if let id = group.suggestedCustomerID {
-                choices[group.project] = .existing(id)
-            } else {
-                unassigned += group.items.count
-            }
-        }
-        let summary = applySAPImport(plan, choices: choices, deactivateMissing: false)
-        var text = "\(stamp): \(rows.count) Aufgaben gelesen. \(summary)"
-        if unassigned > 0 {
-            text += " \(unassigned) Aufgaben in neuen Projekten warten im SAP-Abgleich auf einen Kunden."
-            // Gleich zeigen, statt still zu schließen: Projekten Kunden zuordnen
-            sapSyncRows = rows
-            selection = .customers
-            showsSAPSync = true
-        }
-        sapAutoStatus = text
-        inboxMessage = unassigned > 0 ? "SAP: \(unassigned) neue Aufgaben zuordnen (Kunden › SAP-Abgleich)" : inboxMessage
-    }
-
-    func reportSAPAutoFetch(_ message: String) {
-        sapAutoStatus = "\(Date().formatted(date: .abbreviated, time: .shortened)): \(message)"
-        AppLog.info("SAP", "Automatischer Abruf: \(message)")
-    }
-
-    func sapImportPlan(_ rows: [SAPTaskRow]) -> SAPImport.Plan {
-        SAPImport.plan(rows: rows, existing: pspElements, customers: customers)
-    }
-
-    /// Übernimmt den Abgleich und gibt eine kurze Zusammenfassung zurück.
-    func applySAPImport(_ plan: SAPImport.Plan, choices: [String: SAPCustomerChoice], deactivateMissing: Bool) -> String {
-        var created: [String: UUID] = [:]
-        let knownIDs = Set(pspElements.map(\.id))
-        let elements = SAPImport.apply(plan, customerFor: { group in
-            switch choices[group.project] ?? .skip {
-            case .skip:
-                return nil
-            case .existing(let id):
-                return id
-            case .new(let name):
-                if let id = created[name] { return id }
-                let customer = addCustomer(name: name)
-                created[name] = customer?.id
-                return customer?.id
-            }
-        }, deactivateMissing: deactivateMissing)
-        for psp in elements {
-            save(psp)
-        }
-        let new = elements.filter { !knownIDs.contains($0.id) }.count
-        let deactivated = deactivateMissing ? plan.missing.count : 0
-        let updated = elements.count - new - deactivated
-        var parts: [String] = []
-        if new > 0 { parts.append(new == 1 ? "1 PSP-Element neu" : "\(new) PSP-Elemente neu") }
-        if updated > 0 { parts.append("\(updated) aktualisiert") }
-        if deactivated > 0 { parts.append("\(deactivated) deaktiviert") }
-        if !created.isEmpty { parts.append(created.count == 1 ? "1 Kunde angelegt" : "\(created.count) Kunden angelegt") }
-        let summary = parts.isEmpty ? "Alles war schon auf dem Stand." : parts.joined(separator: ", ") + "."
-        AppLog.info("SAP", "Abgleich übernommen: \(summary)")
-        return summary
-    }
-
     // MARK: Tagesabschluss und Buchung
 
     var bookingRules: BookingRules {
@@ -1668,8 +1452,6 @@ final class AppModel {
         )
     }
 
-    /// Leistung in SAP zur Arbeitsart, wie in den Einstellungen hinterlegt.
-    /// Work Log Type in ManageEngine zur Arbeitsart, wie in den Einstellungen gewählt.
     /// Standard für Tickets ohne eigenen Work Log Type.
     var defaultWorklogType: String {
         _ = settingsVersion
@@ -1688,12 +1470,6 @@ final class AppModel {
         guard var task = self.task(id), task.worklogType != value else { return }
         task.worklogType = value
         persist(task)
-    }
-
-    func serviceProduct(for workType: WorkType?) -> String {
-        _ = settingsVersion
-        guard let workType else { return "" }
-        return UserDefaults.standard.string(forKey: Preferences.serviceKey(for: workType)) ?? ""
     }
 
     func closeLines(for day: LocalDate) -> [BookingLine] {
@@ -1722,7 +1498,7 @@ final class AppModel {
         }
     }
 
-    /// Bucht den Tag: bereitet vor und sendet die Worklogs an ManageEngine. SAP bleibt für die Übertragung offen.
+    /// Bucht den Tag: bereitet vor und sendet die Worklogs an ManageEngine.
     func bookDay(_ day: LocalDate, minutes overrides: [UUID: Int]) async -> String {
         await connectMissingTickets(for: day)
         prepareBookings(for: day, minutes: overrides)
@@ -1736,11 +1512,7 @@ final class AppModel {
                 parts.append("\(pendingME.count) Worklog(s) warten, bis ManageEngine in den Einstellungen eingerichtet ist.")
             }
         }
-        let openSAP = bookings.filter { $0.day == day && $0.target == .sap && !$0.status.isDone }.count
-        if openSAP > 0 {
-            parts.append("\(openSAP) Zeile(n) noch in SAP eintragen und abhaken.")
-        }
-        return parts.isEmpty ? "Alles gebucht." : parts.joined(separator: " ")
+        return parts.isEmpty ? "Alle Worklogs sind gesendet." : parts.joined(separator: " ")
     }
 
     /// Sendet fällige Worklogs, auch Wiederholungen nach Fehlern.
@@ -1836,20 +1608,7 @@ final class AppModel {
         }
     }
 
-    /// Markiert die SAP-Zeile als von Hand eingetragen (legt die Buchung bei Bedarf an).
-    func markEnteredInSAP(_ line: BookingLine, minutes: Int?) {
-        if let existing = line.bookings[.sap] {
-            save(BookingQueue.entered(existing, now: Date()))
-            return
-        }
-        guard let prepared = DailyClose.prepare(line, minutes: minutes, now: Date()).first(where: { $0.target == .sap }) else {
-            lastError = "Für SAP fehlt noch etwas: \(line.issues(for: .sap).map(\.message).joined(separator: ", "))."
-            return
-        }
-        save(BookingQueue.entered(prepared, now: Date()))
-    }
-
-    /// Kein Worklog im Ticket für diese Zeile (dort freiwillig); SAP bleibt.
+    /// Kein Worklog im Ticket für diese Zeile (dort freiwillig).
     func skipManageEngine(_ line: BookingLine, minutes: Int) {
         save(BookingQueue.skipped(line, target: .manageEngine, minutes: minutes, now: Date()))
     }
@@ -1861,29 +1620,10 @@ final class AppModel {
         save(booking)
     }
 
-    func undoEnteredInSAP(_ line: BookingLine) {
-        guard var booking = line.bookings[.sap], booking.status == .entered else { return }
-        booking.status = .pending
-        booking.updatedAt = Date()
-        save(booking)
-    }
-
-    /// Übertragungsliste für SAP als Text (für Excel) und als Datei im Export-Ordner.
-    func sapTransferList(for day: LocalDate, minutes overrides: [UUID: Int]) -> (text: String, file: URL?) {
-        prepareBookings(for: day, minutes: overrides)
-        let sapBookings = bookings.filter { $0.day == day && $0.target == .sap }
-        let text = SAPTransfer.csv(sapBookings) { [weak self] workType in
-            self?.serviceProduct(for: workType) ?? ""
-        }
-        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Tagwerk/Exporte", isDirectory: true)
-        let file = folder.appendingPathComponent("SAP-\(day.string).csv")
-        do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try text.data(using: .utf8)?.write(to: file)
-            return (text, file)
-        } catch {
-            return (text, nil)
+    /// Liste des Tages zum Kopieren (Aufgabe, Kunde, Ticket, Stunden, Beschreibung), z. B. zum Abtippen in ein anderes System.
+    func dayListText(for day: LocalDate, minutes overrides: [UUID: Int]) -> String {
+        DayList.text(closeLines(for: day), minutes: overrides) { [weak self] id in
+            self?.customer(id)?.name
         }
     }
 
@@ -2349,7 +2089,6 @@ final class AppModel {
             customers = snapshot.customers
             tasks = snapshot.tasks
             entries = snapshot.entries
-            pspElements = snapshot.pspElements
             bookings = snapshot.bookings
             goals = snapshot.goals
             longGoals = snapshot.longGoals
@@ -2365,9 +2104,9 @@ final class AppModel {
     private func cleanUpHTMLEntities() {
         for task in tasks where task.title.contains("&") || task.workDescription.contains("&") || task.notes.contains("&") {
             var fixed = task
-            fixed.title = HTMLTable.decodeEntities(task.title)
-            fixed.workDescription = HTMLTable.decodeEntities(task.workDescription)
-            fixed.notes = HTMLTable.decodeEntities(task.notes)
+            fixed.title = HTMLText.decodeEntities(task.title)
+            fixed.workDescription = HTMLText.decodeEntities(task.workDescription)
+            fixed.notes = HTMLText.decodeEntities(task.notes)
             if fixed != task {
                 try? store.save(fixed)
                 if let index = tasks.firstIndex(where: { $0.id == fixed.id }) { tasks[index] = fixed }
@@ -2417,7 +2156,6 @@ final class AppModel {
         checkPomodoro()
         if tickCount % 600 == 0 { updater.checkIfDue() }
         tickCount += 1
-        if tickCount == 5 { autoFetchSAPIfDue() }
         if tickCount % 5 == 0 {
             checkIdle()
         }
@@ -2443,19 +2181,6 @@ final class AppModel {
                 customers[index] = customer
             } else {
                 customers.append(customer)
-            }
-        } catch {
-            report(error)
-        }
-    }
-
-    private func save(_ psp: PSPElement) {
-        do {
-            try store.save(psp)
-            if let index = pspElements.firstIndex(where: { $0.id == psp.id }) {
-                pspElements[index] = psp
-            } else {
-                pspElements.append(psp)
             }
         } catch {
             report(error)

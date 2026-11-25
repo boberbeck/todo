@@ -335,7 +335,7 @@ struct InboxRow: View {
                     CardMeta(task: task, compact: true)
                     SubtaskToggle(task: task)
                 }
-                if hovering || task.pspElement != nil || task.ticketNumber != nil {
+                if model.resolved(task).hasTicket {
                     BookingSummary(task: task)
                 }
                 if model.expandedTaskIDs.contains(task.id) {

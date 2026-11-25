@@ -198,8 +198,6 @@ final class SQLiteStoreTests: XCTestCase {
             externalID: "1234",
             plannedDate: LocalDate(year: 2026, month: 11, day: 19),
             estimateMinutes: 60,
-            workType: .stoerung,
-            pspElement: "4711",
             workDescription: "Logs geprüft",
             sortIndex: 3,
             createdAt: created,
@@ -230,28 +228,23 @@ final class SQLiteStoreTests: XCTestCase {
         try reopened.save(changed)
         XCTAssertEqual(try reopened.load().tasks, [changed], "Speichern überschreibt statt zu verdoppeln")
 
-        let psp = PSPElement(customerID: customer.id, code: "4711", title: "Wartung 2026", lastUsedAt: created)
         let booking = Booking(
             taskID: task.id,
             day: LocalDate(year: 2026, month: 11, day: 19),
             target: .manageEngine,
             minutes: 45,
             description: "Logs geprüft",
-            pspElement: "4711",
-            workType: .stoerung,
             ticketKey: "998877",
             status: .failed,
             lastError: "Zeitüberschreitung",
             attempts: 2,
             updatedAt: created
         )
-        try reopened.save(psp)
         try reopened.save(booking)
         var account = customer
         account.manageEngineAccount = "Müller Logistik GmbH"
         try reopened.save(account)
         let withBookings = try reopened.load()
-        XCTAssertEqual(withBookings.pspElements, [psp])
         XCTAssertEqual(withBookings.bookings, [booking])
         XCTAssertEqual(withBookings.customers.first?.manageEngineAccount, "Müller Logistik GmbH")
 
@@ -366,8 +359,8 @@ final class DailyCloseTests: XCTestCase {
 
     func testLinesRoundAndPickTargets() {
         let ticket = TaskItem(
-            title: "VPN-Störung", source: .ticket, externalID: "1234", workType: .stoerung,
-            pspElement: "4711", workDescription: "Logs geprüft", externalKey: "998877"
+            title: "VPN-Störung", source: .ticket, externalID: "1234",
+            workDescription: "Logs geprüft", externalKey: "998877"
         )
         let todo = TaskItem(title: "Angebot schreiben")
         let entries = [
@@ -382,38 +375,47 @@ final class DailyCloseTests: XCTestCase {
         XCTAssertEqual(lines.map(\.task.id), [todo.id, ticket.id], "sortiert nach erstem Start")
         let ticketLine = lines[1]
         XCTAssertEqual(ticketLine.minutes, 45, "38 Minuten werden zu 45")
-        XCTAssertEqual(ticketLine.targets, [.sap, .manageEngine])
+        XCTAssertEqual(ticketLine.targets, [.manageEngine])
         XCTAssertTrue(ticketLine.issues.isEmpty)
-        XCTAssertEqual(ticketLine.sapComment, "#1234 Logs geprüft")
+        XCTAssertEqual(ticketLine.worklogDescription, "Logs geprüft")
         let todoLine = lines[0]
-        XCTAssertEqual(todoLine.targets, [.sap])
-        XCTAssertEqual(Set(todoLine.issues), [.missingPSP, .missingWorkType])
+        XCTAssertTrue(todoLine.targets.isEmpty, "ohne Ticket geht nichts raus")
+        XCTAssertTrue(todoLine.issues.isEmpty)
+        XCTAssertTrue(todoLine.isDone)
     }
 
     func testPrepareSkipsDoneAndIncompleteTargets() {
-        let ticket = TaskItem(
-            title: "Drucker", source: .ticket, externalID: "1241", workType: .wartung,
-            pspElement: "4702", workDescription: "", externalKey: "555"
+        var ticket = TaskItem(
+            title: "Drucker", source: .ticket, externalID: "1241",
+            workDescription: "", externalKey: "555"
         )
         let entries = [TimeEntry(taskID: ticket.id, start: at(10), end: at(10, 30))]
         let lines = DailyClose.lines(
             for: day, tasks: [ticket], entries: entries, bookings: [],
             rules: BookingRules(), now: at(18), calendar: calendar
         )
-        let prepared = DailyClose.prepare(lines[0], now: at(18))
-        XCTAssertEqual(prepared.map(\.target), [.sap], "ohne Beschreibung kein Worklog")
+        XCTAssertTrue(DailyClose.prepare(lines[0], now: at(18)).isEmpty, "ohne Beschreibung kein Worklog")
 
-        let entered = BookingQueue.entered(prepared[0], now: at(18))
-        let again = DailyClose.lines(
-            for: day, tasks: [ticket], entries: entries, bookings: [entered],
+        ticket.workDescription = "Toner getauscht"
+        let described = DailyClose.lines(
+            for: day, tasks: [ticket], entries: entries, bookings: [],
             rules: BookingRules(), now: at(18), calendar: calendar
         )
-        XCTAssertTrue(DailyClose.prepare(again[0], now: at(18)).isEmpty, "Eingetragenes wird nie doppelt vorbereitet")
+        let prepared = DailyClose.prepare(described[0], now: at(18))
+        XCTAssertEqual(prepared.map(\.target), [.manageEngine])
+        XCTAssertEqual(prepared.first?.description, "Toner getauscht")
+
+        let confirmed = BookingQueue.confirmed(prepared[0], reference: "WL-1", now: at(18))
+        let again = DailyClose.lines(
+            for: day, tasks: [ticket], entries: entries, bookings: [confirmed],
+            rules: BookingRules(), now: at(18), calendar: calendar
+        )
+        XCTAssertTrue(DailyClose.prepare(again[0], now: at(18)).isEmpty, "Gebuchtes wird nie doppelt vorbereitet")
         XCTAssertFalse(again[0].changedAfterBooking)
 
         let longer = entries + [TimeEntry(taskID: ticket.id, start: at(14), end: at(14, 30))]
         let changed = DailyClose.lines(
-            for: day, tasks: [ticket], entries: longer, bookings: [entered],
+            for: day, tasks: [ticket], entries: longer, bookings: [confirmed],
             rules: BookingRules(), now: at(18), calendar: calendar
         )
         XCTAssertTrue(changed[0].changedAfterBooking, "nachträglich geänderte Zeit wird gemeldet")
@@ -423,7 +425,9 @@ final class DailyCloseTests: XCTestCase {
         let start = Date(timeIntervalSince1970: 1_000_000)
         let booking = Booking(taskID: UUID(), day: day, target: .manageEngine, minutes: 30, description: "x")
         XCTAssertEqual(BookingQueue.due([booking], target: .manageEngine, now: start).count, 1)
-        XCTAssertTrue(BookingQueue.due([booking], target: .sap, now: start).isEmpty)
+        var skipped = booking
+        skipped.status = .skipped
+        XCTAssertTrue(BookingQueue.due([skipped], target: .manageEngine, now: start).isEmpty, "Ausgelassenes wird nicht gesendet")
 
         let failed = BookingQueue.failed(booking, error: "offline", now: start)
         XCTAssertEqual(failed.attempts, 1)
@@ -437,14 +441,22 @@ final class DailyCloseTests: XCTestCase {
         XCTAssertNil(confirmed.lastError)
     }
 
-    func testSAPTransferList() {
-        let booking = Booking(
-            taskID: UUID(), day: day, target: .sap, minutes: 75,
-            description: "#1234 Logs \"VPN\"; neu gestartet", pspElement: "4711", workType: .stoerung
+    func testDayList() {
+        let customer = Customer(name: "Müller Logistik")
+        let task = TaskItem(
+            title: "VPN", customerID: customer.id, source: .ticket, externalID: "1234",
+            workDescription: "Logs geprüft\tTunnel\nneu gestartet"
         )
-        let csv = SAPTransfer.csv([booking]) { $0 == .stoerung ? "S-100" : "" }
-        XCTAssertEqual(csv, "Datum;PSP-Element;Leistung;Stunden;Kommentar\n19.11.2026;4711;S-100;1,25;\"#1234 Logs \"\"VPN\"\"; neu gestartet\"\n")
-        XCTAssertEqual(SAPTransfer.hours(30), "0,50")
+        let entries = [TimeEntry(taskID: task.id, start: at(9), end: at(10, 10))]
+        let lines = DailyClose.lines(
+            for: day, tasks: [task], entries: entries, bookings: [],
+            rules: BookingRules(), now: at(18), calendar: calendar
+        )
+        let text = DayList.text(lines) { $0 == customer.id ? customer.name : nil }
+        XCTAssertEqual(text, "Datum\tAufgabe\tKunde\tTicket\tStunden\tBeschreibung\n19.11.2026\tVPN\tMüller Logistik\t#1234\t1,25\tLogs geprüft Tunnel neu gestartet\n")
+        let overridden = DayList.text(lines, minutes: [task.id: 60]) { _ in nil }
+        XCTAssertTrue(overridden.contains("\t1,00\t"), overridden)
+        XCTAssertEqual(DayList.hours(30), "0,50")
     }
 }
 
@@ -653,12 +665,12 @@ final class ReviewTests: XCTestCase {
 
     func testTimeExport() {
         let customer = Customer(name: "Müller; Logistik")
-        let task = TaskItem(title: "VPN", customerID: customer.id, source: .ticket, externalID: "1234", workType: .stoerung, pspElement: "4711")
+        let task = TaskItem(title: "VPN", customerID: customer.id, source: .ticket, externalID: "1234")
         let entry = TimeEntry(taskID: task.id, start: at(thursday, 9), end: at(thursday, 9, 45))
         let csv = TimeExport.csv(entries: [entry], tasks: [task], customers: [customer], now: at(thursday, 18), calendar: calendar)
         let lines = csv.split(separator: "\n")
         XCTAssertEqual(lines.count, 2)
-        XCTAssertEqual(lines[1], "19.11.2026;09:00;09:45;45;\"Müller; Logistik\";VPN;Ticket;1234;Störung;4711;")
+        XCTAssertEqual(lines[1], "19.11.2026;09:00;09:45;45;\"Müller; Logistik\";VPN;Ticket;1234;")
     }
 
     func testSQLiteGoalsAndBackup() throws {
@@ -684,89 +696,11 @@ final class ReviewTests: XCTestCase {
     }
 }
 
-final class SAPImportTests: XCTestCase {
-    func testTaskIDs() {
-        XCTAssertTrue(SAPImport.looksLikeTaskID("CPSO8643-12"))
-        XCTAssertTrue(SAPImport.looksLikeTaskID("P1000-3"))
-        XCTAssertTrue(SAPImport.looksLikeTaskID("CPSO8643-12-1"))
-        XCTAssertFalse(SAPImport.looksLikeTaskID("2026-11-19"))
-        XCTAssertFalse(SAPImport.looksLikeTaskID("UTF-8"))
-        XCTAssertFalse(SAPImport.looksLikeTaskID("Projektaufgabenbestätigung"))
-        XCTAssertFalse(SAPImport.looksLikeTaskID("cpso8643-1"))
-        XCTAssertEqual(SAPImport.projectKey(of: "CPSO8643-12"), "CPSO8643")
-    }
-
-    func testTableWithHeader() {
-        let text = """
-        Kategorie\tAufgabennummer\tAufgabenname\tKunde
-        Projektaufgabenbestätigung\tCPSO8643-12\tFirewall erneuern\tMüller Logistik GmbH
-        Projektaufgabenbestätigung\tCPSO8643-1\tWartung\tMüller Logistik GmbH
-        Projektaufgabenbestätigung\tCPSO8643-1\tWartung\tMüller Logistik GmbH
-        """
-        let rows = SAPImport.rows(fromText: text)
-        XCTAssertEqual(rows.count, 2)
-        XCTAssertEqual(rows[0].code, "CPSO8643-12")
-        XCTAssertEqual(rows[0].title, "Firewall erneuern")
-        XCTAssertEqual(rows[0].project, "CPSO8643")
-        XCTAssertEqual(rows[0].customerName, "Müller Logistik GmbH")
-        XCTAssertEqual(rows[0].category, "Projektaufgabenbestätigung")
-    }
-
-    func testTableWithoutHeaderAndSemicolons() {
-        let rows = SAPImport.rows(fromText: "Projektaufgabenbestätigung;CPSO8643-5;Migration Exchange\nSumme;;\n")
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0].code, "CPSO8643-5")
-        XCTAssertEqual(rows[0].title, "Migration Exchange")
-    }
-
-    func testLinesCopiedFromBrowser() {
-        let rows = SAPImport.rows(fromText: "Projektaufgabenbestätigung CPSO8643-7\nCPSO8643-8 Netzwerk\nGruppieren nach Kategorie")
-        XCTAssertEqual(rows.map(\.code), ["CPSO8643-7", "CPSO8643-8"])
-        XCTAssertEqual(rows[1].title, "Netzwerk")
-    }
-
-    func testLinesFromWebPage() {
-        // So liest sich eine Tabelle aus Div-Zellen: jede Zelle eine Zeile
-        let text = """
-        Kategorie
-        Aufgabennummer
-        Aufgabenname
-        Projektaufgabenbestätigung
-        CPSO8643-12
-        Firewall erneuern
-        Projektaufgabenbestätigung
-        CPSO8643-1
-        Wartung 2026
-        """
-        let rows = SAPImport.rows(fromText: text)
-        XCTAssertEqual(rows.map(\.code), ["CPSO8643-12", "CPSO8643-1"])
-        XCTAssertEqual(rows.map(\.title), ["Firewall erneuern", "Wartung 2026"])
-    }
-
-    func testActivityColumn() {
-        let cells = [
-            ["Kategorie", "Aufgabennummer", "Tätigkeit"],
-            ["Projektaufgabenbestätigung", "CPSO9001-1", "Interne Besprechung"],
-        ]
-        let rows = SAPImport.rows(fromCells: cells)
-        XCTAssertEqual(rows.first?.activity, "Interne Besprechung")
-        XCTAssertEqual(rows.first?.title, "Interne Besprechung", "ohne Namensspalte wird die Tätigkeit zum Namen")
-
-        let customer = Customer(name: "Intern", colorIndex: 0)
-        let existing = [PSPElement(customerID: customer.id, code: "CPSO9001-1", title: "Interne Besprechung")]
-        let plan = SAPImport.plan(rows: rows, existing: existing, customers: [customer])
-        let saved = SAPImport.apply(plan, customerFor: { $0.suggestedCustomerID }, deactivateMissing: false)
-        XCTAssertEqual(saved.first?.activity, "Interne Besprechung")
-        XCTAssertEqual(saved.first?.label, "CPSO9001-1 · Interne Besprechung")
-    }
-
-    func testSQLiteKeepsActivity() throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tagwerk-psp-\(UUID().uuidString)")
+final class StoreDetailTests: XCTestCase {
+    func testSQLiteKeepsWorklogType() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tagwerk-wl-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: folder) }
         let store = try SQLiteStore(url: folder.appendingPathComponent("tagwerk.sqlite"))
-        let psp = PSPElement(customerID: UUID(), code: "CPSO9001-1", title: "Besprechung", activity: "Interne Tätigkeit")
-        try store.save(psp)
-        XCTAssertEqual(try store.load().pspElements, [psp])
         let ticket = TaskItem(title: "Ticket", source: .ticket, createdAt: Date(timeIntervalSince1970: 1_700_000_000), worklogType: "Fehlalarm")
         try store.save(ticket)
         XCTAssertEqual(try store.load().tasks.first?.worklogType, "Fehlalarm")
@@ -793,133 +727,9 @@ final class SAPImportTests: XCTestCase {
         XCTAssertTrue(try store.changes(since: Date().addingTimeInterval(60)).isEmpty)
     }
 
-    func testGroupRowsAreNoTitles() {
-        let cells = [
-            ["Kategorie: Projektaufgabenbestätigung (null)", "CPSO8643-1"],
-            ["Gruppieren nach...", "CPSO8643-2"],
-            ["Projektaufgabenbestätigung", "CPSO8643-3", "Firewall"],
-        ]
-        let rows = SAPImport.rows(fromCells: cells)
-        XCTAssertEqual(rows.map(\.title), ["", "", "Firewall"])
-    }
-
-    func testOCRRepair() {
-        XCTAssertEqual(SAPImport.repairOCRCell("CPSO8643 – 12"), "CPSO8643-12")
-        XCTAssertEqual(SAPImport.repairOCRCell("Wartung - Server"), "Wartung - Server")
-        let rows = [
-            SAPTaskRow(code: "CPSO8643-1", title: "A"),
-            SAPTaskRow(code: "CPS08643-2", title: "B"),
-            SAPTaskRow(code: "CPSO8643-4", title: "C"),
-            SAPTaskRow(code: "CPS08643-1", title: "A doppelt"),
-        ]
-        let repaired = SAPImport.repairOCRCodes(rows)
-        XCTAssertEqual(repaired.map(\.code), ["CPSO8643-1", "CPSO8643-2", "CPSO8643-4"])
-        XCTAssertEqual(repaired[1].project, "CPSO8643")
-
-        // Die meisten verlesen, nur eine richtig: trotzdem „CPSO“
-        let mostlyMisread = [
-            SAPTaskRow(code: "CPS08643-1", title: "A", activity: "Consulting"),
-            SAPTaskRow(code: "CPS08643-2", title: "B"),
-            SAPTaskRow(code: "CPSO8710-2", title: "C"),
-        ]
-        XCTAssertEqual(SAPImport.repairOCRCodes(mostlyMisread).map(\.code), ["CPSO8643-1", "CPSO8643-2", "CPSO8710-2"])
-    }
-
-    func testCSVQuotes() {
-        let cells = TableText.cells(from: "Aufgabennummer,Aufgabenname\n\"CPSO1-2\",\"Beratung, vor Ort\"\n")
-        XCTAssertEqual(cells[1], ["CPSO1-2", "Beratung, vor Ort"])
-    }
-
-    func testHTMLTable() {
-        let html = "<table><tr><th>Aufgabennummer</th><th>Aufgabenname</th></tr><tr><td><span>CPSO8643-9</span></td><td>Gr&uuml;ne&nbsp;Wiese &amp; Co</td></tr></table>"
-        let rows = SAPImport.rows(fromCells: HTMLTable.cells(from: html))
-        XCTAssertEqual(rows.first?.code, "CPSO8643-9")
-        XCTAssertEqual(rows.first?.title, "Grüne Wiese & Co")
-    }
-
-    func testXLSXSheet() {
-        let shared = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Aufgabennummer</t></si><si><t>Aufgabenname</t></si><si><t>CPSO8643-10</t></si><si><r><t>Back</t></r><r><t>up</t></r></si></sst>
-        """
-        let sheet = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>
-        <row r="1"><c r="A1" t="s"><v>0</v></c><c r="C1" t="s"><v>1</v></c></row>
-        <row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>42</v></c><c r="C2" t="s"><v>3</v></c></row>
-        <row r="3"><c r="A3" t="inlineStr"><is><t>CPSO8643-11</t></is></c><c r="C3" t="inlineStr"><is><t>Monitoring</t></is></c></row>
-        </sheetData></worksheet>
-        """
-        let cells = XLSXSheet.cells(sheet: Data(sheet.utf8), sharedStrings: Data(shared.utf8))
-        XCTAssertEqual(cells[0], ["Aufgabennummer", "", "Aufgabenname"])
-        XCTAssertEqual(cells[1], ["CPSO8643-10", "42", "Backup"])
-        let rows = SAPImport.rows(fromCells: cells)
-        XCTAssertEqual(rows.map(\.code), ["CPSO8643-10", "CPSO8643-11"])
-        XCTAssertEqual(rows.map(\.title), ["Backup", "Monitoring"])
-        XCTAssertEqual(XLSXSheet.columnIndex(of: "AB12"), 27)
-    }
-
-    func testSpreadsheetML() {
-        let xml = """
-        <?xml version="1.0"?>
-        <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-        <Worksheet ss:Name="Aufgaben"><Table>
-        <Row><Cell><Data ss:Type="String">Aufgabennummer</Data></Cell><Cell><Data ss:Type="String">Aufgabenname</Data></Cell></Row>
-        <Row><Cell><Data ss:Type="String">CPSO8643-4</Data></Cell><Cell ss:Index="2"><Data ss:Type="String">Projekt Netzumbau</Data></Cell></Row>
-        </Table></Worksheet></Workbook>
-        """
-        let data = Data(xml.utf8)
-        XCTAssertTrue(SpreadsheetML.isSpreadsheetML(data))
-        let rows = SAPImport.rows(fromCells: SpreadsheetML.cells(from: data))
-        XCTAssertEqual(rows.first?.code, "CPSO8643-4")
-        XCTAssertEqual(rows.first?.title, "Projekt Netzumbau")
-    }
-
-    func testPlanAndApply() {
-        let mueller = Customer(name: "Müller Logistik", colorIndex: 1, manageEngineAccount: "Müller Logistik GmbH")
-        let stadtwerke = Customer(name: "Stadtwerke Nord", colorIndex: 2)
-        let existing = [
-            PSPElement(customerID: mueller.id, code: "CPSO8643-1", title: "Wartung"),
-            PSPElement(customerID: mueller.id, code: "CPSO8643-2", title: "Störungen"),
-            PSPElement(customerID: mueller.id, code: "CPSO8643-4", title: "Netzumbau", isActive: false),
-            PSPElement(customerID: stadtwerke.id, code: "CPSO9000-1", title: "Support"),
-        ]
-        let rows = [
-            SAPTaskRow(code: "CPSO8643-1", title: "Wartung"),
-            SAPTaskRow(code: "CPSO8643-4", title: "Netzumbau"),
-            SAPTaskRow(code: "CPSO8643-12", title: "Firewall"),
-            SAPTaskRow(code: "CPSO8700-1", title: "Rollout", customerName: "Stadtwerke Nord GmbH"),
-            SAPTaskRow(code: "CPSO8800-1", title: "Beratung", customerName: "Hansa Spedition"),
-        ]
-        let plan = SAPImport.plan(rows: rows, existing: existing, customers: [mueller, stadtwerke])
-        XCTAssertEqual(plan.groups.map(\.project), ["CPSO8643", "CPSO8700", "CPSO8800"])
-        XCTAssertEqual(plan.groups[0].suggestedCustomerID, mueller.id)
-        XCTAssertEqual(plan.groups[1].suggestedCustomerID, stadtwerke.id)
-        XCTAssertNil(plan.groups[2].suggestedCustomerID)
-        XCTAssertEqual(plan.groups[0].items.map(\.change), [.unchanged, .reactivated, .new])
-        // CPSO8643-2 fehlt in SAP, CPSO9000-1 gehört zu einem anderen Projekt und bleibt
-        XCTAssertEqual(plan.missing.map(\.code), ["CPSO8643-2"])
-
-        let saved = SAPImport.apply(plan, customerFor: { group in
-            group.project == "CPSO8800" ? nil : group.suggestedCustomerID
-        }, deactivateMissing: true)
-        let byCode = Dictionary(uniqueKeysWithValues: saved.map { ($0.code, $0) })
-        XCTAssertNil(byCode["CPSO8643-1"], "Unverändertes wird nicht gespeichert")
-        XCTAssertEqual(byCode["CPSO8643-4"]?.isActive, true)
-        XCTAssertEqual(byCode["CPSO8643-12"]?.customerID, mueller.id)
-        XCTAssertEqual(byCode["CPSO8700-1"]?.customerID, stadtwerke.id)
-        XCTAssertNil(byCode["CPSO8800-1"], "Übersprungenes Projekt")
-        XCTAssertEqual(byCode["CPSO8643-2"]?.isActive, false)
-    }
-
-    func testRenamedTask() {
-        let customer = Customer(name: "Becker", colorIndex: 0)
-        let existing = [PSPElement(customerID: customer.id, code: "CPSO1-1", title: "Alt")]
-        let plan = SAPImport.plan(rows: [SAPTaskRow(code: "CPSO1-1", title: "Neu")], existing: existing, customers: [customer])
-        XCTAssertEqual(plan.groups.first?.items.first?.change, .renamed("Alt"))
-        let saved = SAPImport.apply(plan, customerFor: { $0.suggestedCustomerID }, deactivateMissing: false)
-        XCTAssertEqual(saved.first?.title, "Neu")
-        XCTAssertEqual(saved.first?.id, existing[0].id)
+    func testHTMLEntities() {
+        XCTAssertEqual(HTMLText.decodeEntities("Server &lt;neu&gt; &amp; Dr&uuml;cker &#228;&#xFC;"), "Server <neu> & Drücker äü")
+        XCTAssertEqual(HTMLText.decodeEntities("ohne"), "ohne")
     }
 }
 
@@ -995,169 +805,6 @@ final class ManageEngineTechnicianTests: XCTestCase {
     }
 }
 
-/// Die englische ByDesign-Liste: mehrere Activities je Aufgabe, feste und scrollbare Spalten.
-final class SAPEnglishListTests: XCTestCase {
-    func testEnglishHeadersAndSeveralActivities() {
-        let cells = [
-            ["Show: My Current Work Packages", "Group By…"],
-            ["Task ID", "Work Package Task", "Activity", "Category", "Project ID"],
-            ["CPSO8643-6", "Firewall Migration", "Consulting", "Project Task", "CPSO8643"],
-            ["CPSO8643-6", "Firewall Migration", "Remote Support", "Project Task", "CPSO8643"],
-            ["CPSO8643-7", "Monitoring", "Consulting", "Project Task", "CPSO8643"],
-            ["CPSO8643-7", "Monitoring", "Consulting", "Project Task", "CPSO8643"],
-        ]
-        let rows = SAPImport.rows(fromCells: cells)
-        XCTAssertEqual(rows.map(\.code), ["CPSO8643-6", "CPSO8643-6", "CPSO8643-7"], "eine Zeile je Aufgabe und Activity")
-        XCTAssertEqual(rows.map(\.title), ["Firewall Migration", "Firewall Migration", "Monitoring"])
-        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Remote Support", "Consulting"])
-        XCTAssertEqual(rows.first?.category, "Project Task")
-    }
-
-    func testGroupByIsNoTitle() {
-        XCTAssertTrue(SAPImport.isNoise("Group By…"))
-        XCTAssertTrue(SAPImport.isNoise("Group By: Category"))
-        XCTAssertTrue(SAPImport.isNoise("Project Task Confirmation"))
-        XCTAssertTrue(SAPImport.isNoise("Work Package Task"))
-        XCTAssertFalse(SAPImport.isNoise("Firewall Migration"))
-        let rows = SAPImport.rows(fromLines: ["CPSO8643-6", "Group By…", "CPSO8643-7", "Monitoring"])
-        XCTAssertEqual(rows.map(\.title), ["", "Monitoring"])
-    }
-
-    func testCodeColumnFoundByContent() {
-        // Die Überschrift passt nicht zum Inhalt: die Nummern stehen unter „Work Package Task“.
-        let cells = [
-            ["Work Package Task", "Description", "Activity"],
-            ["CPSO8643-6", "Firewall Migration", "Consulting"],
-            ["CPSO8643-7", "Monitoring", "Remote Support"],
-        ]
-        let rows = SAPImport.rows(fromCells: cells)
-        XCTAssertEqual(rows.map(\.code), ["CPSO8643-6", "CPSO8643-7"])
-        XCTAssertEqual(rows.map(\.title), ["Firewall Migration", "Monitoring"])
-        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Remote Support"])
-    }
-
-    func testNumberInsideTheNameCell() {
-        let cells = [
-            ["Work Package Task", "Activity"],
-            ["Firewall Migration (CPSO8643-6)", "Consulting"],
-            ["CPSO8643-7 Monitoring", "Training"],
-        ]
-        let rows = SAPImport.rows(fromCells: cells)
-        XCTAssertEqual(rows.map(\.code), ["CPSO8643-6", "CPSO8643-7"])
-        XCTAssertEqual(rows.map(\.title), ["Firewall Migration", "Monitoring"])
-        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Training"])
-    }
-
-    func testMergeKeepsActivitiesAndFillsNames() {
-        let rows = SAPImport.merged([
-            SAPTaskRow(code: "CPSO1-1", title: ""),
-            SAPTaskRow(code: "CPSO1-1", title: "", activity: "Consulting"),
-            SAPTaskRow(code: "CPSO1-1", title: "Wartung", activity: "Training"),
-            SAPTaskRow(code: "CPSO1-1", title: "", activity: "consulting"),
-        ])
-        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Training"], "ohne Activity entfällt, doppelt wird eins")
-        XCTAssertEqual(rows.map(\.title), ["Wartung", "Wartung"], "Name kommt von derselben Aufgabe")
-    }
-
-    func testBestReadingWins() {
-        let withoutActivity = [SAPTaskRow(code: "CPSO1-1", title: "A"), SAPTaskRow(code: "CPSO1-2", title: "B")]
-        let withActivity = [SAPTaskRow(code: "CPSO1-1", title: "A", activity: "X"), SAPTaskRow(code: "CPSO1-2", title: "B", activity: "Y")]
-        let fewer = [SAPTaskRow(code: "CPSO1-1", title: "A", activity: "X")]
-        XCTAssertEqual(SAPImport.best(of: [withoutActivity, withActivity, fewer]), withActivity)
-        XCTAssertEqual(SAPImport.best(of: [[], fewer]), fewer)
-    }
-
-    func testPlanMatchesTaskAndActivity() {
-        let customer = Customer(name: "Müller", colorIndex: 0)
-        let old = PSPElement(customerID: customer.id, code: "CPSO8643-6", title: "Firewall Migration")
-        let other = PSPElement(customerID: customer.id, code: "CPSO8643-9", title: "Altprojekt")
-        let rows = [
-            SAPTaskRow(code: "CPSO8643-6", title: "Firewall Migration", activity: "Consulting"),
-            SAPTaskRow(code: "CPSO8643-6", title: "Firewall Migration", activity: "Remote Support"),
-        ]
-        let plan = SAPImport.plan(rows: rows, existing: [old, other], customers: [customer])
-        let items = plan.groups.first?.items ?? []
-        XCTAssertEqual(items.map(\.id), ["CPSO8643-6|consulting", "CPSO8643-6|remote support"])
-        XCTAssertEqual(items.first?.existing?.id, old.id, "das alte Element ohne Activity bekommt die erste")
-        XCTAssertEqual(items.last?.change, .new)
-        XCTAssertEqual(plan.missing.map(\.code), ["CPSO8643-9"])
-
-        let saved = SAPImport.apply(plan, customerFor: { $0.suggestedCustomerID }, deactivateMissing: false)
-        XCTAssertEqual(saved.count, 2)
-        XCTAssertEqual(saved.map(\.activity), ["Consulting", "Remote Support"])
-        XCTAssertEqual(saved.first?.id, old.id)
-
-        // Später ohne Activity gelesen: keine der beiden gilt als verschwunden
-        let both = [
-            PSPElement(customerID: customer.id, code: "CPSO8643-6", title: "Firewall Migration", activity: "Consulting"),
-            PSPElement(customerID: customer.id, code: "CPSO8643-6", title: "Firewall Migration", activity: "Remote Support"),
-        ]
-        let again = SAPImport.plan(rows: [SAPTaskRow(code: "CPSO8643-6", title: "Firewall Migration")], existing: both, customers: [customer])
-        XCTAssertTrue(again.missing.isEmpty)
-        XCTAssertEqual(both[0].matches(code: "cpso8643-6", activity: "consulting"), true)
-        XCTAssertEqual(both[1].matches(code: "CPSO8643-6", activity: "Consulting"), false)
-    }
-
-    // MARK: Lesen nach Lage auf dem Bildschirm
-
-    private func box(_ text: String, _ x: Double, _ y: Double, width: Double = 90) -> TextBox {
-        TextBox(text: text, x: x, y: y, width: width, height: 16)
-    }
-
-    func testLayoutWithFixedAndScrollingColumns() {
-        // Links eine eigene Tabelle mit der Task ID, rechts der Rest; im Seitenaufbau zwei getrennte Tabellen.
-        var boxes = [
-            box("Group By…", 300, 10),
-            box("Task ID", 20, 60), box("Work Package Task", 160, 60, width: 140), box("Activity", 420, 60), box("Category", 600, 60),
-        ]
-        let data = [
-            ("CPSO8643-6", "Firewall Migration", "Consulting"),
-            ("CPSO8643-6", "Firewall Migration", "Remote Support"),
-            ("CPSO8643-7", "Monitoring", "Consulting"),
-        ]
-        for (index, row) in data.enumerated() {
-            let y = 100 + Double(index) * 36
-            boxes.append(box(row.0, 22, y + 1))
-            boxes.append(box(row.1, 162, y, width: 150))
-            boxes.append(box(row.2, 421, y))
-            boxes.append(box("Project Task", 601, y))
-        }
-        // Reihenfolge wie im Seitenaufbau: erst die ganze linke Tabelle, dann die rechte
-        let shuffled = boxes.filter { $0.x < 100 } + boxes.filter { $0.x >= 100 }
-        let cells = LayoutTable.cells(from: shuffled)
-        XCTAssertEqual(cells.first, ["Task ID", "Work Package Task", "Activity", "Category"])
-        XCTAssertEqual(cells[1], ["CPSO8643-6", "Firewall Migration", "Consulting", "Project Task"])
-
-        let rows = SAPImport.rows(fromLayout: shuffled)
-        XCTAssertEqual(rows.map(\.code), ["CPSO8643-6", "CPSO8643-6", "CPSO8643-7"])
-        XCTAssertEqual(rows.map(\.title), ["Firewall Migration", "Firewall Migration", "Monitoring"])
-        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Remote Support", "Consulting"])
-    }
-
-    func testLayoutJoinsSplitTextAndWrappedNames() {
-        let boxes = [
-            box("Task", 20, 60, width: 32), box("ID", 56, 60, width: 14), box("Work Package Task", 160, 60, width: 140), box("Activity", 420, 60),
-            // „CPSO8643-“ und „8“ in zwei Text-Stücken direkt nebeneinander
-            box("CPSO8643-", 20, 100, width: 70), box("8", 90, 100, width: 8),
-            box("Netzwerk und", 160, 100), box("Consulting", 420, 100),
-            // umgebrochener Name in der nächsten Textzeile
-            box("Firewall", 160, 118),
-            box("CPSO8643-9", 20, 140), box("Backup", 160, 140), box("Training", 420, 140),
-        ]
-        let rows = SAPImport.rows(fromLayout: boxes)
-        XCTAssertEqual(rows.map(\.code), ["CPSO8643-8", "CPSO8643-9"])
-        XCTAssertEqual(rows.map(\.title), ["Netzwerk und Firewall", "Backup"])
-        XCTAssertEqual(rows.map(\.activity), ["Consulting", "Training"])
-    }
-
-    func testLayoutWithoutHeader() {
-        let boxes = [box("CPSO8643-6", 20, 100), box("Firewall Migration", 200, 100, width: 150)]
-        let rows = SAPImport.rows(fromLayout: boxes)
-        XCTAssertEqual(rows.map(\.code), ["CPSO8643-6"])
-        XCTAssertEqual(rows.first?.title, "Firewall Migration")
-    }
-}
-
 /// Unteraufgaben und Tickets an eigenen Aufgaben.
 final class SubtaskAndTicketTests: XCTestCase {
     private var calendar: Calendar {
@@ -1184,12 +831,10 @@ final class SubtaskAndTicketTests: XCTestCase {
 
     func testSubtaskInheritsBookingDetails() {
         let ticket = TaskItem(title: "Firewall", source: .ticket, externalID: "1234", externalKey: "998877", worklogType: "Wartung")
-        let parent = TaskItem(title: "Firewall-Umzug", customerID: UUID(), pspElement: "CPSO8643-6", sapActivity: "Consulting")
+        let parent = TaskItem(title: "Firewall-Umzug", customerID: UUID())
         let subtask = TaskItem(title: "Regeln exportieren", parentID: parent.id)
         let resolved = subtask.resolved(parent: parent)
         XCTAssertEqual(resolved.customerID, parent.customerID)
-        XCTAssertEqual(resolved.pspElement, "CPSO8643-6")
-        XCTAssertEqual(resolved.sapActivity, "Consulting")
         XCTAssertFalse(resolved.hasTicket)
 
         let underTicket = TaskItem(title: "Logs sichten", parentID: ticket.id).resolved(parent: ticket)
@@ -1201,11 +846,11 @@ final class SubtaskAndTicketTests: XCTestCase {
     }
 
     func testDailyCloseForSubtaskWithOwnTicket() {
-        let parent = TaskItem(title: "Firewall-Umzug", pspElement: "CPSO8643-6", sapActivity: "Consulting")
+        let parent = TaskItem(title: "Firewall-Umzug")
         var subtask = TaskItem(title: "Regeln exportieren", workDescription: "Regeln gesichert", parentID: parent.id)
         subtask.ticketNumber = "1240"
         subtask.ticketKey = "100124"
-        let plain = TaskItem(title: "Team Sitzung", pspElement: "INT1-1", sapActivity: "Internal Meeting")
+        let plain = TaskItem(title: "Team Sitzung")
         let entries = [
             TimeEntry(taskID: subtask.id, start: at(9), end: at(9, 30)),
             TimeEntry(taskID: plain.id, start: at(10), end: at(10, 45)),
@@ -1217,32 +862,29 @@ final class SubtaskAndTicketTests: XCTestCase {
         XCTAssertEqual(lines.count, 2, "nur Aufgaben mit Zeit")
         let line = lines[0]
         XCTAssertEqual(line.task.id, subtask.id)
-        XCTAssertEqual(line.targets, [.sap, .manageEngine], "eigenes Ticket: auch Worklog")
-        XCTAssertTrue(line.issues.isEmpty, "Tätigkeit aus SAP ersetzt die Arbeitsart: \(line.issues)")
+        XCTAssertEqual(line.targets, [.manageEngine], "eigenes Ticket: Worklog")
+        XCTAssertTrue(line.issues.isEmpty, "\(line.issues)")
         XCTAssertEqual(line.displayTitle, "Firewall-Umzug: Regeln exportieren")
-        XCTAssertEqual(line.sapComment, "#1240 Regeln gesichert")
 
         let prepared = DailyClose.prepare(line, now: at(18))
-        XCTAssertEqual(prepared.map(\.target), [.sap, .manageEngine])
-        XCTAssertEqual(prepared.first?.pspElement, "CPSO8643-6")
-        XCTAssertEqual(prepared.first?.activity, "Consulting")
-        XCTAssertEqual(prepared.last?.ticketKey, "100124")
+        XCTAssertEqual(prepared.map(\.target), [.manageEngine])
+        XCTAssertEqual(prepared.first?.ticketKey, "100124")
+        XCTAssertEqual(prepared.first?.description, "Regeln gesichert")
 
         let meeting = lines[1]
-        XCTAssertEqual(meeting.targets, [.sap])
-        XCTAssertEqual(meeting.sapComment, "Team Sitzung")
-        let csv = SAPTransfer.csv(DailyClose.prepare(meeting, now: at(18))) { _ in "S-100" }
-        XCTAssertTrue(csv.contains("19.11.2026;INT1-1;Internal Meeting;0,75;Team Sitzung"), csv)
+        XCTAssertTrue(meeting.targets.isEmpty)
+        let list = DayList.text(lines) { _ in nil }
+        XCTAssertTrue(list.contains("19.11.2026\tTeam Sitzung\t\t\t0,75\t"), list)
     }
 
-    func testSQLiteKeepsSubtaskTicketAndActivity() throws {
+    func testSQLiteKeepsSubtaskTicket() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tagwerk-sub-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: folder) }
         let store = try SQLiteStore(url: folder.appendingPathComponent("tagwerk.sqlite"))
         let parent = TaskItem(title: "Umzug", createdAt: Date(timeIntervalSince1970: 1_700_000_000))
         let subtask = TaskItem(
             title: "Kabel", createdAt: Date(timeIntervalSince1970: 1_700_000_100),
-            parentID: parent.id, ticketNumber: "1240", ticketKey: "100124", sapActivity: "Installation",
+            parentID: parent.id, ticketNumber: "1240", ticketKey: "100124",
             ticketTitle: "Drucker im Lager"
         )
         try store.save(parent)
@@ -1250,10 +892,10 @@ final class SubtaskAndTicketTests: XCTestCase {
         let loaded = try store.load().tasks.first { $0.id == subtask.id }
         XCTAssertEqual(loaded, subtask)
 
-        let booking = Booking(taskID: subtask.id, day: day, target: .sap, minutes: 30, description: "Kabel",
-                              updatedAt: Date(timeIntervalSince1970: 1_700_000_200), activity: "Installation")
+        let booking = Booking(taskID: subtask.id, day: day, target: .manageEngine, minutes: 30, description: "Kabel",
+                              updatedAt: Date(timeIntervalSince1970: 1_700_000_200))
         try store.save(booking)
-        XCTAssertEqual(try store.load().bookings.first?.activity, "Installation")
+        XCTAssertEqual(try store.load().bookings, [booking])
     }
 }
 

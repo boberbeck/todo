@@ -5,7 +5,7 @@ import TagwerkCore
 /// Einstellungen in Tabs, wie bei Mac-Apps üblich.
 struct SettingsView: View {
     enum Tab: String, CaseIterable {
-        case general, focus, calendar, booking, manageEngine, claude, data
+        case general, focus, calendar, manageEngine, claude, data
     }
 
     static let tabKey = "settingsTab"
@@ -22,9 +22,6 @@ struct SettingsView: View {
             CalendarSettings()
                 .tabItem { Label("Kalender", systemImage: "calendar") }
                 .tag(Tab.calendar.rawValue)
-            BookingSettings()
-                .tabItem { Label("Buchung", systemImage: "clock.badge.checkmark") }
-                .tag(Tab.booking.rawValue)
             ManageEngineSettings()
                 .tabItem { Label("ManageEngine", systemImage: "ticket") }
                 .tag(Tab.manageEngine.rawValue)
@@ -36,6 +33,10 @@ struct SettingsView: View {
                 .tag(Tab.data.rawValue)
         }
         .frame(width: 620)
+        .onAppear {
+            // Früher gab es den Reiter „Buchung“; dann mit Allgemein öffnen
+            if Tab(rawValue: tab) == nil { tab = Tab.general.rawValue }
+        }
     }
 }
 
@@ -114,6 +115,8 @@ struct GeneralSettings: View {
     @AppStorage(Preferences.workdayEndKey) private var workdayEnd = Preferences.defaultWorkdayEnd
     @AppStorage(Preferences.planningOnLaunchKey) private var planningOnLaunch = true
     @AppStorage(Preferences.idleMinutesKey) private var idleMinutes = 10
+    @AppStorage(Preferences.roundingStepKey) private var roundingStep = 15
+    @AppStorage(Preferences.roundingModeKey) private var roundingMode = RoundingMode.nearest.rawValue
 
     var body: some View {
         Form {
@@ -124,6 +127,22 @@ struct GeneralSettings: View {
                 Text("Arbeitszeit")
             } footer: {
                 SettingsFootnote("Daraus berechnet Tagwerk die freien Lücken zwischen deinen Terminen.")
+            }
+
+            Section {
+                Picker("Runden auf", selection: $roundingStep) {
+                    ForEach([5, 10, 15, 30], id: \.self) { step in
+                        Text("\(step) Minuten").tag(step)
+                    }
+                }
+                Picker("Rundung", selection: $roundingMode) {
+                    Text("kaufmännisch").tag(RoundingMode.nearest.rawValue)
+                    Text("immer aufrunden").tag(RoundingMode.up.rawValue)
+                }
+            } header: {
+                Text("Tagesabschluss")
+            } footer: {
+                SettingsFootnote("Gilt für die Zeiten im Tagesabschluss, die Worklogs in ManageEngine und die kopierte Liste. Jede Zeile hat mindestens einen Schritt.")
             }
 
             Section("Tagesplanung") {
@@ -186,6 +205,8 @@ struct GeneralSettings: View {
         .settingsPage(height: 760)
         .onChange(of: workdayStart) { model.settingsChanged() }
         .onChange(of: workdayEnd) { model.settingsChanged() }
+        .onChange(of: roundingStep) { model.settingsChanged() }
+        .onChange(of: roundingMode) { model.settingsChanged() }
     }
 
     private func timeBinding(_ minutes: Binding<Int>) -> Binding<Date> {
@@ -211,12 +232,6 @@ struct StandingTasksSection: View {
                             .font(.caption)
                             .foregroundStyle(Theme.secondary)
                     }
-                    if let psp = model.pspLabel(for: task) {
-                        Text(psp)
-                            .font(.caption)
-                            .foregroundStyle(Theme.tertiary)
-                            .lineLimit(1)
-                    }
                     Button {
                         model.removeStandingTask(task.id)
                     } label: {
@@ -240,7 +255,7 @@ struct StandingTasksSection: View {
         } header: {
             Text("Standardaufgaben")
         } footer: {
-            SettingsFootnote("Immer da und nie erledigt, z. B. Organisatorisches oder Interne Besprechung. Auf Start startet ein Klick die Zeit; im Kalender stehen sie nach einem Doppelklick zur Wahl. Kunde und SAP-Aufgabe legst du auf Start per Rechtsklick › Details fest.")
+            SettingsFootnote("Immer da und nie erledigt, z. B. Organisatorisches oder Interne Besprechung. Auf Start startet ein Klick die Zeit; im Kalender stehen sie nach einem Doppelklick zur Wahl. Kunde oder Ticket legst du auf Start per Rechtsklick › Details fest.")
         }
     }
 
@@ -522,134 +537,6 @@ struct CalendarSettings: View {
     }
 }
 
-// MARK: Buchung
-
-struct BookingSettings: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.openWindow) private var openWindow
-    @AppStorage(Preferences.roundingStepKey) private var roundingStep = 15
-    @AppStorage(Preferences.roundingModeKey) private var roundingMode = RoundingMode.nearest.rawValue
-    @AppStorage(Preferences.bydesignURLKey) private var bydesignURL = ""
-    @AppStorage(Preferences.bydesignUserKey) private var bydesignUser = ""
-    @AppStorage(Preferences.bydesignAutoFetchKey) private var bydesignAutoFetch = false
-    @AppStorage(Preferences.bydesignTaskListURLKey) private var bydesignTaskList = ""
-    @State private var bydesignPassword = ""
-
-    private func saveByDesignPassword() {
-        guard !bydesignPassword.isEmpty else { return }
-        model.setByDesignPassword(bydesignPassword)
-        bydesignPassword = ""
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Picker("Runden auf", selection: $roundingStep) {
-                    ForEach([5, 10, 15, 30], id: \.self) { step in
-                        Text("\(step) Minuten").tag(step)
-                    }
-                }
-                Picker("Rundung", selection: $roundingMode) {
-                    Text("kaufmännisch").tag(RoundingMode.nearest.rawValue)
-                    Text("immer aufrunden").tag(RoundingMode.up.rawValue)
-                }
-            } header: {
-                Text("Rundung")
-            } footer: {
-                SettingsFootnote("Gilt für SAP und ManageEngine. Jede Buchung hat mindestens einen Schritt.")
-            }
-
-            Section {
-                ForEach(WorkType.allCases) { workType in
-                    ServiceProductField(workType: workType)
-                }
-            } header: {
-                Text("Leistung je Arbeitsart")
-            } footer: {
-                SettingsFootnote("Steht im SAP-Assistenten neben jeder Zeile. Leer lassen, wenn ByDesign die Leistung aus der Projektaufgabe übernimmt.")
-            }
-
-            Section {
-                SettingsField(title: "Adresse von ByDesign", detail: "wie im Browser, z. B. https://my123456.sapbydesign.com") {
-                    SettingsTextField(prompt: "https://my…sapbydesign.com", text: $bydesignURL, width: 280)
-                }
-                SettingsField(title: "Benutzer") {
-                    SettingsTextField(prompt: "Benutzername in ByDesign", text: $bydesignUser, width: 200)
-                }
-                SettingsField(title: "Passwort", detail: model.hasByDesignPassword ? "im Schlüsselbund" : "liegt nur im Schlüsselbund dieses Macs") {
-                    HStack(spacing: 8) {
-                        SecureField("", text: $bydesignPassword, prompt: Text(model.hasByDesignPassword ? "•••••••• (gespeichert)" : "Passwort"))
-                            .labelsHidden()
-                            .textFieldStyle(TagwerkFieldStyle())
-                            .frame(width: 180)
-                            .onSubmit(saveByDesignPassword)
-                        Button("Sichern", action: saveByDesignPassword)
-                            .disabled(bydesignPassword.isEmpty)
-                        if model.hasByDesignPassword {
-                            Button("Entfernen") { model.setByDesignPassword("") }
-                        }
-                    }
-                }
-                Toggle("Aufgaben einmal am Tag automatisch holen", isOn: $bydesignAutoFetch)
-                LabeledContent {
-                    Button("Jetzt holen") { model.startSAPAutoFetch() }
-                        .disabled(bydesignTaskList.isEmpty || bydesignUser.isEmpty || !model.hasByDesignPassword)
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Automatischer Abruf")
-                        Text(model.sapAutoStatus ?? (bydesignTaskList.isEmpty ? "Noch keine Liste gemerkt: im ByDesign-Fenster „Diese Liste merken“." : "Liste gemerkt."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                LabeledContent {
-                    Button("Abgleichen …") {
-                        model.showsSAPSync = true
-                        openWindow(id: "main")
-                        NSApp.activate()
-                    }
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Projektaufgaben aus ByDesign")
-                        Text("\(model.pspElements.filter(\.isActive).count) aktive PSP-Elemente")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } header: {
-                Text("SAP ByDesign")
-            } footer: {
-                SettingsFootnote("„Abgleichen“ holt deine Aufgaben direkt aus ByDesign (Anmeldung im Tagwerk-Fenster), aus einem Excel-Export oder einem Bildschirmfoto. In SAP ändert sich dabei nichts.")
-            }
-        }
-        .settingsPage(height: 700)
-        .onChange(of: roundingStep) { model.settingsChanged() }
-        .onChange(of: roundingMode) { model.settingsChanged() }
-    }
-}
-
-/// Leistung in SAP für eine Arbeitsart.
-struct ServiceProductField: View {
-    @Environment(AppModel.self) private var model
-    let workType: WorkType
-    @State private var value = ""
-
-    var body: some View {
-        SettingsField(title: workType.label) {
-            SettingsTextField(prompt: "Leistungs-ID", text: $value, width: 180, monospaced: true)
-        }
-        .onAppear {
-            value = UserDefaults.standard.string(forKey: Preferences.serviceKey(for: workType)) ?? ""
-        }
-        .onChange(of: value) {
-            UserDefaults.standard.set(value.trimmingCharacters(in: .whitespaces), forKey: Preferences.serviceKey(for: workType))
-            model.settingsChanged()
-        }
-    }
-}
-
 // MARK: ManageEngine
 
 struct ManageEngineSettings: View {
@@ -904,7 +791,7 @@ struct ClaudeSettings: View {
             Section {
                 Text("Claude kann über MCP direkt mit Tagwerk arbeiten: den Tag zusammenfassen, Aufgaben anlegen und ändern, Timer starten und stoppen, Zeiten auswerten und sagen, was beim Tagesabschluss noch fehlt.")
                     .fixedSize(horizontal: false, vertical: true)
-                Label("Gebucht wird nur hier in Tagwerk. Claude schickt nichts an SAP oder ManageEngine.", systemImage: "lock.shield")
+                Label("Worklogs sendet nur Tagwerk selbst. Claude schickt nichts an ManageEngine.", systemImage: "lock.shield")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } header: {
@@ -1149,9 +1036,9 @@ enum ClaudeIntegration {
                     return tools.count
                 }.first
                 if let toolCount, !hasSubtasks {
-                    continuation.resume(returning: (false, "Läuft, aber das ist eine ältere Fassung (Stand \(version))\(which): ohne Unteraufgaben, Tickets und Tätigkeit. Auf diese Kopie umstellen, dann Claude Desktop mit ⌘Q beenden und neu öffnen. (\(toolCount) Werkzeuge)"))
+                    continuation.resume(returning: (false, "Läuft, aber das ist eine ältere Fassung (Stand \(version))\(which): ohne Unteraufgaben und Tickets. Auf diese Kopie umstellen, dann Claude Desktop mit ⌘Q beenden und neu öffnen. (\(toolCount) Werkzeuge)"))
                 } else if let toolCount {
-                    continuation.resume(returning: (true, "Läuft: Stand \(version)\(which), \(toolCount) Werkzeuge, mit Unteraufgaben, Tickets und Tätigkeit. Sieht Claude sie nicht, Claude Desktop mit ⌘Q beenden und neu öffnen. \(err.contains("bereit") ? "" : err.trimmingCharacters(in: .whitespacesAndNewlines))"))
+                    continuation.resume(returning: (true, "Läuft: Stand \(version)\(which), \(toolCount) Werkzeuge, mit Unteraufgaben und Tickets. Sieht Claude sie nicht, Claude Desktop mit ⌘Q beenden und neu öffnen. \(err.contains("bereit") ? "" : err.trimmingCharacters(in: .whitespacesAndNewlines))"))
                 } else {
                     let detail = err.trimmingCharacters(in: .whitespacesAndNewlines)
                     continuation.resume(returning: (false, "Keine gültige Antwort. \(detail.isEmpty ? "Exit-Code \(process.terminationStatus)" : detail)"))

@@ -2,39 +2,38 @@
 
 # Tagwerk
 
-Tagwerk ist der Arbeitsname einer schlanken Mac-App für Tagesplanung, Fokus und Zeiterfassung. Später bucht sie die Zeiten direkt in SAP Business ByDesign und als Worklog in ManageEngine.
+Tagwerk ist der Arbeitsname einer schlanken Mac-App für Tagesplanung, Fokus und Zeiterfassung. Zeiten auf Tickets gehen als Worklog an ManageEngine.
 
 Der vollständige Plan steht im Dokument „Plan: Eigene Todo-App für den Mac“.
 
-## Stand: Phase 4 plus SAP-Abgleich und Claude-Anbindung
+## Stand: Phase 4 plus Claude-Anbindung
 
 Aufbau: dunkel und ruhig, oben die Leiste mit Start, Plan, Kalender, Fokus, Kunden und Rückblick.
 
 | Bereich | Was geht |
 | --- | --- |
 | Start | Großes Datum, Stunden heute und diese Woche. Links die Aufgaben von heute (neue oben oder unten einfügen, per Ziehen sortieren), darunter die Erledigt-Liste und der Eingang. Rechts der Tageskalender, an der Kante breiter ziehbar; die Lupen machen die Stunden höher. |
-| Aufgabe öffnen | ⓘ beim Darüberfahren, Rechtsklick › „Öffnen …“ oder im Fokus „Aufgabe öffnen“: ein Fenster mit Titel, Planung, Kunde, Ziel, SAP-Aufgabe, Ticket, Work Log Type, Unteraufgaben (umbenennen, Timer, löschen), Notizen, Bearbeitung und allen Zeiteinträgen. Doppelklick auf eine Aufgabe öffnet weiter den Fokus, Doppelklick auf eine Unteraufgabe benennt sie um. |
-| Unteraufgaben | Beim Darüberfahren über eine Aufgabe das Listen-Symbol neben ▶, Rechtsklick › „Unteraufgabe hinzufügen“ oder im Fokus „Unteraufgaben“; geht in Start, Eingang, Woche und bei den Kunden. Claude legt sie über MCP mit `unteraufgabe_von` an. Jede Unteraufgabe hat ihren eigenen Timer und kann ein eigenes Ticket haben; Kunde, SAP-Aufgabe und Ticket erbt sie sonst von der Aufgabe darüber. Im Tagesabschluss steht sie als eigene Zeile („Aufgabe: Unteraufgabe“). |
+| Aufgabe öffnen | ⓘ beim Darüberfahren, Rechtsklick › „Öffnen …“ oder im Fokus „Aufgabe öffnen“: ein Fenster mit Titel, Planung, Kunde, Ziel, Ticket, Work Log Type, Unteraufgaben (umbenennen, Timer, löschen), Notizen, Bearbeitung und allen Zeiteinträgen. Doppelklick auf eine Aufgabe öffnet weiter den Fokus, Doppelklick auf eine Unteraufgabe benennt sie um. |
+| Unteraufgaben | Beim Darüberfahren über eine Aufgabe das Listen-Symbol neben ▶, Rechtsklick › „Unteraufgabe hinzufügen“ oder im Fokus „Unteraufgaben“; geht in Start, Eingang, Woche und bei den Kunden. Claude legt sie über MCP mit `unteraufgabe_von` an. Jede Unteraufgabe hat ihren eigenen Timer und kann ein eigenes Ticket haben; Kunde und Ticket erbt sie sonst von der Aufgabe darüber. Im Tagesabschluss steht sie als eigene Zeile („Aufgabe: Unteraufgabe“). |
 | Zeit nachtragen | Vergessen, den Timer zu starten? Auf Start „Eintragen“ › „Zeit nachtragen …“, ⌥⌘T, Rechtsklick auf eine Aufgabe › „Zeit nachtragen …“ oder im Fokus „Vergessen zu starten?“. Dort startet der Timer auch rückwirkend („läuft schon seit 15 Minuten“ oder „seit dem letzten Eintrag“), ohne sich mit erfassten Zeiten zu überschneiden. |
 | Mittagspause | Gedacht für die richtige Pause, wenn du länger weg bist; kurze Unterbrechungen und Pomodoro-Pausen werden nicht eingetragen (bei Pomodoro hält nur die Zeit an). Oben rechts das Besteck neben dem laufenden Timer (oder ⇧⌘P, im Fokus „Mittagspause“): der Timer hält an, die Mittagspause läuft mit, „Weiter“ startet dieselbe Aufgabe wieder. Vergessen? Auf Start unter „Eintragen“ › „Mittagspause nachtragen …“ (Vorschlag 12:00–12:30), im Kalender oder per Doppelklick in eine freie Stelle; Arbeit, die in dieser Zeit erfasst war, wird dort herausgeschnitten. Die Mittagspause steht schraffiert im Kalender und im Tagesband, zählt nicht als Arbeitszeit und wird nicht gebucht. Der Tagesabschluss sagt, wenn nach dem Arbeitszeitgesetz Pause fehlt (ab 6 Stunden 30 Minuten, ab 9 Stunden 45 Minuten). |
-| Standardaufgaben | Aufgaben wie „Organisatorisches“, „Interne Besprechung“ oder „Weiterbildung“: immer da, nie erledigt, nicht im Eingang. Auf Start unter „Standardaufgaben“ startet ein Klick die Zeit (noch ein Klick stoppt), daneben steht, wie viel es heute war. Rechtsklick › Details legt Kunde, SAP-Aufgabe und Tätigkeit fest, damit sie im Tagesabschluss richtig gebucht werden. Im Kalender stehen sie nach einem Doppelklick in eine vergangene Stelle zur Wahl, beim Nachtragen ganz oben. Anlegen und umbenennen mit „+“ auf Start oder in Einstellungen › Allgemein. |
-| Krank und Urlaub | Auf Start „Eintragen“ › Abwesend: „Heute krank“, halber Tag, mehrere Tage oder Urlaub (nur Arbeitstage). Im Kalender per Rechtsklick auf einen Tag. Das Wochenziel wird um diese Tage kleiner, offene Aufgaben rücken auf den nächsten Arbeitstag, Start zeigt einen Hinweis mit „Austragen“. Über Claude: „Trag mich heute krank ein“. In SAP ByDesign trägst du die Abwesenheit selbst ein. |
+| Standardaufgaben | Aufgaben wie „Organisatorisches“, „Interne Besprechung“ oder „Weiterbildung“: immer da, nie erledigt, nicht im Eingang. Auf Start unter „Standardaufgaben“ startet ein Klick die Zeit (noch ein Klick stoppt), daneben steht, wie viel es heute war. Rechtsklick › Details legt Kunde oder Ticket fest. Im Kalender stehen sie nach einem Doppelklick in eine vergangene Stelle zur Wahl, beim Nachtragen ganz oben. Anlegen und umbenennen mit „+“ auf Start oder in Einstellungen › Allgemein. |
+| Krank und Urlaub | Auf Start „Eintragen“ › Abwesend: „Heute krank“, halber Tag, mehrere Tage oder Urlaub (nur Arbeitstage). Im Kalender per Rechtsklick auf einen Tag. Das Wochenziel wird um diese Tage kleiner, offene Aufgaben rücken auf den nächsten Arbeitstag, Start zeigt einen Hinweis mit „Austragen“. Über Claude: „Trag mich heute krank ein“. |
 | Ticket zuordnen | Jede eigene Aufgabe oder Unteraufgabe lässt sich einem Ticket zuordnen (Rechtsklick › „Ticket zuordnen“ oder der Ticket-Knopf im Fokus). Gesucht wird nach Nummer oder Betreff, auf Wunsch direkt in ManageEngine über alle Techniker (auch Tickets von Kollegen). Die Zeit geht dann zusätzlich als Worklog an das Ticket. |
 | Ziele | Lange Ziele über Wochen, z. B. „AZ-305 bestehen“: Zieldatum, Stundenziel, Fortschrittsbalken und das nötige Tempo („≈ 4 h pro Woche nötig“). Aufgaben ordnest du per Rechtsklick › Ziel zu, ziehst sie auf ein Ziel oder legst sie direkt im Ziel an; ihre Zeit (auch die der Unteraufgaben) zählt mit. Die aktiven Ziele stehen auch auf Start und im Rückblick. ⌘6 öffnet die Ziele, der Rückblick ist jetzt ⌘7. |
 | Plan | Woche planen: links der Eingang, daneben eine Spalte je Tag mit geplanter und freier Zeit. Aufgaben zieht man zwischen den Tagen hin und her. |
 | Kalender | Die Woche mit Terminen, Zeitblöcken und erfasster Zeit in Kundenfarben, Stunden je Tag und gegen das Wochenziel. Doppelklick in eine freie Stelle legt dort gleich eine neue Aufgabe an: Titel eintippen, ↩. Was schon vorbei ist, wird als erfasste Zeit eingetragen (die Aufgabe gilt als erledigt), was noch kommt, als Zeitblock geplant; „…“ öffnet „Zeit nachtragen“ für eine bestehende Aufgabe oder einen Kunden. Das geht auch im Tageskalender auf Start. Erfasste Zeit lässt sich mit der Maus verschieben, an der oberen und unteren Kante zieht man Beginn und Ende (in Fünf-Minuten-Schritten, ohne andere Einträge zu überlappen); Doppelklick auf den Eintrag öffnet „Zeit bearbeiten“ mit Aufgabe, Tag, Von und Bis. |
 | Tag planen | Geführte Planung beim ersten Öffnen am Tag: Übriges von gestern, Eingang, schätzen, in freie Lücken legen. |
-| Tag abschließen | Zeiten je Aufgabe gerundet prüfen und anpassen. Worklogs gehen an ManageEngine. SAP-Zeilen überträgst du mit Kopier-Knöpfen oder als Excel-Liste und hakst sie ab; nichts wird doppelt gebucht. |
+| Tag abschließen | Zeiten je Aufgabe gerundet prüfen und anpassen. Aufgaben mit Ticket schicken ihre Zeit als Worklog an ManageEngine (freiwillig, nichts doppelt). „Liste kopieren“ gibt den Tag als Tabelle (Aufgabe, Kunde, Ticket, Stunden, Beschreibung) für Excel oder Numbers mit. |
 | ManageEngine | Eigene offene Tickets landen im Eingang (Konto → Kunde). Zugang in den Einstellungen, der API-Schlüssel liegt im Schlüsselbund. |
 | Pomodoro | Im Fokus oben „Pomodoro“ einschalten: 25 Minuten arbeiten (die große Uhr zählt herunter), dann 5 Minuten Pause, nach vier Runden 15 Minuten. In der Pause stoppen Zeit und Musik, die Pause zählt herunter; Ton und Mitteilung bei Pause und danach, „Weiter“ startet die nächste Runde mit derselben Aufgabe. Zeiten in Einstellungen › Fokus. |
-| Fokus | Vollbild mit einer Aufgabe, großem Timer, Erledigt und Nächste. Arbeitsart, PSP-Element und Bearbeitung klappen unten auf. Dazu Musik aus Apple Music, Internetradio, YouTube oder der eigenen Klangwelt: startet mit dem Timer und hält mit ihm an. |
-| Kunden | Kennzahlen und eine Karte je Kunde mit Stunden dieser Woche und im Monat. Im Kunden: lokale Todos, PSP-Elemente, ManageEngine-Konto. |
+| Fokus | Vollbild mit einer Aufgabe, großem Timer, Erledigt und Nächste. Ticket, Work Log Type und Bearbeitung klappen unten auf. Dazu Musik aus Apple Music, Internetradio, YouTube oder der eigenen Klangwelt: startet mit dem Timer und hält mit ihm an. |
+| Kunden | Kennzahlen und eine Karte je Kunde mit Stunden dieser Woche und im Monat. Im Kunden: lokale Todos und ManageEngine-Konto. |
 | Rückblick | Stunden gegen das Wochenziel, Tagesdurchschnitt, Anteil Kundenarbeit, Stunden je Tag und je Kunde, Verlauf der letzten Wochen, Wochenziele, Export als CSV. |
 | Leerlauf | Läuft der Timer und kommt länger keine Eingabe, fragt Tagwerk nach der Rückkehr: Zeit behalten, abziehen oder einer anderen Aufgabe geben (auch einer Standardaufgabe). Ab 20 Minuten gibt es zusätzlich „Als Mittagspause eintragen“. |
 | Schnell erfassen | ⌃⌥ Leertaste öffnet von überall ein kleines Fenster für neue Aufgaben. |
 | Mails | Mails aus Outlook (oder .eml-Dateien) in den Eingang ziehen; Betreff und Absender werden übernommen. |
 | Sicherung | Täglich eine Kopie der Datenbank, die letzten 14 bleiben. |
-| SAP-Abgleich | Die Aufgabenliste aus ByDesign (deutsch oder englisch) wird zu PSP-Elementen bei den Kunden, je Aufgabe und Tätigkeit (Activity) ein Eintrag. Neue kommen dazu, geänderte Bezeichnungen werden übernommen, verschwundene auf Wunsch deaktiviert. |
 | Claude | Ein MCP-Server liegt in der App. Claude Desktop und Claude Code können damit Aufgaben, Timer, Zeiten und den Stand des Tagesabschlusses lesen und ändern. Gebucht wird weiter nur in Tagwerk. |
 | Menüleiste | Laufende Zeit, Stoppen, Mittagspause, Erledigt, eine andere Aufgabe oder Standardaufgabe starten. |
 
@@ -80,20 +79,11 @@ Screenshots aller Bildschirme liegen unter `docs/screenshots`. Die CI erzeugt si
 
 Für den Kalenderzugriff am besten `scripts/make-app.sh` nutzen und `build/Tagwerk.app` starten. macOS fragt dann einmal nach dem Zugriff auf die Kalender. In den Einstellungen (⌘,) legst du Arbeitszeit, Kalender und Zeitblöcke fest. Ist dein Exchange-Konto im macOS-Kalender eingerichtet, erscheinen dort auch die Outlook-Termine.
 
-## Abgleich mit SAP ByDesign
+## Termine als Zeit erfassen
 
-Ohne API-Zugriff auf SAP holt Tagwerk die Projektaufgaben (z. B. `CPSO8643-12`) auf einem von drei Wegen; alle unter Kunden › SAP-Abgleich:
+Termine aus dem Kalender werden per Rechtsklick oder Doppelklick › „Als Zeit erfassen …“ zur erfassten Zeit, mit Kunde; Tagwerk merkt sich den Kunden je Termintitel. Im Tagesabschluss ist der Worklog im Ticket freiwillig („Ohne Worklog“).
 
-1. **Direkt aus ByDesign:** „ByDesign öffnen“ öffnet ByDesign in einem Tagwerk-Fenster. Anmelden wie im Browser, die Liste deiner Aufgaben öffnen, „Aufgaben holen“. Tagwerk liest die Tabelle von der Seite, bei langen Listen weiterblättern und erneut holen. Die Anmeldung bleibt wie in Safari als Cookie auf dem Mac; ein Passwort speichert Tagwerk nicht. Die Adresse steht in Einstellungen › Buchung.
-   Mit Benutzer und Passwort in Einstellungen › Buchung meldet Tagwerk sich selbst an (das Passwort liegt im Schlüsselbund). Ist die Liste einmal mit „Diese Liste merken“ gemerkt, holt Tagwerk sie auf Wunsch einmal am Tag beim Start automatisch und übernimmt neue Aufgaben in schon bekannten Projekten; neue Projekte warten im SAP-Abgleich auf einen Kunden.
-2. **Bildschirmfoto:** Liste fotografieren (⇧⌘4) und ins Abgleich-Fenster ziehen oder einfügen; Tagwerk liest die Nummern per Texterkennung.
-3. **Excel-Export oder kopierte Tabelle**, falls ByDesign einen Export anbietet (`.xlsx`, Excel-XML, CSV, HTML).
-
-Tagwerk liest die Seite so, wie man sie sieht: Text auf gleicher Höhe ist eine Zeile, die Spalten kommen aus den Überschriften (deutsch wie „Aufgabennummer“, „Tätigkeit“ oder englisch wie „Task ID“, „Work Package Task“, „Activity“). Hat eine Aufgabe mehrere Activities, wird jede ein eigener Eintrag; die gewählte Tätigkeit landet in der SAP-Buchung (Spalte „Leistung“ der Übertragungsliste, Kopier-Knopf „Tätigkeit“ im Tagesabschluss). Klappt das Lesen nicht, sichert „Seite sichern“ im ByDesign-Fenster, was Tagwerk sieht (Datei in Downloads, vor dem Weitergeben ansehen).
-
-Danach jedem Projekt einmal den Kunden zuordnen. Beim nächsten Abgleich merkt Tagwerk sich das über die schon bekannten Aufgaben. In SAP ändert sich dabei nichts.
-
-Termine aus dem Kalender werden per Rechtsklick oder Doppelklick › „Als Zeit erfassen …“ zur erfassten Zeit, mit Kunde, PSP-Element und Arbeitsart; Tagwerk merkt sich die Auswahl je Termintitel. Im Tagesabschluss ist der Worklog im Ticket freiwillig („Ohne Worklog“), die Buchung in SAP nicht.
+SAP ByDesign ist nicht mehr eingebaut. Beim ersten Start der neuen Fassung räumt Tagwerk das gespeicherte ByDesign-Passwort, die Anmeldung im früheren ByDesign-Fenster und die Einstellungen dazu weg. Alte Daten in der Datenbank bleiben unangetastet, werden aber nicht mehr gelesen.
 
 ## Claude anbinden (MCP)
 
@@ -113,7 +103,7 @@ Termine aus dem Kalender werden per Rechtsklick oder Doppelklick › „Als Zeit
 
 - **Claude im Browser und auf dem Handy (z. B. ein privates Konto):** Einstellungen › Claude › „Claude im Browser und auf dem Handy“. Solange Tagwerk läuft, startet es `tagwerk-mcp --http` nur auf diesem Mac (127.0.0.1) und auf Wunsch einen Tunnel, über den claude.ai den Mac erreicht. Am einfachsten ist [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) mit fester Adresse (`tailscale funnel {port}`); ngrok mit fester Adresse oder Cloudflare (neue Adresse bei jedem Start) gehen auch. Die angezeigte Adresse (`https://…/mcp/<schlüssel>`) in claude.ai unter Einstellungen › Connectors als eigenen Connector eintragen; dann steht Tagwerk auch in der Claude-App auf dem Handy bereit. Der lange Schlüssel im Pfad schützt den Zugang (liegt im Schlüsselbund, „Neuer Schlüssel“ sperrt die alte Adresse). Der Mac muss an sein.
 
-Werkzeuge: `tagesuebersicht`, `aufgaben`, `aufgabe_anlegen`, `aufgabe_aendern`, `timer_starten`, `timer_stoppen`, `zeitauswertung`, `tagesabschluss`, `kunden`, `wochenziele`, `wochenziel_anlegen`, `ziele`, `ziel_anlegen`. Der Server arbeitet direkt auf der Datenbank; die geöffnete App lädt Änderungen innerhalb einer Sekunde nach. Nach SAP oder ManageEngine bucht Claude nicht. Mit der Umgebungsvariable `TAGWERK_DB` lässt sich eine andere Datenbank angeben, z. B. zum Ausprobieren.
+Werkzeuge: `tagesuebersicht`, `aufgaben`, `aufgabe_anlegen`, `aufgabe_aendern`, `timer_starten`, `timer_stoppen`, `zeitauswertung`, `tagesabschluss`, `kunden`, `wochenziele`, `wochenziel_anlegen`, `ziele`, `ziel_anlegen`. Der Server arbeitet direkt auf der Datenbank; die geöffnete App lädt Änderungen innerhalb einer Sekunde nach. An ManageEngine sendet Claude nichts. Mit der Umgebungsvariable `TAGWERK_DB` lässt sich eine andere Datenbank angeben, z. B. zum Ausprobieren.
 
 ## Signieren (einmal einrichten, damit Freigaben bleiben)
 
@@ -133,14 +123,14 @@ Ohne Zertifikat signiert der Build ad hoc. Den API-Schlüssel liest Tagwerk erst
 
 Eine iPhone-Fassung gibt es noch nicht, der Umstieg ist aber vorbereitet:
 
-- **Der Kern läuft auf dem iPhone.** `TagwerkCore` (Datenmodell, Zeitlogik, Datenbank, SAP-Import, ManageEngine) hängt nur an Foundation und SQLite; die CI baut ihn bei jedem Push zusätzlich für iOS.
+- **Der Kern läuft auf dem iPhone.** `TagwerkCore` (Datenmodell, Zeitlogik, Datenbank, ManageEngine) hängt nur an Foundation und SQLite; die CI baut ihn bei jedem Push zusätzlich für iOS.
 - **Die Datenbank merkt sich Änderungen.** Jede Zeile hat `modified_at`, Gelöschtes landet in `deleted_record`; `SQLiteStore.changes(since:)` liefert, was sich seit einem Zeitpunkt geändert hat. Trigger erfassen auch Änderungen des MCP-Servers. Alle Einträge haben UUIDs, damit Geräte ohne Zusammenstöße zusammenführen können.
 
 Noch zu tun, sobald es losgeht:
 
 1. Entscheidung zum Abgleich: iCloud (CloudKit, braucht das Apple-Entwicklerkonto, 99 € im Jahr) oder der Mac als Server für eine Web-App im WLAN oder per Tailscale (ohne Konto).
 2. Abgleich auf Basis von `changes(since:)` bauen (letzte Änderung gewinnt, Löschungen zuerst).
-3. iPhone-App-Ziel anlegen: Heute, Timer, Schnell erfassen, Fokus mit Musik (dort über MediaPlayer statt AppleScript), Eingang. SAP-Abgleich, Tagesabschluss und ManageEngine bleiben auf dem Mac.
+3. iPhone-App-Ziel anlegen: Heute, Timer, Schnell erfassen, Fokus mit Musik (dort über MediaPlayer statt AppleScript), Eingang. Tagesabschluss und ManageEngine bleiben auf dem Mac.
 4. Mit Konto: Signatur und TestFlight in der CI.
 
 ## Daten

@@ -304,7 +304,7 @@ struct StandingTaskStrip: View {
                             .textFieldStyle(TagwerkFieldStyle())
                             .frame(width: 260)
                             .onSubmit(add)
-                        Text("Bleibt immer da und wird nie erledigt. Kunde und SAP-Aufgabe legst du per Rechtsklick › Details fest.")
+                        Text("Bleibt immer da und wird nie erledigt. Kunde oder Ticket legst du per Rechtsklick › Details fest.")
                             .font(.caption)
                             .foregroundStyle(Theme.tertiary)
                             .frame(width: 260, alignment: .leading)
@@ -375,7 +375,7 @@ struct StandingChip: View {
             Button("Im Fokus öffnen") { model.openFocus(task.id) }
             Button("Zeit nachtragen …") { model.beginTimeEntry(for: task.id) }
             Divider()
-            Button("Details: Kunde, SAP, Ticket …") { model.openDetail(task.id) }
+            Button("Details: Kunde, Ticket …") { model.openDetail(task.id) }
             Divider()
             Button("Entfernen", role: .destructive) { model.removeStandingTask(task.id) }
         }

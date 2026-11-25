@@ -404,7 +404,7 @@ struct TaskBlock: View {
     }
 }
 
-/// Termin als Zeit erfassen: Kunde, PSP-Element und Arbeitsart wählen, damit er in SAP landet.
+/// Termin als Zeit erfassen: Titel und Kunde; Tagwerk merkt sich den Kunden je Termintitel.
 struct LogEventSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -412,16 +412,6 @@ struct LogEventSheet: View {
 
     @State private var title = ""
     @State private var customerID: UUID?
-    @State private var pspElement: String?
-    @State private var activity: String?
-    @State private var workType: WorkType?
-    @State private var showsTaskPicker = false
-
-    private var pspLabel: String {
-        guard let pspElement else { return "Suchen, z. B. „Team Sitzung“" }
-        return model.pspElements.first(where: { $0.matches(code: pspElement, activity: activity) })?.label
-            ?? [pspElement, activity].compactMap { $0 }.joined(separator: " · ")
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -434,42 +424,15 @@ struct LogEventSheet: View {
             }
             Form {
                 TextField("Titel", text: $title)
-                LabeledContent("SAP-Aufgabe") {
-                    Button {
-                        showsTaskPicker = true
-                    } label: {
-                        Text(pspLabel)
-                            .lineLimit(1)
-                    }
-                    .popover(isPresented: $showsTaskPicker, arrowEdge: .bottom) {
-                        SAPTaskPicker(selectedCode: pspElement, selectedActivity: activity) { psp, customCode in
-                            if let psp {
-                                pspElement = psp.code
-                                activity = psp.activity
-                                customerID = psp.customerID
-                            } else {
-                                pspElement = customCode
-                                activity = nil
-                            }
-                            showsTaskPicker = false
-                        }
-                    }
-                }
-                Picker("Kunde (kommt von der SAP-Aufgabe)", selection: $customerID) {
+                Picker("Kunde", selection: $customerID) {
                     Text("Ohne Kunde").tag(UUID?.none)
                     ForEach(model.activeCustomers) { customer in
                         Text(customer.name).tag(UUID?.some(customer.id))
                     }
                 }
-                Picker(activity == nil ? "Arbeitsart" : "Arbeitsart (optional, Tätigkeit kommt aus SAP)", selection: $workType) {
-                    Text("Keine").tag(WorkType?.none)
-                    ForEach(WorkType.allCases) { type in
-                        Text(type.label).tag(WorkType?.some(type))
-                    }
-                }
             }
             .tagwerkForm()
-            Text("Tagwerk merkt sich die Auswahl für Termine mit demselben Titel.")
+            Text("Tagwerk merkt sich den Kunden für Termine mit demselben Titel.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack {
@@ -477,7 +440,7 @@ struct LogEventSheet: View {
                 Button("Abbrechen") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Erfassen") {
-                    model.logEvent(event, title: title, assignment: .init(customerID: customerID, pspElement: pspElement, workType: workType, activity: activity))
+                    model.logEvent(event, title: title, assignment: .init(customerID: customerID))
                     dismiss()
                 }
                 .buttonStyle(GhostButtonStyle(prominent: true))
@@ -488,20 +451,7 @@ struct LogEventSheet: View {
         .frame(width: 460)
         .onAppear {
             title = event.showsTitle ? event.displayTitle : "Termin"
-            if let remembered = model.eventAssignment(for: event) {
-                customerID = remembered.customerID
-                pspElement = remembered.pspElement
-                activity = remembered.activity
-                workType = remembered.workType
-            }
-        }
-        .onChange(of: customerID) { old, new in
-            // Anderer Kunde: eine SAP-Aufgabe eines anderen Kunden passt nicht mehr
-            if old != nil, old != new, let code = pspElement,
-               model.pspElements.first(where: { $0.matches(code: code, activity: activity) })?.customerID != new {
-                pspElement = nil
-                activity = nil
-            }
+            customerID = model.eventAssignment(for: event)?.customerID
         }
     }
 }

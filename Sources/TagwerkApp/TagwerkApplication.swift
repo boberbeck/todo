@@ -31,12 +31,6 @@ struct TagwerkApplication: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("SAP ByDesign", id: "bydesign") {
-            ByDesignBrowserView()
-                .environment(model)
-        }
-        .defaultSize(width: 1180, height: 780)
-
         Settings {
             SettingsView()
                 .environment(model)
@@ -90,8 +84,6 @@ struct TagwerkCommands: Commands {
             }
             .keyboardShortcut("p", modifiers: [.command, .shift])
             Button("Mittagspause nachtragen …") { model.beginBreakEntry() }
-            Divider()
-            Button("SAP-Aufgaben abgleichen …") { model.showsSAPSync = true }
         }
         CommandMenu("Gehe zu") {
             Button("Start") { model.selection = .today }
@@ -136,10 +128,6 @@ enum Preferences {
     static let meAutoFetchKey = "manageEngineAutoFetch"
     static let idleMinutesKey = "idleMinutes"
     static let calendarWidthKey = "calendarColumnWidth"
-    static let bydesignURLKey = "bydesignURL"
-    static let bydesignUserKey = "bydesignUser"
-    static let bydesignTaskListURLKey = "bydesignTaskListURL"
-    static let bydesignAutoFetchKey = "bydesignAutoFetch"
     /// Updates aus GitHub
     static let updateAutoCheckKey = "updateAutoCheck"
     /// Zuletzt angebotener Absturzbericht (Dateiname)
@@ -157,8 +145,6 @@ enum Preferences {
     static let remotePortKey = "remoteMCPPort"
     static let remotePublicURLKey = "remoteMCPPublicURL"
     static let remoteTunnelCommandKey = "remoteMCPTunnelCommand"
-    static let bydesignLastAutoFetchKey = "bydesignLastAutoFetch"
-    static let bydesignPasswordAccount = "bydesign"
     /// Standard-Work-Log-Type für Tickets, bei denen keiner gewählt ist.
     static let defaultWorklogTypeKey = "worklogTypeDefault"
     /// Work Log Types in ServiceDesk Plus, genau wie dort benannt (Pflichtfeld beim Worklog).
@@ -178,8 +164,6 @@ enum Preferences {
     static let maxCalendarWidth: Double = 900
     static let defaultHourHeight: Double = 48
     static let hourHeightRange: ClosedRange<Double> = 32...160
-
-    static func serviceKey(for workType: WorkType) -> String { "serviceProduct.\(workType.rawValue)" }
 
     static func reflectionKey(for day: LocalDate) -> String { "reflection.\(day.string)" }
 

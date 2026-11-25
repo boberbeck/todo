@@ -354,7 +354,7 @@ struct TicketPicker: View {
                             Label("Trotzdem #\(typedNumber) zuordnen (ohne Worklog)", systemImage: "number")
                         }
                         .padding(8)
-                        .help("Die Nummer steht dann im SAP-Kommentar; einen Worklog kann Tagwerk ohne Verbindung zum Ticket nicht anlegen.")
+                        .help("Die Nummer steht dann an der Aufgabe und in der Tagesliste; einen Worklog kann Tagwerk ohne Verbindung zum Ticket nicht anlegen.")
                     }
                     if found.isEmpty, remote.isEmpty, trimmed.count < 3, !isSearchingRemote {
                         Text(model.canUseManageEngine
@@ -369,7 +369,7 @@ struct TicketPicker: View {
             .frame(height: 260)
             Divider()
             HStack {
-                Text("Die Zeit geht dann auch als Worklog an das Ticket. SAP bleibt Pflicht.")
+                Text("Die Zeit geht dann als Worklog an das Ticket.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -565,40 +565,16 @@ struct AddSubtaskButton: View {
     }
 }
 
-/// Wohin die Zeit einer Aufgabe geht: SAP-Aufgabe mit Tätigkeit und Ticket mit Titel. Ein Klick ändert es.
+/// Ticket einer Aufgabe mit Titel; dorthin geht die Zeit als Worklog. Ein Klick ändert es.
 struct BookingSummary: View {
     @Environment(AppModel.self) private var model
     let task: TaskItem
 
-    @State private var showsSAP = false
     @State private var showsTicket = false
 
     var body: some View {
         let effective = model.resolved(task)
         HStack(spacing: 6) {
-            Button {
-                showsSAP = true
-            } label: {
-                chip(
-                    icon: "building.columns",
-                    label: "SAP",
-                    text: model.pspLabel(for: task) ?? "Aufgabe fehlt",
-                    state: effective.pspElement == nil ? .missing : .ok
-                )
-            }
-            .buttonStyle(.plain)
-            .help(effective.pspElement == nil ? "SAP-Aufgabe wählen; ohne sie lässt sich die Zeit nicht buchen" : "SAP-Aufgabe ändern")
-            .popover(isPresented: $showsSAP, arrowEdge: .bottom) {
-                SAPTaskPicker(selectedCode: task.pspElement, selectedActivity: task.sapActivity) { psp, customCode in
-                    if let psp {
-                        model.setSAPTask(psp, for: task.id)
-                    } else {
-                        model.setPSPElement(customCode ?? "", for: task.id)
-                    }
-                    showsSAP = false
-                }
-            }
-
             if let number = effective.linkedTicketNumber {
                 Button {
                     if task.source != .ticket { showsTicket = true }
@@ -613,7 +589,7 @@ struct BookingSummary: View {
                 .buttonStyle(.plain)
                 .help(effective.linkedTicketKey == nil
                       ? "Ticket ohne Verbindung zu ManageEngine: kein Worklog möglich"
-                      : "Die Zeit geht auch als Worklog an dieses Ticket")
+                      : "Die Zeit geht als Worklog an dieses Ticket")
                 .popover(isPresented: $showsTicket, arrowEdge: .bottom) {
                     TicketPicker(taskID: task.id) { showsTicket = false }
                 }

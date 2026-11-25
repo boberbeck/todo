@@ -2,19 +2,19 @@ import AppKit
 import SwiftUI
 import TagwerkCore
 
-/// Tagesabschluss: Zeiten prüfen, Worklogs an ManageEngine senden, SAP-Zeilen übertragen und abhaken.
+/// Tagesabschluss: Zeiten prüfen, Worklogs an ManageEngine senden, Rückschau schreiben.
+/// „Liste kopieren“ gibt die Zeiten des Tages als Tabelle mit, z. B. zum Abtippen in ein anderes System.
 struct DayCloseView: View {
     @Environment(AppModel.self) private var model
     @State private var day = LocalDate.today()
     @State private var overrides: [UUID: Int] = [:]
     @State private var reflection = ""
     @State private var message: String?
-    @State private var exportedFile: URL?
 
     var body: some View {
         let lines = model.closeLines(for: day)
         let total = lines.reduce(0) { $0 + (overrides[$1.id] ?? $1.minutes) }
-        let openSAP = lines.filter { !($0.status(for: .sap)?.isDone ?? false) }.count
+        let worklogs = lines.filter { !$0.targets.isEmpty }.count
 
         VStack(spacing: 0) {
             header(total: total, lineCount: lines.count)
@@ -40,7 +40,7 @@ struct DayCloseView: View {
 
             Divider()
 
-            footer(hasLines: !lines.isEmpty, openSAP: openSAP)
+            footer(hasLines: !lines.isEmpty, worklogs: worklogs)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 16)
         }
@@ -68,11 +68,11 @@ struct DayCloseView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Tag abschließen")
                     .font(.title2.weight(.medium))
-                Text("\(lineCount) Aufgaben · \(TimeMath.format(minutes: total)) h zu buchen · gerundet auf \(model.bookingRules.roundingStep) Minuten")
+                Text("\(lineCount) Aufgaben · \(TimeMath.format(minutes: total)) h · gerundet auf \(model.bookingRules.roundingStep) Minuten")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 if let absence = model.absence(on: day) {
-                    Label("\(absence.label) eingetragen: in ByDesign als Abwesenheit erfassen", systemImage: absence.kind.symbol)
+                    Label("\(absence.label) eingetragen", systemImage: absence.kind.symbol)
                         .font(.callout)
                         .foregroundStyle(Theme.secondary)
                 }
@@ -114,7 +114,7 @@ struct DayCloseView: View {
         }
     }
 
-    private func footer(hasLines: Bool, openSAP: Int) -> some View {
+    private func footer(hasLines: Bool, worklogs: Int) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             TextField("Rückschau: Was lief gut, was bleibt für morgen?", text: $reflection, axis: .vertical)
                 .lineLimit(1...3)
@@ -129,36 +129,27 @@ struct DayCloseView: View {
                 }
                 Spacer()
                 Button {
-                    let list = model.sapTransferList(for: day, minutes: overrides)
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(list.text, forType: .string)
-                    exportedFile = list.file
-                    message = "SAP-Liste kopiert (zum Einfügen in Excel)."
+                    NSPasteboard.general.setString(model.dayListText(for: day, minutes: overrides), forType: .string)
+                    message = "Liste kopiert: Aufgabe, Kunde, Ticket, Stunden und Beschreibung, passt so in Excel oder Numbers."
                 } label: {
-                    Label("SAP-Liste kopieren", systemImage: "doc.on.clipboard")
+                    Label("Liste kopieren", systemImage: "doc.on.clipboard")
                 }
                 .disabled(!hasLines)
-                if let exportedFile {
-                    Button("Datei zeigen") {
-                        NSWorkspace.shared.activateFileViewerSelecting([exportedFile])
+                .help("Die Zeiten des Tages als Tabelle kopieren, z. B. zum Abtippen in ein anderes System")
+                if worklogs > 0 {
+                    Button {
+                        Task {
+                            message = await model.bookDay(day, minutes: overrides)
+                        }
+                    } label: {
+                        Label(model.isSendingBookings ? "Wird gesendet …" : "Worklogs senden", systemImage: "paperplane")
+                            .frame(minWidth: 120)
                     }
+                    .buttonStyle(GhostButtonStyle(prominent: true))
+                    .disabled(model.isSendingBookings)
+                    .help("Die Zeit der Aufgaben mit Ticket als Worklog an ManageEngine senden")
                 }
-                Button {
-                    Task {
-                        message = await model.bookDay(day, minutes: overrides)
-                    }
-                } label: {
-                    Label(model.isSendingBookings ? "Wird gebucht …" : "Buchen", systemImage: "paperplane")
-                        .frame(minWidth: 90)
-                }
-                .buttonStyle(GhostButtonStyle(prominent: true))
-                .disabled(!hasLines || model.isSendingBookings)
-                .help("Worklogs an ManageEngine senden und SAP-Zeilen vorbereiten")
-            }
-            if openSAP > 0 && hasLines {
-                Text("SAP-Zeilen in ByDesign eintragen und hier abhaken, die Kopier-Knöpfe helfen")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -171,7 +162,7 @@ struct DayCloseView: View {
     }
 }
 
-/// Eine Aufgabe im Tagesabschluss mit Zeit, Angaben für SAP und Status je Ziel.
+/// Eine Aufgabe im Tagesabschluss mit Zeit, Ticket, Beschreibung und Status des Worklogs.
 struct CloseLineRow: View {
     @Environment(AppModel.self) private var model
     let line: BookingLine
@@ -199,7 +190,7 @@ struct CloseLineRow: View {
                             .monospacedDigit()
                         Stepper("Zeit", value: $minutes, in: 0...720, step: model.bookingRules.roundingStep)
                             .labelsHidden()
-                            .disabled(line.isDone)
+                            .disabled(!line.targets.isEmpty && line.isDone)
                     }
                     Text("erfasst \(TimeMath.format(line.trackedSeconds))")
                         .font(.caption)
@@ -209,23 +200,9 @@ struct CloseLineRow: View {
             }
 
             FlowLayout(spacing: 8) {
-                PSPMenu(task: line.task)
-                WorkTypeMenu(task: line.task)
                 TicketMenu(task: line.task)
                 if line.targets.contains(.manageEngine) {
                     WorklogTypeMenu(task: line.task)
-                }
-                if let activity = line.task.sapActivity, !activity.isEmpty {
-                    Text("Tätigkeit \(activity)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    let service = model.serviceProduct(for: line.task.workType)
-                    if !service.isEmpty {
-                        Text("Leistung \(service)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
             }
 
@@ -259,7 +236,7 @@ struct CloseLineRow: View {
     }
 }
 
-/// Status eines Ziels. Bei SAP mit Kopier-Knöpfen und Abhaken.
+/// Status des Worklogs im Ticket.
 struct TargetStatusView: View {
     @Environment(AppModel.self) private var model
     let line: BookingLine
@@ -274,27 +251,23 @@ struct TargetStatusView: View {
                 .frame(width: 7, height: 7)
             Text("\(target.label): \(status?.label ?? "offen")")
                 .font(.caption.weight(.medium))
-            if target == .sap {
-                sapTools(status: status)
-            } else {
-                if status == .failed, let error = line.bookings[target]?.lastError {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.danger)
-                        .help(error)
-                    Button("Erneut senden") {
-                        Task { _ = await model.retryManageEngine() }
-                    }
+            if status == .failed, let error = line.bookings[target]?.lastError {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Theme.danger)
+                    .help(error)
+                Button("Erneut senden") {
+                    Task { _ = await model.retryManageEngine() }
+                }
+                .controlSize(.small)
+            }
+            // Der Worklog im Ticket ist freiwillig.
+            if status == .skipped {
+                Button("Doch senden") { model.unskipManageEngine(line) }
                     .controlSize(.small)
-                }
-                // Der Worklog im Ticket ist freiwillig, SAP nicht.
-                if status == .skipped {
-                    Button("Doch senden") { model.unskipManageEngine(line) }
-                        .controlSize(.small)
-                } else if status != .confirmed {
-                    Button("Ohne Worklog") { model.skipManageEngine(line, minutes: minutes) }
-                        .controlSize(.small)
-                        .help("Nur in SAP buchen, keinen Worklog im Ticket anlegen")
-                }
+            } else if status != .confirmed {
+                Button("Ohne Worklog") { model.skipManageEngine(line, minutes: minutes) }
+                    .controlSize(.small)
+                    .help("Keinen Worklog im Ticket anlegen")
             }
         }
         .padding(.horizontal, 8)
@@ -302,43 +275,9 @@ struct TargetStatusView: View {
         .background(Capsule().fill(Color.white.opacity(0.04)))
     }
 
-    @ViewBuilder
-    private func sapTools(status: BookingStatus?) -> some View {
-        if status == .entered {
-            Button("Rückgängig") { model.undoEnteredInSAP(line) }
-                .controlSize(.small)
-        } else {
-            copyButton("PSP", value: line.task.pspElement ?? "")
-            if let activity = line.task.sapActivity, !activity.isEmpty {
-                copyButton("Tätigkeit", value: activity)
-            }
-            copyButton("Std.", value: SAPTransfer.hours(minutes))
-            copyButton("Text", value: line.sapComment)
-            Button {
-                model.markEnteredInSAP(line, minutes: minutes)
-            } label: {
-                Label("In SAP eingetragen", systemImage: "checkmark")
-            }
-            .controlSize(.small)
-            .disabled(!line.issues(for: .sap).isEmpty)
-        }
-    }
-
-    private func copyButton(_ title: String, value: String) -> some View {
-        Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(value, forType: .string)
-        } label: {
-            Label(title, systemImage: "doc.on.doc")
-        }
-        .controlSize(.small)
-        .disabled(value.isEmpty)
-        .help("„\(value)“ kopieren")
-    }
-
     private func color(for status: BookingStatus?) -> Color {
         switch status {
-        case .confirmed, .entered: return Theme.done
+        case .confirmed: return Theme.done
         case .skipped: return Theme.tertiary
         case .failed: return Theme.danger
         default: return Theme.tertiary
@@ -354,7 +293,7 @@ struct DescriptionField: View {
 
     var body: some View {
         TextField("Was wurde gemacht", text: $text)
-            .help("Text für den Worklog im Ticket und für SAP")
+            .help("Text für den Worklog im Ticket und für die Liste")
             .textFieldStyle(TagwerkFieldStyle())
             .onAppear { text = task.workDescription }
             .onSubmit { model.setDescription(text, for: task.id) }

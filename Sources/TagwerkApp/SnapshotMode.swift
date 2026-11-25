@@ -30,10 +30,6 @@ enum SnapshotMode {
         UserDefaults.standard.register(defaults: [
             Preferences.meBaseURLKey: "https://helpdesk.example.com",
             Preferences.meTechnicianKey: "301",
-            Preferences.serviceKey(for: .wartung): "S-WART",
-            Preferences.serviceKey(for: .stoerung): "S-STOER",
-            Preferences.serviceKey(for: .projekt): "S-PROJ",
-            Preferences.serviceKey(for: .beratung): "S-BERAT",
         ])
         try? await Task.sleep(for: .seconds(2))
 
@@ -69,7 +65,7 @@ enum SnapshotMode {
             ("tagesabschluss", .close),
         ]
         let richest = model.activeCustomers.max { lhs, rhs in
-            model.psps(for: lhs.id, includeInactive: true).count < model.psps(for: rhs.id, includeInactive: true).count
+            model.customerTasks(lhs.id, done: false).count < model.customerTasks(rhs.id, done: false).count
         }
         if let customer = richest {
             screens.insert(("kunde", .customer(customer.id)), at: 5)
@@ -196,15 +192,6 @@ enum SnapshotMode {
             try? await Task.sleep(for: .seconds(0.5))
         }
 
-        // Abgleich mit SAP ByDesign
-        model.selection = .customers
-        model.sapSyncRows = DemoData.sapRows
-        model.showsSAPSync = true
-        try? await Task.sleep(for: .seconds(1.5))
-        await capture(window.attachedSheet ?? window, name: "sapabgleich", in: directory)
-        model.showsSAPSync = false
-        try? await Task.sleep(for: .seconds(0.8))
-
         // Einstellungen, jeder Tab einzeln
         openSettings()
         try? await Task.sleep(for: .seconds(1.5))
@@ -223,17 +210,6 @@ enum SnapshotMode {
         NSApp.windows.first { $0.isVisible && $0 !== window && !($0 is NSPanel) && $0.frame.width > 300 }?.close()
         window.makeKeyAndOrderFront(nil)
 
-        // ByDesign-Fenster mit der Beispielseite
-        openWindow("bydesign")
-        try? await Task.sleep(for: .seconds(6))
-        if let browser = NSApp.windows.first(where: { $0.isVisible && $0.title == "SAP ByDesign" }) {
-            browser.makeKeyAndOrderFront(nil)
-            try? await Task.sleep(for: .seconds(0.5))
-            await capture(browser, name: "bydesign", in: directory)
-            browser.close()
-        } else {
-            log("Snapshot: ByDesign-Fenster nicht gefunden")
-        }
         finish(in: directory)
     }
 

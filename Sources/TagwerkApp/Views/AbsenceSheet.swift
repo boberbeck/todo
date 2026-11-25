@@ -59,7 +59,7 @@ struct AbsenceSheet: View {
             }
             .tagwerkForm()
 
-            Text("Wochenenden zählen nicht mit. Das Wochenziel wird um diese Tage kleiner. In SAP ByDesign trägst du die Abwesenheit wie gewohnt selbst ein.")
+            Text("Wochenenden zählen nicht mit. Das Wochenziel wird um diese Tage kleiner.")
                 .font(.caption)
                 .foregroundStyle(Theme.tertiary)
                 .fixedSize(horizontal: false, vertical: true)

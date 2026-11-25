@@ -51,7 +51,7 @@ struct BugReportView: View {
                 }
             }
             .tagwerkForm()
-            Text("Das Protokoll enthält keine Passwörter oder Schlüssel, aber Ticketnummern und Meldungen aus SAP und ManageEngine. Bitte kurz ansehen, bevor du es weitergibst.")
+            Text("Das Protokoll enthält keine Passwörter oder Schlüssel, aber Ticketnummern und Meldungen aus ManageEngine. Bitte kurz ansehen, bevor du es weitergibst.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
