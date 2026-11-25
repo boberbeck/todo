@@ -327,7 +327,7 @@ struct RunningTimerPill: View {
                         Text(task.title)
                             .lineLimit(1)
                             .foregroundStyle(Theme.secondary)
-                            .frame(maxWidth: 160, alignment: .leading)
+                            .frame(maxWidth: 130, alignment: .leading)
                         if let pomodoro = model.pomodoro, pomodoro.phase == .work {
                             Label(PomodoroText.clock(model.pomodoroRemaining), systemImage: "timer")
                                 .monospacedDigit()

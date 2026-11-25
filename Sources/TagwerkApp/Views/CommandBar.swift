@@ -161,7 +161,8 @@ struct CommandRow: View {
     }
 }
 
-/// Knopf in der Titelleiste: öffnet die Befehlszeile.
+/// Knopf in der Titelleiste: öffnet die Befehlszeile. Schmal (Lupe und ⌘K), damit Timer und Einstellungen
+/// auch bei kleinem Fenster in der Leiste bleiben.
 struct CommandBarButton: View {
     @Environment(AppModel.self) private var model
     @State private var hovering = false
@@ -170,17 +171,14 @@ struct CommandBarButton: View {
         Button {
             model.openCommandBar()
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 12, weight: .medium))
-                Text("Was jetzt?")
-                    .font(.system(size: 13))
                 Text("⌘K")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(Theme.tertiary)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
             }
             .foregroundStyle(hovering ? Theme.text : Theme.secondary)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
             .frame(height: 28)
             .background(Capsule().fill(Color.white.opacity(hovering ? 0.08 : 0.04)))
             .overlay(Capsule().strokeBorder(Theme.border))
@@ -188,7 +186,7 @@ struct CommandBarButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help("Befehlszeile: starten, nachtragen, anlegen, Mittagspause … in einer Zeile (⌘K)")
+        .help("Was jetzt? Befehlszeile: starten, nachtragen, anlegen, Mittagspause, krank … in einer Zeile (⌘K)")
     }
 }
 
