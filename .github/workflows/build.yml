@@ -162,22 +162,8 @@ jobs:
             build/Tagwerk.dmg
             build/Tagwerk.zip
 
-      - name: Release „aktuell“ aktualisieren
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          NOTES="Automatisch gebaut aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}) am $(date -u '+%d.%m.%Y %H:%M') UTC.
-
-          Installieren: Tagwerk.dmg laden und öffnen, Tagwerk auf „Programme“ ziehen (ältere Fassung ersetzen).
-          Tagwerk.zip ist dasselbe als ZIP.
-          Beim ersten Öffnen blockt macOS die App, weil sie nicht von Apple beglaubigt ist:
-          Systemeinstellungen › Datenschutz & Sicherheit › „Dennoch öffnen“.
-          Oder im Terminal: xattr -dr com.apple.quarantine /Applications/Tagwerk.app"
-          gh release delete aktuell --yes --cleanup-tag || true
-          gh release create aktuell build/Tagwerk.dmg build/Tagwerk.zip --prerelease --target "$GITHUB_SHA" --title "Tagwerk – aktueller Stand" --notes "$NOTES"
-
-      # Nur bei Bedarf: Commit-Nachricht mit [screenshots] oder manueller Start.
+      # Nur bei Bedarf: Commit-Nachricht mit [screenshots] oder manueller Start. Vor dem Release, damit die Bilder auch kommen,
+      # wenn GitHub beim Release hakt.
       - name: Screenshots ins Repository legen
         if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[screenshots]')
         run: |
@@ -194,3 +180,26 @@ jobs:
             # Kam während des Builds ein neuer Commit dazu, die Screenshots obendrauf setzen
             git push || { git pull --rebase origin "${GITHUB_REF_NAME}" && git push; } || echo "Push nicht möglich, der Branch hat sich inzwischen geändert"
           fi
+
+      - name: Release „aktuell“ aktualisieren
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="Automatisch gebaut aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}) am $(date -u '+%d.%m.%Y %H:%M') UTC.
+
+          Installieren: Tagwerk.dmg laden und öffnen, Tagwerk auf „Programme“ ziehen (ältere Fassung ersetzen).
+          Tagwerk.zip ist dasselbe als ZIP.
+          Beim ersten Öffnen blockt macOS die App, weil sie nicht von Apple beglaubigt ist:
+          Systemeinstellungen › Datenschutz & Sicherheit › „Dennoch öffnen“.
+          Oder im Terminal: xattr -dr com.apple.quarantine /Applications/Tagwerk.app"
+          # GitHub antwortet manchmal kurz mit Fehler 500; dann ohne Release dazustehen wäre schlecht (die App findet kein Update).
+          for attempt in 1 2 3 4 5; do
+            gh release delete aktuell --yes --cleanup-tag 2>/dev/null || true
+            if gh release create aktuell build/Tagwerk.dmg build/Tagwerk.zip --prerelease --target "$GITHUB_SHA" --title "Tagwerk – aktueller Stand" --notes "$NOTES"; then
+              exit 0
+            fi
+            echo "Release anlegen fehlgeschlagen (Versuch $attempt), neuer Versuch in $((attempt * 20)) Sekunden"
+            sleep $((attempt * 20))
+          done
+          exit 1
