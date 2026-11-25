@@ -66,6 +66,10 @@ public enum CommandAction: Equatable, Sendable {
     case startLunch
     case endLunch
     case open(CommandDestination)
+    /// Krank oder Urlaub eintragen (nur Arbeitstage zählen)
+    case absent(kind: AbsenceKind, from: LocalDate, through: LocalDate, halfDay: Bool)
+    /// Fenster „Abwesenheit eintragen“ mit Zeitraum und Notiz
+    case absenceForm(AbsenceKind)
 }
 
 /// Ein Vorschlag in der Befehlszeile: was ↩ tut.
@@ -94,6 +98,10 @@ public struct CommandContext: Sendable {
     public var lunchRunning: Bool
     public var now: Date
     public var calendar: Calendar
+    /// Heute schon krank oder Urlaub eingetragen?
+    public var absentToday: Bool
+    /// Heute schon erfasste Zeit (morgens ohne Zeit schlägt die Befehlszeile „Heute krank“ vor)
+    public var trackedTodaySeconds: TimeInterval
 
     public init(
         tasks: [TaskItem],
@@ -102,7 +110,9 @@ public struct CommandContext: Sendable {
         runningTaskID: UUID?,
         lunchRunning: Bool,
         now: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        absentToday: Bool = false,
+        trackedTodaySeconds: TimeInterval = 0
     ) {
         self.tasks = tasks
         self.customers = customers
@@ -111,6 +121,8 @@ public struct CommandContext: Sendable {
         self.lunchRunning = lunchRunning
         self.now = now
         self.calendar = calendar
+        self.absentToday = absentToday
+        self.trackedTodaySeconds = trackedTodaySeconds
     }
 }
 
@@ -122,6 +134,7 @@ public struct CommandContext: Sendable {
 /// - „seit 9:30 Angebot“ → Timer läuft seit 9:30
 /// - „morgen Rechnung prüfen 30m“ → Aufgabe für morgen mit Schätzung
 /// - „Mittag“, „fertig“, „stopp“, „Kalender“
+/// - „krank“, „krank bis Freitag“, „Urlaub von Montag bis Freitag“
 public enum QuickCommand {
     public static let maximumLogMinutes = 8 * 60
 
@@ -135,6 +148,19 @@ public enum QuickCommand {
 
         // Feste Wörter: stopp, fertig, Mittag, weiter
         result += keywordSuggestions(key, context)
+
+        // „krank“, „krank bis Freitag“, „Urlaub morgen“
+        let absenceParsed = absence(query, today: context.today, calendar: context.calendar)
+        if let parsed = absenceParsed {
+            result.append(absenceSuggestion(parsed, context))
+            result.append(CommandSuggestion(
+                id: "absence-form-\(parsed.kind.rawValue)",
+                title: parsed.kind == .sick ? "Krank eintragen …" : "Urlaub eintragen …",
+                detail: "Fenster mit Zeitraum, halbem Tag und Notiz",
+                symbol: "calendar.badge.plus",
+                action: .absenceForm(parsed.kind)
+            ))
+        }
 
         // „45m Telefonat“: Zeit bis jetzt nachtragen
         if let parsed = leadingDuration(query), !parsed.rest.isEmpty, parsed.minutes <= maximumLogMinutes {
@@ -182,7 +208,7 @@ public enum QuickCommand {
         }
 
         // „morgen Angebot 30m“, „neu …“, „+ …“, „später …“: Aufgabe anlegen
-        if let parsed = planned(query, today: context.today, calendar: context.calendar) {
+        if absenceParsed == nil, let parsed = planned(query, today: context.today, calendar: context.calendar) {
             let split = DurationParser.split(title: parsed.rest)
             let title = cleanTitle(split.title)
             if !title.isEmpty {
@@ -231,7 +257,7 @@ public enum QuickCommand {
         }
 
         // Freier Text: neue Aufgabe jetzt starten oder anlegen
-        if !looksLikeCommand(query), result.allSatisfy({ !$0.id.hasPrefix("log") && !$0.id.hasPrefix("since") && !$0.id.hasPrefix("add") }) {
+        if !looksLikeCommand(query), result.allSatisfy({ !$0.id.hasPrefix("log") && !$0.id.hasPrefix("since") && !$0.id.hasPrefix("add") && !$0.id.hasPrefix("absen") }) {
             let split = DurationParser.split(title: query)
             let title = cleanTitle(split.title)
             if !title.isEmpty, title.count >= 2 {
@@ -276,6 +302,10 @@ public enum QuickCommand {
         }
         for task in DayPlan.standing(context.tasks).filter({ $0.id != context.runningTaskID }).prefix(2) {
             result.append(CommandSuggestion(id: "start-\(task.id)", title: task.title, detail: "Standardaufgabe · Timer starten", symbol: "pin", action: .start(task.id)))
+        }
+        // Morgens, bevor Zeit läuft: falls man krank ist
+        if !context.absentToday, context.runningTaskID == nil, !context.lunchRunning, context.trackedTodaySeconds < 60 {
+            result.append(absenceSuggestion((.sick, context.today, context.today, false), context))
         }
         result.append(CommandSuggestion(id: "open-close", title: CommandDestination.close.label, detail: "Zeiten prüfen, Worklogs senden", symbol: CommandDestination.close.symbol, action: .open(.close)))
         return Array(result.prefix(limit))
@@ -357,6 +387,47 @@ public enum QuickCommand {
         return (day, tokens.joined(separator: " "))
     }
 
+    /// „krank“, „heute halber Tag krank“, „krank bis Freitag“, „Urlaub von Montag bis Freitag“, „krank 3 Tage“,
+    /// „Urlaub 28.12. bis 2.1.“ → Art, Zeitraum und halber Tag (nur bei einem einzelnen Tag).
+    public static func absence(_ text: String, today: LocalDate, calendar: Calendar) -> (kind: AbsenceKind, from: LocalDate, through: LocalDate, halfDay: Bool)? {
+        let tokens = normalize(text).split(whereSeparator: { $0 == " " || $0 == "," }).map(String.init)
+        let kind: AbsenceKind
+        if tokens.contains(where: { $0.hasPrefix("krank") }) {
+            kind = .sick
+        } else if tokens.contains(where: { $0.hasPrefix("urlaub") }) {
+            kind = .vacation
+        } else {
+            return nil
+        }
+        let half = tokens.contains { $0.hasPrefix("halb") || $0 == "½" }
+        var from: LocalDate?
+        var through: LocalDate?
+        var dayCount: Int?
+        var index = 0
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "bis", index + 1 < tokens.count {
+                through = absenceDay(tokens[index + 1], today: today, reference: from ?? today, calendar: calendar)
+                index += 2
+                continue
+            }
+            if let number = Int(token), index + 1 < tokens.count, tokens[index + 1].hasPrefix("tag") {
+                dayCount = number
+                index += 2
+                continue
+            }
+            if from == nil, let day = absenceDay(token, today: today, reference: today, calendar: calendar) {
+                from = day
+            }
+            index += 1
+        }
+        let start = from ?? today
+        var end = through ?? start
+        if let dayCount, dayCount > 1 { end = start.adding(days: dayCount - 1, calendar: calendar) }
+        if end < start { end = start }
+        return (kind, start, end, half && start == end)
+    }
+
     /// Wie gut ein Aufgabentitel zur Eingabe passt (nil = gar nicht).
     public static func matchScore(title: String, query: String) -> Int? {
         let title = normalize(title)
@@ -380,6 +451,63 @@ public enum QuickCommand {
     private static let weekdays: [String: Int] = [
         "sonntag": 1, "montag": 2, "dienstag": 3, "mittwoch": 4, "donnerstag": 5, "freitag": 6, "samstag": 7,
     ]
+
+    /// „heute“, „morgen“, „Freitag“ (nächster ab `reference`, auch derselbe Tag), „28.11.“, „28.11.2026“.
+    private static func absenceDay(_ token: String, today: LocalDate, reference: LocalDate, calendar: Calendar) -> LocalDate? {
+        switch token {
+        case "heute": return today
+        case "morgen": return today.adding(days: 1, calendar: calendar)
+        case "ubermorgen": return today.adding(days: 2, calendar: calendar)
+        default:
+            if let weekday = weekdays[token] {
+                let current = calendar.component(.weekday, from: reference.startDate(calendar: calendar))
+                return reference.adding(days: (weekday - current + 7) % 7, calendar: calendar)
+            }
+            let parts = token.split(separator: ".").compactMap { Int($0) }
+            guard parts.count >= 2, (1...31).contains(parts[0]), (1...12).contains(parts[1]) else { return nil }
+            var year = parts.count >= 3 ? parts[2] : today.year
+            if year < 100 { year += 2000 }
+            var day = LocalDate(year: year, month: parts[1], day: parts[0])
+            // „2.1.“ im Dezember meint den Januar danach
+            if parts.count < 3, day < today.adding(days: -31, calendar: calendar) {
+                day = LocalDate(year: year + 1, month: parts[1], day: parts[0])
+            }
+            return day
+        }
+    }
+
+    private static func absenceSuggestion(_ parsed: (kind: AbsenceKind, from: LocalDate, through: LocalDate, halfDay: Bool), _ context: CommandContext) -> CommandSuggestion {
+        let what = parsed.kind == .sick ? "krank" : "Urlaub"
+        let title: String
+        if parsed.from == parsed.through {
+            let day = capitalizedFirst(dayLabel(parsed.from, today: context.today, calendar: context.calendar))
+            title = "\(day) \(parsed.halfDay ? "halber Tag " : "")\(what) eintragen"
+        } else {
+            let from = dayLabel(parsed.from, today: context.today, calendar: context.calendar)
+            let through = dayLabel(parsed.through, today: context.today, calendar: context.calendar)
+            title = "\(capitalizedFirst(what)) von \(from) bis \(through) eintragen"
+        }
+        let workdays = Absences.workdays(from: parsed.from, through: parsed.through, calendar: context.calendar).count
+        let detail: String
+        if workdays == 0 {
+            detail = "Kein Arbeitstag im Zeitraum (Wochenende)"
+        } else {
+            let count = parsed.halfDay ? "½ Arbeitstag" : (workdays == 1 ? "1 Arbeitstag" : "\(workdays) Arbeitstage")
+            detail = "\(count) · Wochenziel wird kleiner\(parsed.halfDay ? "" : ", offene Aufgaben rücken weiter")"
+        }
+        return CommandSuggestion(
+            id: "absent-\(parsed.kind.rawValue)-\(parsed.from.string)-\(parsed.through.string)",
+            title: title,
+            detail: detail,
+            symbol: parsed.kind.symbol,
+            action: .absent(kind: parsed.kind, from: parsed.from, through: parsed.through, halfDay: parsed.halfDay)
+        )
+    }
+
+    private static func capitalizedFirst(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        return first.uppercased() + text.dropFirst()
+    }
 
     private static func words(_ text: String) -> [String] {
         text.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
@@ -437,7 +565,7 @@ public enum QuickCommand {
 
     private static func looksLikeCommand(_ query: String) -> Bool {
         let key = normalize(query)
-        let reserved = ["stop", "stopp", "stoppen", "anhalten", "erledigt", "fertig", "done", "mittag", "mittagspause", "pause", "weiter"]
+        let reserved = ["stop", "stopp", "stoppen", "anhalten", "erledigt", "fertig", "done", "mittag", "mittagspause", "pause", "weiter", "krank", "urlaub"]
         return reserved.contains(key) || CommandDestination.allCases.contains { $0.keywords.contains(key) }
     }
 

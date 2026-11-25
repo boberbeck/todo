@@ -140,6 +140,38 @@ final class QuickCommandTests: XCTestCase {
         XCTAssertEqual(actions("telefonat müller").first, .startNew(title: "Telefonat müller", customerID: mueller.id))
     }
 
+    func testAbsenceParsing() {
+        let parse = { (text: String) in QuickCommand.absence(text, today: self.today, calendar: self.calendar) }
+        XCTAssertEqual(parse("krank")?.from, today)
+        XCTAssertEqual(parse("krank")?.through, today)
+        XCTAssertEqual(parse("krank")?.kind, .sick)
+        XCTAssertEqual(parse("heute halber Tag krank")?.halfDay, true)
+        XCTAssertEqual(parse("krank bis Freitag")?.through, LocalDate(year: 2026, month: 11, day: 27))
+        XCTAssertEqual(parse("Urlaub morgen")?.from, LocalDate(year: 2026, month: 11, day: 25))
+        XCTAssertEqual(parse("Urlaub morgen")?.kind, .vacation)
+        let week = parse("Urlaub von Montag bis Freitag")
+        XCTAssertEqual(week?.from, LocalDate(year: 2026, month: 11, day: 30))
+        XCTAssertEqual(week?.through, LocalDate(year: 2026, month: 12, day: 4))
+        XCTAssertEqual(parse("krank 3 Tage")?.through, LocalDate(year: 2026, month: 11, day: 26))
+        XCTAssertEqual(parse("Urlaub 28.12. bis 2.1.")?.through, LocalDate(year: 2027, month: 1, day: 2))
+        XCTAssertEqual(parse("halber Tag krank bis Freitag")?.halfDay, false, "halber Tag nur bei einem Tag")
+        XCTAssertNil(parse("Angebot schreiben"))
+    }
+
+    func testAbsenceSuggestions() {
+        XCTAssertEqual(actions("krank").first, .absent(kind: .sick, from: today, through: today, halfDay: false))
+        XCTAssertTrue(actions("krank").contains(.absenceForm(.sick)))
+        XCTAssertFalse(actions("krank").contains { if case .startNew = $0 { return true } else { return false } })
+        XCTAssertEqual(QuickCommand.suggestions(for: "krank", in: context()).first?.title, "Heute krank eintragen")
+        XCTAssertEqual(QuickCommand.suggestions(for: "krank bis freitag", in: context()).first?.detail.hasPrefix("4 Arbeitstage"), true)
+        XCTAssertFalse(actions("Freitag krank").contains { if case .add = $0 { return true } else { return false } }, "kein „Krank“ als Aufgabe")
+        // Morgens ohne erfasste Zeit steht „Heute krank“ schon ohne Eingabe da
+        let morning = CommandContext(tasks: [vpn], customers: [], today: today, runningTaskID: nil, lunchRunning: false, now: now, calendar: calendar)
+        XCTAssertTrue(QuickCommand.suggestions(for: "", in: morning).map(\.action).contains(.absent(kind: .sick, from: today, through: today, halfDay: false)))
+        let working = CommandContext(tasks: [vpn], customers: [], today: today, runningTaskID: nil, lunchRunning: false, now: now, calendar: calendar, trackedTodaySeconds: 3600)
+        XCTAssertFalse(QuickCommand.suggestions(for: "", in: working).map(\.action).contains(.absent(kind: .sick, from: today, through: today, halfDay: false)))
+    }
+
     func testIdleSuggestions() {
         let idle = actions("", running: vpn.id)
         XCTAssertEqual(idle.first, .complete(vpn.id))

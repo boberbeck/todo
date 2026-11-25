@@ -1171,7 +1171,9 @@ final class AppModel {
             today: today,
             runningTaskID: runningEntry?.taskID,
             lunchRunning: runningBreak != nil,
-            now: Date()
+            now: Date(),
+            absentToday: absence(on: today) != nil,
+            trackedTodaySeconds: trackedToday(now: Date())
         ))
     }
 
@@ -1219,6 +1221,11 @@ final class AppModel {
         case .endLunch:
             endBreak(resume: true)
             showToast(runningTask.map { "Weiter mit „\($0.title)“" } ?? "Mittagspause beendet", symbol: "play.fill")
+        case .absent(let kind, let from, let through, let halfDay):
+            let message = markAbsent(kind, from: from, through: through, halfDay: halfDay)
+            showToast(message, symbol: kind.symbol)
+        case .absenceForm(let kind):
+            beginAbsence(kind)
         case .open(let destination):
             switch destination {
             case .start: selection = .today

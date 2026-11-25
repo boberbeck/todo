@@ -129,8 +129,9 @@ struct StartTaskColumn: View {
                     Spacer(minLength: 8)
                     // Wird die Spalte schmal, bleiben nur die Symbole (mit Hinweis beim Darüberfahren)
                     ViewThatFits(in: .horizontal) {
-                        DayActions(compact: false)
-                        DayActions(compact: true)
+                        DayActions(style: .full)
+                        DayActions(style: .medium)
+                        DayActions(style: .compact)
                     }
                 }
                 AddTaskField(day: model.today, takesNewTaskShortcut: true)
@@ -225,13 +226,16 @@ struct StartTaskColumn: View {
     }
 }
 
-/// Knöpfe neben „Heute“: Eintragen (Pause, Zeit, Abwesenheit), Tag planen, Tag abschließen.
-/// `compact` zeigt nur Symbole, wenn die Spalte schmal ist.
+/// Knöpfe neben „Heute“: Eintragen (Mittagspause, Zeit), Krank/Urlaub, Tag planen, Tag abschließen.
+/// Ist die Spalte schmal, werden erst die beiden Menüs, dann alle Knöpfe zu Symbolen (Hinweis beim Darüberfahren).
 struct DayActions: View {
+    enum Style { case full, medium, compact }
+
     @Environment(AppModel.self) private var model
-    let compact: Bool
+    let style: Style
 
     var body: some View {
+        let absent = model.absence(on: model.today)
         HStack(spacing: 8) {
             Menu {
                 if model.runningBreak != nil {
@@ -241,42 +245,55 @@ struct DayActions: View {
                 }
                 Button("Mittagspause nachtragen …") { model.beginBreakEntry() }
                 Button("Zeit nachtragen …") { model.beginTimeEntry() }
-                Divider()
-                Section("Abwesend") {
-                    Button("Heute krank") { model.markAbsent(.sick, from: model.today, through: model.today) }
-                    Button("Heute halber Tag krank") { model.markAbsent(.sick, from: model.today, through: model.today, halfDay: true) }
-                    Button("Krank für mehrere Tage …") { model.beginAbsence(.sick) }
-                    Button("Urlaub eintragen …") { model.beginAbsence(.vacation) }
-                }
             } label: {
-                label("Eintragen", systemImage: "square.and.pencil")
+                label("Eintragen", systemImage: "square.and.pencil", iconOnly: style != .full)
             }
             .menuStyle(.button)
             .menuIndicator(.hidden)
             .buttonStyle(GhostButtonStyle())
             .fixedSize()
-            .help("Mittagspause, vergessene Zeit oder Krank- und Urlaubstage eintragen")
+            .help("Mittagspause oder vergessene Zeit eintragen")
+
+            Menu {
+                if let absent {
+                    Button("\(absent.label) austragen") { model.removeAbsence(on: model.today) }
+                    Divider()
+                }
+                Button("Heute krank") { model.markAbsent(.sick, from: model.today, through: model.today) }
+                Button("Heute halber Tag krank") { model.markAbsent(.sick, from: model.today, through: model.today, halfDay: true) }
+                Button("Krank für mehrere Tage …") { model.beginAbsence(.sick) }
+                Divider()
+                Button("Urlaub eintragen …") { model.beginAbsence(.vacation) }
+            } label: {
+                label(absent.map { $0.kind.label } ?? "Krank / Urlaub", systemImage: absent?.kind.symbol ?? "cross.case", iconOnly: style != .full)
+            }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .buttonStyle(GhostButtonStyle())
+            .fixedSize()
+            .help("Krank- oder Urlaubstag eintragen (auch mit ⌘K: „krank“, „krank bis Freitag“)")
+
             Button {
                 model.selection = .planning
             } label: {
-                label("Tag planen", systemImage: "sunrise")
+                label("Tag planen", systemImage: "sunrise", iconOnly: style == .compact)
             }
             .buttonStyle(GhostButtonStyle())
             .help("Geführte Tagesplanung (⌘0)")
             Button {
                 model.selection = .close
             } label: {
-                label("Tag abschließen", systemImage: "moon")
+                label("Tag abschließen", systemImage: "moon", iconOnly: style == .compact)
             }
             .buttonStyle(GhostButtonStyle())
-            .help("Zeiten prüfen und buchen (⌘9)")
+            .help("Zeiten prüfen und Worklogs senden (⌘9)")
         }
         .fixedSize()
     }
 
     @ViewBuilder
-    private func label(_ title: String, systemImage: String) -> some View {
-        if compact {
+    private func label(_ title: String, systemImage: String, iconOnly: Bool) -> some View {
+        if iconOnly {
             Label(title, systemImage: systemImage).labelStyle(.iconOnly)
         } else {
             Label(title, systemImage: systemImage)

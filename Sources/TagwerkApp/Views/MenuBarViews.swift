@@ -82,6 +82,11 @@ struct MenuBarContent: View {
                 Divider()
             }
 
+            if model.absence(on: model.today) == nil {
+                Button("Heute krank eintragen") {
+                    model.markAbsent(.sick, from: model.today, through: model.today)
+                }
+            }
             Button("Befehlszeile … (⌘K)") {
                 openWindow(id: "main")
                 NSApp.activate()
