@@ -139,8 +139,6 @@ public final class InMemoryStore: Store {
         snapshot.entries.removeAll { $0.id == id }
     }
 
-    }
-
     private func upsert<T: Identifiable>(_ item: T, into list: inout [T]) {
         if let index = list.firstIndex(where: { $0.id == item.id }) {
             list[index] = item
