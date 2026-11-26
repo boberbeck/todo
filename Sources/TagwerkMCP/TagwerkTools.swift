@@ -492,7 +492,7 @@ public final class TagwerkTools {
         let lines = DailyClose.lines(for: day, tasks: snapshot.tasks, entries: snapshot.entries, bookings: snapshot.bookings, rules: rules, now: now(), calendar: calendar)
         let described: [[String: Any]] = lines.map { line in
             var entry: [String: Any] = [
-                "aufgabe": line.task.title,
+                "aufgabe": line.displayTitle,
                 "id": line.task.id.uuidString,
                 "minuten": line.minutes,
                 "erfasst_min": minutes(line.trackedSeconds),
@@ -501,7 +501,12 @@ public final class TagwerkTools {
                 },
             ]
             if let number = line.task.linkedTicketNumber { entry["ticket"] = number }
-            if !line.task.workDescription.isEmpty { entry["beschreibung"] = line.task.workDescription }
+            if !line.listDescription.isEmpty { entry["beschreibung"] = line.listDescription }
+            if line.isCombined {
+                entry["teile"] = line.parts.map { part in
+                    ["aufgabe": part.task.title, "erfasst_min": minutes(part.trackedSeconds)] as [String: Any]
+                }
+            }
             if !line.openIssues.isEmpty { entry["fehlt"] = line.openIssues.map(\.message) }
             if line.changedAfterBooking { entry["hinweis"] = "Zeit nach dem Buchen geändert" }
             return entry

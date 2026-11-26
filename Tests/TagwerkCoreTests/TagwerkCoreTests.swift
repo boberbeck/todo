@@ -891,6 +891,95 @@ final class SubtaskAndTicketTests: XCTestCase {
         XCTAssertTrue(list.contains("19.11.2026\tTeam Sitzung\t\t\t0,75\t"), list)
     }
 
+    func testDailyCloseCombinesSubtasksOnSameTicket() {
+        var parent = TaskItem(title: "Firewall-Umzug", workDescription: "Planung abgestimmt")
+        parent.ticketNumber = "1240"
+        parent.ticketKey = "100124"
+        let export = TaskItem(title: "Regeln exportieren", workDescription: "Regeln gesichert", parentID: parent.id)
+        let check = TaskItem(title: "Test", parentID: parent.id)
+        var license = TaskItem(title: "Lizenz", workDescription: "Lizenz verlängert", parentID: parent.id)
+        license.ticketNumber = "1300"
+        license.ticketKey = "100130"
+        let entries = [
+            TimeEntry(taskID: export.id, start: at(9), end: at(9, 20)),
+            TimeEntry(taskID: parent.id, start: at(10), end: at(10, 10)),
+            TimeEntry(taskID: check.id, start: at(11), end: at(11, 5)),
+            TimeEntry(taskID: license.id, start: at(12), end: at(12, 30)),
+        ]
+        let lines = DailyClose.lines(
+            for: day, tasks: [parent, export, check, license], entries: entries, bookings: [],
+            rules: BookingRules(), now: at(18), calendar: calendar
+        )
+        XCTAssertEqual(lines.count, 2, "ein Worklog je Ticket")
+        let combined = lines[0]
+        XCTAssertTrue(combined.isCombined)
+        XCTAssertEqual(combined.task.id, parent.id, "gebucht unter der Aufgabe darüber")
+        XCTAssertEqual(combined.displayTitle, "Firewall-Umzug")
+        XCTAssertEqual(combined.parts.map(\.task.id), [parent.id, export.id, check.id])
+        XCTAssertEqual(combined.trackedSeconds, 35 * 60)
+        XCTAssertEqual(combined.minutes, TimeMath.rounded(35 * 60, toMinutes: 15, mode: .nearest), "einmal für alles gerundet")
+        XCTAssertTrue(combined.issues.isEmpty, "\(combined.issues)")
+        XCTAssertEqual(combined.worklogDescription, "Planung abgestimmt\nRegeln exportieren: Regeln gesichert\nTest")
+
+        let prepared = DailyClose.prepare(combined, now: at(18))
+        XCTAssertEqual(prepared.count, 1)
+        XCTAssertEqual(prepared.first?.taskID, parent.id)
+        XCTAssertEqual(prepared.first?.ticketKey, "100124")
+        XCTAssertEqual(prepared.first?.minutes, combined.minutes)
+
+        // Eigenes Ticket: eigene Zeile wie bisher
+        XCTAssertEqual(lines[1].task.id, license.id)
+        XCTAssertFalse(lines[1].isCombined)
+        XCTAssertEqual(lines[1].displayTitle, "Firewall-Umzug: Lizenz")
+
+        let list = DayList.text(lines) { _ in nil }
+        XCTAssertTrue(list.contains("Planung abgestimmt; Regeln exportieren: Regeln gesichert; Test"), list)
+    }
+
+    func testDailyCloseCombinesWithoutParentTimeAndKeepsEarlierSingleBookings() {
+        var parent = TaskItem(title: "Firewall-Umzug")
+        parent.ticketNumber = "1240"
+        parent.ticketKey = "100124"
+        let first = TaskItem(title: "Export", workDescription: "Regeln gesichert", parentID: parent.id)
+        let second = TaskItem(title: "Import", parentID: parent.id)
+        let entries = [
+            TimeEntry(taskID: first.id, start: at(9), end: at(9, 30)),
+            TimeEntry(taskID: second.id, start: at(10), end: at(10, 30)),
+        ]
+        let lines = DailyClose.lines(
+            for: day, tasks: [parent, first, second], entries: entries, bookings: [],
+            rules: BookingRules(), now: at(18), calendar: calendar
+        )
+        XCTAssertEqual(lines.count, 1)
+        XCTAssertEqual(lines[0].displayTitle, "Firewall-Umzug")
+        XCTAssertEqual(lines[0].task.id, first.id, "ohne Zeit auf der Aufgabe darüber: unter dem ersten Teil")
+        XCTAssertEqual(lines[0].minutes, 60)
+        XCTAssertEqual(lines[0].worklogDescription, "Export: Regeln gesichert\nImport")
+        XCTAssertTrue(lines[0].issues.isEmpty, "ein Text reicht")
+
+        // Ganz ohne Text: Hinweis wie bei einer einzelnen Aufgabe
+        let bare = TaskItem(title: "Export", parentID: parent.id)
+        let bareLines = DailyClose.lines(
+            for: day, tasks: [parent, bare, second],
+            entries: [TimeEntry(taskID: bare.id, start: at(9), end: at(9, 30)), entries[1]], bookings: [],
+            rules: BookingRules(), now: at(18), calendar: calendar
+        )
+        XCTAssertEqual(bareLines.first?.issues, [.missingDescription])
+
+        // Vor der Umstellung schon einzeln gebucht: bleibt einzeln, damit nichts doppelt ins Ticket geht
+        let bookings = [first, second].map { task -> Booking in
+            var booking = Booking(taskID: task.id, day: day, target: .manageEngine, minutes: 30, description: task.title)
+            booking.status = .confirmed
+            return booking
+        }
+        let legacy = DailyClose.lines(
+            for: day, tasks: [parent, first, second], entries: entries, bookings: bookings,
+            rules: BookingRules(), now: at(18), calendar: calendar
+        )
+        XCTAssertEqual(legacy.count, 2)
+        XCTAssertTrue(legacy.allSatisfy { !$0.isCombined && $0.isDone })
+    }
+
     func testSQLiteKeepsSubtaskTicket() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tagwerk-sub-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: folder) }

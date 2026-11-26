@@ -206,7 +206,11 @@ struct CloseLineRow: View {
                 }
             }
 
-            DescriptionField(task: line.task)
+            if line.isCombined {
+                CombinedPartsView(line: line)
+            } else {
+                DescriptionField(task: line.task)
+            }
 
             HStack(spacing: 8) {
                 ForEach(line.targets) { target in
@@ -233,6 +237,36 @@ struct CloseLineRow: View {
             }
         }
         .padding(.vertical, 6)
+    }
+}
+
+/// Zusammengefasste Zeile: jede Unteraufgabe (und die Aufgabe selbst) mit ihrer Zeit und ihrem Bearbeitungstext.
+/// Im Ticket landet ein Worklog mit allen Texten untereinander.
+struct CombinedPartsView: View {
+    let line: BookingLine
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("\(line.parts.count) Teile, ein Worklog im Ticket", systemImage: "square.stack")
+                .font(.caption)
+                .foregroundStyle(Theme.tertiary)
+                .help("Unteraufgaben am selben Ticket gehen zusammen als ein Worklog ins Ticket: Zeit zusammengezählt, die Texte untereinander.\n\n\(line.worklogDescription)")
+            ForEach(line.parts, id: \.task.id) { part in
+                HStack(spacing: 10) {
+                    Text(part.task.isSubtask ? part.task.title : "Aufgabe selbst")
+                        .font(.callout)
+                        .foregroundStyle(part.task.isSubtask ? Theme.text : Theme.secondary)
+                        .lineLimit(1)
+                        .frame(width: 170, alignment: .leading)
+                    Text(TimeMath.format(part.trackedSeconds))
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, alignment: .trailing)
+                    DescriptionField(task: part.task)
+                }
+            }
+        }
     }
 }
 

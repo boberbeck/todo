@@ -1703,7 +1703,7 @@ final class AppModel {
             if booking.ticketKey != key {
                 booking.ticketKey = key
             }
-            let start = firstStart(of: booking.taskID, on: booking.day)
+            let start = worklogStart(for: booking)
             do {
                 let reference = try await manageEngine.addWorklog(
                     requestKey: key,
@@ -1787,6 +1787,13 @@ final class AppModel {
         DayList.text(closeLines(for: day), minutes: overrides) { [weak self] id in
             self?.customer(id)?.name
         }
+    }
+
+    /// Beginn des Worklogs: der früheste Eintrag aller Teile der Zeile (bei zusammengefassten Unteraufgaben).
+    private func worklogStart(for booking: Booking) -> Date {
+        let ids = closeLines(for: booking.day).first { $0.id == booking.taskID }?.parts.map(\.task.id) ?? []
+        return (ids.isEmpty ? [booking.taskID] : ids).map { firstStart(of: $0, on: booking.day) }.min()
+            ?? firstStart(of: booking.taskID, on: booking.day)
     }
 
     private func firstStart(of taskID: UUID, on day: LocalDate) -> Date {

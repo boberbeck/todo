@@ -96,7 +96,11 @@ enum DemoData {
             createdAt: now.addingTimeInterval(-3 * hour)
         )
         tasks += [serverUpdate, jourFixe, vpn, offer, invoice]
-        // Unteraufgaben: das Angebot in Schritten, einer davon mit eigenem Ticket
+        // Unteraufgaben: das Angebot in Schritten, einer davon mit eigenem Ticket. Die Logs zur VPN-Störung
+        // gehen mit der Störung als ein Worklog ins Ticket.
+        let tunnelLogs = TaskItem(title: "Tunnel-Logs sichern", customerID: mueller.id, workDescription: "Logs exportiert und abgelegt",
+                                  status: .done, completedAt: now.addingTimeInterval(-40 * minute),
+                                  sortIndex: 1, createdAt: now.addingTimeInterval(-3 * hour), parentID: vpn.id)
         tasks += [
             TaskItem(title: "Leistungsumfang klären", customerID: becker.id, status: .done, completedAt: now.addingTimeInterval(-hour),
                      sortIndex: 1, createdAt: now.addingTimeInterval(-29 * hour), parentID: offer.id),
@@ -104,12 +108,12 @@ enum DemoData {
                      sortIndex: 2, createdAt: now.addingTimeInterval(-29 * hour), parentID: offer.id),
             TaskItem(title: "Lizenzen prüfen", customerID: becker.id, sortIndex: 3, createdAt: now.addingTimeInterval(-29 * hour),
                      parentID: offer.id, ticketNumber: "1243", ticketKey: "100143"),
-            TaskItem(title: "Tunnel-Logs sichern", customerID: mueller.id, status: .done, completedAt: now.addingTimeInterval(-40 * minute),
-                     sortIndex: 1, createdAt: now.addingTimeInterval(-3 * hour), parentID: vpn.id),
+            tunnelLogs,
             TaskItem(title: "Provider anrufen", customerID: mueller.id, sortIndex: 2, createdAt: now.addingTimeInterval(-3 * hour), parentID: vpn.id),
         ]
         entry(serverUpdate, startsAgo: 4 * hour, minutes: 23)
         entries.append(TimeEntry(taskID: jourFixe.id, start: at(9), end: at(9, 30)))
+        entry(tunnelLogs, startsAgo: 112 * minute, minutes: 14)
         entry(vpn, startsAgo: 95 * minute, minutes: 10)
         // läuft gerade; zusammen mit dem Eintrag davor 0:42:15
         entries.append(TimeEntry(taskID: vpn.id, start: now.addingTimeInterval(-(32 * minute + 15))))
