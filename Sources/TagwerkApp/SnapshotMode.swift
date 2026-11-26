@@ -119,6 +119,16 @@ enum SnapshotMode {
             try? await Task.sleep(for: .seconds(0.8))
         }
 
+        // Tagesabschluss weiter unten: Unteraufgaben am selben Ticket als ein Worklog
+        model.selection = .close
+        try? await Task.sleep(for: .seconds(1.5))
+        for line in model.closeLines(for: model.today) where line.isCombined {
+            log("Tagesabschluss zusammengefasst: \(line.displayTitle), \(line.parts.count) Teile, \(line.minutes) Min., Worklog: \(line.worklogDescription.replacingOccurrences(of: "\n", with: " | "))")
+        }
+        scrollToBottom(in: window)
+        try? await Task.sleep(for: .seconds(0.8))
+        await capture(window, name: "tagesabschluss-unteraufgaben", in: directory)
+
         // Neue Aufgabe direkt im Kalender beschriften
         model.selection = .calendar
         try? await Task.sleep(for: .seconds(1.2))
@@ -285,6 +295,24 @@ enum SnapshotMode {
 
     /// Bittet das CI-Skript um ein Foto. Ohne Antwort zeichnet die App das Fenster selbst.
     @MainActor
+    /// Scrollt die längste Liste im Fenster ganz nach unten (für Bilder von Inhalten unterhalb des sichtbaren Bereichs).
+    private static func scrollToBottom(in window: NSWindow) {
+        func scrollViews(in view: NSView) -> [NSScrollView] {
+            let own: [NSScrollView] = (view as? NSScrollView).map { [$0] } ?? []
+            return own + view.subviews.flatMap { scrollViews(in: $0) }
+        }
+        guard let content = window.contentView else { return }
+        let candidates = scrollViews(in: content).filter { $0.documentView != nil }
+        guard let scroll = candidates.max(by: { lhs, rhs in
+            let left = (lhs.documentView?.frame.height ?? 0) - lhs.contentView.bounds.height
+            let right = (rhs.documentView?.frame.height ?? 0) - rhs.contentView.bounds.height
+            return left < right
+        }), let document = scroll.documentView else { return }
+        let bottom = document.isFlipped ? max(0, document.frame.height - scroll.contentView.bounds.height) : 0
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: bottom))
+        scroll.reflectScrolledClipView(scroll.contentView)
+    }
+
     private static func capture(_ window: NSWindow?, name: String, in directory: URL) async {
         let marker = directory.appendingPathComponent(".ready")
         let windowNumber = window?.windowNumber ?? 0
