@@ -640,9 +640,16 @@ struct TaskCard: View {
                     .strikethrough(task.isDone, color: Theme.tertiary)
                     .lineLimit(compact ? 3 : 2)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    CardMeta(task: task, compact: compact)
-                    SubtaskToggle(task: task)
+                if compact {
+                    FlowLayout(spacing: 8, lineSpacing: 3) {
+                        CardMeta(task: task, compact: true)
+                        SubtaskToggle(task: task)
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        CardMeta(task: task)
+                        SubtaskToggle(task: task)
+                    }
                 }
                 if !compact, !task.isDone, model.resolved(task).hasTicket {
                     BookingSummary(task: task)
@@ -748,32 +755,43 @@ struct CardMeta: View {
     let task: TaskItem
     var compact = false
 
+    /// Schmal (`compact`): die Angaben stehen einzeln und brechen im umgebenden Umbruch-Layout in die nächste Zeile,
+    /// statt jede für sich bis zur Unkenntlichkeit gekürzt zu werden.
     var body: some View {
-        let parts = metaParts
-        let goal = model.longGoal(task.longGoalID)
-        if model.customer(task.customerID) != nil || !parts.isEmpty || goal != nil {
+        if compact {
+            items
+        } else {
             HStack(spacing: 6) {
-                if let customer = model.customer(task.customerID) {
-                    HStack(spacing: 4) {
-                        CustomerDot(colorIndex: customer.colorIndex, size: 6)
-                        Text(customer.name)
-                            .lineLimit(1)
-                    }
-                }
-                if let goal {
-                    HStack(spacing: 4) {
-                        Image(systemName: "flag")
-                        Text(goal.title)
-                            .lineLimit(1)
-                    }
-                }
-                ForEach(parts, id: \.self) { part in
-                    Text(part)
-                        .lineLimit(1)
-                }
+                items
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var items: some View {
+        if let customer = model.customer(task.customerID) {
+            HStack(spacing: 4) {
+                CustomerDot(colorIndex: customer.colorIndex, size: 6)
+                Text(customer.name)
+                    .lineLimit(1)
             }
             .font(.caption)
             .foregroundStyle(Theme.tertiary)
+        }
+        if let goal = model.longGoal(task.longGoalID) {
+            HStack(spacing: 4) {
+                Image(systemName: "flag")
+                Text(goal.title)
+                    .lineLimit(1)
+            }
+            .font(.caption)
+            .foregroundStyle(Theme.tertiary)
+        }
+        ForEach(metaParts, id: \.self) { part in
+            Text(part)
+                .lineLimit(1)
+                .font(.caption)
+                .foregroundStyle(Theme.tertiary)
         }
     }
 

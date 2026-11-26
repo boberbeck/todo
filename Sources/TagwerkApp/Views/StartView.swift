@@ -347,7 +347,7 @@ struct InboxRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)
                     .lineLimit(2)
-                HStack(spacing: 8) {
+                FlowLayout(spacing: 8, lineSpacing: 3) {
                     CardMeta(task: task, compact: true)
                     SubtaskToggle(task: task)
                 }

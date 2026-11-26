@@ -176,6 +176,8 @@ struct SubtaskRow: View {
                 Text(TimeMath.format(tracked))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(running ? Theme.text : Theme.tertiary)
+                    .lineLimit(1)
+                    .fixedSize()
             }
             // Läuft der Timer, bleibt „Pause“ fest stehen; alles andere erscheint erst beim Darüberfahren
             if running {
