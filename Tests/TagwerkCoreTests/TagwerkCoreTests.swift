@@ -662,6 +662,24 @@ final class ReviewTests: XCTestCase {
         XCTAssertNil(MailDropTitle.best(subject: nil, suggestedName: "message", fileName: "12345.eml", text: nil))
     }
 
+    func testMailSourceInsteadOfFileURL() {
+        // So kommt eine Mail aus dem neuen Outlook: Quelltext dort, wo sonst ein Datei-Link steht
+        let source = """
+        Received: from mx.example.com (10.0.0.1) by mail.example.com\r
+        \twith Microsoft SMTP Server; Thu, 26 Nov 2026 14:50:00 +0100\r
+        From: =?utf-8?Q?J=C3=BCrgen_M=C3=BCller?= <j.mueller@example.com>\r
+        Subject: VPN-Störung Standort Nord\r
+        Message-ID: <x1@example.com>\r
+        \r
+        Hallo zusammen
+        """
+        let header = MailDropPayload.mailHeader(fromFileURLData: Data(source.utf8))
+        XCTAssertEqual(header?.subject, "VPN-Störung Standort Nord")
+        XCTAssertEqual(header?.from, "Jürgen Müller")
+        XCTAssertNil(MailDropPayload.mailHeader(fromFileURLData: Data("file:///Users/test/Downloads/Angebot.eml".utf8)), "echter Link")
+        XCTAssertNil(MailDropPayload.mailHeader(fromFileURLData: Data("irgendein Text ohne Kopf".utf8)))
+    }
+
     func testEmailFromWithoutName() {
         let header = EmailHeaderParser.parse(Data("From: <service@example.com>\nSubject: Test\n\nx".utf8))
         XCTAssertEqual(header.from, "service@example.com")

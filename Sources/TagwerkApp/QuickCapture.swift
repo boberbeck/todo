@@ -203,6 +203,23 @@ enum DropImporter {
                         Task { @MainActor in AppLog.warning("Mail-Drop", "Datei-Link nicht lesbar: \(failure)") }
                         return
                     }
+                    // Das neue Outlook legt statt eines Links den Quelltext der Mail ab („Received: …“)
+                    guard url.isFileURL else {
+                        _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
+                            let header = data.flatMap(MailDropPayload.mailHeader(fromFileURLData:))
+                            let title = MailDropTitle.best(subject: header?.subject, suggestedName: suggested, fileName: nil, text: nil)
+                            let note = "Mail als Quelltext statt Datei-Link: \(data?.count ?? 0) Bytes · Betreff \(header?.subject == nil ? "nicht gefunden" : "gefunden") · Absender \(header?.from == nil ? "nicht gefunden" : "gefunden")"
+                            Task { @MainActor in
+                                AppLog.info("Mail-Drop", note)
+                                if header != nil || title != nil {
+                                    model.addMailTask(subject: title, from: header?.from, link: nil, plannedDate: plannedDate)
+                                } else {
+                                    model.reportUnreadableDrop()
+                                }
+                            }
+                        }
+                        return
+                    }
                     let isMail = ["eml", "msg", "emlx"].contains(url.pathExtension.lowercased())
                     let data = isMail ? try? Data(contentsOf: url) : nil
                     let header = data.map(EmailHeaderParser.parse)

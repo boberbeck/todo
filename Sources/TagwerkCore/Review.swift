@@ -302,6 +302,19 @@ public enum TimeExport {
 
 /// Titel für eine in den Eingang gezogene Mail. Manche Mail-Programme (z. B. das neue Outlook) liefern beim Ziehen keine
 /// lesbare Mail-Datei; dann helfen der vorgeschlagene Name, der Dateiname oder mitgelieferter Text.
+/// Das neue Outlook (Mac) legt beim Ziehen einer Mail ihren Quelltext dorthin, wo sonst ein Datei-Link steht
+/// (Typ `public.file-url`). Ein echter Link beginnt mit „file:“; alles andere wird als Mail gelesen.
+public enum MailDropPayload {
+    /// Kopf der Mail, wenn die Daten eines „Datei-Links“ in Wahrheit eine Mail sind; sonst `nil`.
+    public static func mailHeader(fromFileURLData data: Data) -> EmailHeaderParser.Header? {
+        let start = EmailHeaderParser.decodedText(data.prefix(64)).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if start.hasPrefix("file:") { return nil }
+        let header = EmailHeaderParser.parse(data)
+        guard header.subject != nil || header.from != nil || header.messageID != nil else { return nil }
+        return header
+    }
+}
+
 public enum MailDropTitle {
     public static func best(subject: String?, suggestedName: String?, fileName: String?, text: String?) -> String? {
         if let subject = clean(subject) { return subject }
