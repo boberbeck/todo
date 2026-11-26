@@ -75,3 +75,68 @@ public enum TimeMath {
         return whole * step
     }
 }
+
+/// Verteilt sich überlappende Zeiträume (z. B. erfasste Zeit während eines Termins) im Kalender nebeneinander,
+/// damit keiner den anderen verdeckt.
+public enum CalendarLanes {
+    public struct Item<ID: Hashable>: Sendable where ID: Sendable {
+        public var id: ID
+        public var start: Date
+        public var end: Date
+
+        public init(id: ID, start: Date, end: Date) {
+            self.id = id
+            self.start = start
+            self.end = end
+        }
+    }
+
+    /// Spalte (`index`) und Anzahl Spalten (`count`) der Gruppe, in der der Zeitraum liegt.
+    public struct Lane: Equatable, Sendable {
+        public var index: Int
+        public var count: Int
+
+        public init(index: Int, count: Int) {
+            self.index = index
+            self.count = count
+        }
+
+        public static let single = Lane(index: 0, count: 1)
+    }
+
+    public static func assign<ID: Hashable>(_ items: [Item<ID>]) -> [ID: Lane] {
+        let sorted = items.sorted { lhs, rhs in
+            if lhs.start != rhs.start { return lhs.start < rhs.start }
+            return lhs.end > rhs.end
+        }
+        var result: [ID: Lane] = [:]
+        var group: [(id: ID, lane: Int)] = []
+        var laneEnds: [Date] = []
+        var groupEnd = Date.distantPast
+
+        func closeGroup() {
+            for member in group {
+                result[member.id] = Lane(index: member.lane, count: max(1, laneEnds.count))
+            }
+            group = []
+            laneEnds = []
+        }
+
+        for item in sorted {
+            let end = max(item.end, item.start)
+            if !group.isEmpty, item.start >= groupEnd {
+                closeGroup()
+            }
+            if let free = laneEnds.firstIndex(where: { $0 <= item.start }) {
+                laneEnds[free] = end
+                group.append((item.id, free))
+            } else {
+                laneEnds.append(end)
+                group.append((item.id, laneEnds.count - 1))
+            }
+            groupEnd = group.count == 1 ? end : max(groupEnd, end)
+        }
+        closeGroup()
+        return result
+    }
+}

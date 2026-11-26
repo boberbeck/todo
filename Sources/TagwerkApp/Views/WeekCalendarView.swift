@@ -246,10 +246,18 @@ struct DayTimeline: View {
                     .offset(y: top)
             }
 
-            ForEach(model.dayEntries(day)) { entry in
-                EntryBlock(entry: entry, dayStart: dayStart, hourHeight: hourHeight, dayHeight: total)
-                    .padding(.leading, 16)
-                    .padding(.trailing, 4)
+            // Überlappende Einträge (z. B. Arbeit während eines Termins) nebeneinander statt übereinander
+            let dayEntries = model.dayEntries(day)
+            let lanes = CalendarLanes.assign(dayEntries.map { CalendarLanes.Item(id: $0.id, start: $0.start, end: $0.end ?? model.now) })
+            GeometryReader { geometry in
+                let width = max(0, geometry.size.width - 20)
+                ForEach(dayEntries) { entry in
+                    let lane = lanes[entry.id] ?? .single
+                    let laneWidth = width / CGFloat(lane.count)
+                    EntryBlock(entry: entry, dayStart: dayStart, hourHeight: hourHeight, dayHeight: total)
+                        .frame(width: max(8, laneWidth - (lane.count > 1 ? 2 : 0)))
+                        .offset(x: 16 + CGFloat(lane.index) * laneWidth)
+                }
             }
 
             if isToday {

@@ -157,3 +157,25 @@ final class TimeCarvingTests: XCTestCase {
         XCTAssertTrue(TimeCarving.carve([running], from: at(60), to: at(50), now: at(60)).saved.isEmpty)
     }
 }
+
+final class CalendarLanesTests: XCTestCase {
+    func testOverlappingEntriesSitSideBySide() {
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        func at(_ minutes: Double) -> Date { base.addingTimeInterval(minutes * 60) }
+        // Weekly 14:00–15:00, währenddessen eine Aufgabe 14:20–14:40; danach allein; später wieder zwei
+        let lanes = CalendarLanes.assign([
+            .init(id: "task", start: at(20), end: at(40)),
+            .init(id: "weekly", start: at(0), end: at(60)),
+            .init(id: "after", start: at(60), end: at(90)),
+            .init(id: "a", start: at(120), end: at(150)),
+            .init(id: "b", start: at(130), end: at(140)),
+            .init(id: "c", start: at(145), end: at(160)),
+        ])
+        XCTAssertEqual(lanes["weekly"], .init(index: 0, count: 2), "der längere zuerst links")
+        XCTAssertEqual(lanes["task"], .init(index: 1, count: 2))
+        XCTAssertEqual(lanes["after"], .single, "beginnt genau am Ende: keine Überlappung")
+        XCTAssertEqual(lanes["a"], .init(index: 0, count: 2))
+        XCTAssertEqual(lanes["b"], .init(index: 1, count: 2))
+        XCTAssertEqual(lanes["c"], .init(index: 1, count: 2), "nimmt die frei gewordene Spalte")
+    }
+}
