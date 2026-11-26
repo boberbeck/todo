@@ -613,6 +613,7 @@ struct TaskCard: View {
 
     var body: some View {
         let running = model.isRunning(task.id)
+        VStack(alignment: .leading, spacing: 6) {
         HStack(alignment: .top, spacing: 12) {
             Button {
                 model.toggleDone(task.id)
@@ -646,7 +647,7 @@ struct TaskCard: View {
                 if !compact, !task.isDone, model.resolved(task).hasTicket {
                     BookingSummary(task: task)
                 }
-                if model.expandedTaskIDs.contains(task.id) {
+                if !compact, model.expandedTaskIDs.contains(task.id) {
                     SubtaskList(parent: task)
                         .padding(.top, 2)
                 }
@@ -677,6 +678,11 @@ struct TaskCard: View {
                         }
                     }
                 }
+            }
+        }
+            // In schmalen Karten (Woche, Ziele) nutzen die Unteraufgaben die ganze Breite
+            if compact, model.expandedTaskIDs.contains(task.id) {
+                SubtaskList(parent: task)
             }
         }
         .padding(.horizontal, 16)

@@ -149,34 +149,25 @@ struct SubtaskRow: View {
                     .onExitCommand { isEditing = false }
                     .onChange(of: editorFocused) { if !editorFocused, isEditing { commitRename() } }
             } else {
-                // Eine Zeile; bei Namen wie „VMQPTESDMZ01.app.dmz updaten“ bleiben Anfang und Ende lesbar
-                Text(task.title)
-                    .font(.callout)
-                    .foregroundStyle(task.isDone ? Theme.secondary : Theme.text)
-                    .strikethrough(task.isDone, color: Theme.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .onTapGesture(count: 2) { beginRename() }
-                    .help("\(task.title)\n\nDoppelklick zum Umbenennen, ziehen zum Einplanen an einem eigenen Tag")
-            }
-
-            if !task.isDone, model.isPlannedOnItsOwn(task), let day = task.plannedDate {
-                let isToday = day == model.today
-                Text(DayText.short(day, today: model.today))
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(isToday ? Theme.accent : Theme.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(isToday ? Theme.accentSoft : Color.white.opacity(0.06)))
-                    .fixedSize()
-                    .help("Eigens eingeplant: steht an diesem Tag als eigene Aufgabe. Rechtsklick › „Wieder mit der Aufgabe planen“")
-            }
-
-            if let number = task.ticketNumber, number != model.parent(of: task)?.linkedTicketNumber {
-                Text("#\(number)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(Theme.tertiary)
-                    .help("Zeit geht auch als Worklog an Ticket #\(number)")
+                // Passt alles in eine Zeile, steht es in einer; in schmalen Spalten darf der Name zwei Zeilen haben
+                // (in der Mitte gekürzt, damit Anfang und Ende lesbar bleiben), Tag und Ticket stehen dann darunter.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) {
+                        titleText
+                            .lineLimit(1)
+                            .fixedSize()
+                        badges
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        titleText
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                        if hasBadges {
+                            HStack(spacing: 6) { badges }
+                        }
+                    }
+                }
+                .layoutPriority(1)
             }
 
             Spacer(minLength: 4)
@@ -225,6 +216,50 @@ struct SubtaskRow: View {
         }
         // Auf einen Tag, auf „Heute“ oder in den Kalender ziehen: eigener Tag bzw. Zeitblock
         .draggable(task.id.uuidString)
+    }
+
+    private var titleText: some View {
+        Text(task.title)
+            .font(.callout)
+            .foregroundStyle(task.isDone ? Theme.secondary : Theme.text)
+            .strikethrough(task.isDone, color: Theme.tertiary)
+            .onTapGesture(count: 2) { beginRename() }
+            .help("\(task.title)\n\nDoppelklick zum Umbenennen, ziehen zum Einplanen an einem eigenen Tag")
+    }
+
+    private var ownDay: LocalDate? {
+        guard !task.isDone, model.isPlannedOnItsOwn(task) else { return nil }
+        return task.plannedDate
+    }
+
+    private var ownTicket: String? {
+        guard let number = task.ticketNumber, number != model.parent(of: task)?.linkedTicketNumber else { return nil }
+        return number
+    }
+
+    private var hasBadges: Bool { ownDay != nil || ownTicket != nil }
+
+    /// Eigener Tag und eigenes Ticket
+    @ViewBuilder
+    private var badges: some View {
+        if let day = ownDay {
+            let isToday = day == model.today
+            Text(DayText.short(day, today: model.today))
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(isToday ? Theme.accent : Theme.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(isToday ? Theme.accentSoft : Color.white.opacity(0.06)))
+                .fixedSize()
+                .help("Eigens eingeplant: steht an diesem Tag als eigene Aufgabe. Rechtsklick › „Wieder mit der Aufgabe planen“")
+        }
+        if let number = ownTicket {
+            Text("#\(number)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(Theme.tertiary)
+                .fixedSize()
+                .help("Zeit geht auch als Worklog an Ticket #\(number)")
+        }
     }
 
     private func beginRename() {
