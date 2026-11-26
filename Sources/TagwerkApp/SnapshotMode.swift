@@ -209,7 +209,7 @@ enum SnapshotMode {
         await capture(window, name: "befehlszeile-anlegen", in: directory)
         model.showsCommandBar = false
 
-        for query in ["45m Telefonat Müller", "morgen Rechnung prüfen 30m", "Mittag", "weiter", "orga", "vpn", "fertig", "kalender"] {
+        for query in ["45m Telefonat Müller", "morgen Rechnung prüfen 30m", "Mittag", "weiter", "orga", "vpn", "wechseln zu angebot", "fertig", "kalender"] {
             let suggestions = model.commandSuggestions(for: query)
             guard let first = suggestions.first else {
                 log("Befehl „\(query)“: kein Vorschlag")

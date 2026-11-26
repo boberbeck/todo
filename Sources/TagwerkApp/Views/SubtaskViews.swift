@@ -531,6 +531,71 @@ struct BackdatedStartMenu: View {
     }
 }
 
+/// „Falsche Aufgabe?“ im Fokus: andere Aufgabe wählen. Läuft der Timer, wandert die bisherige Zeit mit,
+/// Timer und Pomodoro-Runde laufen weiter.
+struct SwitchTaskMenu: View {
+    @Environment(AppModel.self) private var model
+    let task: TaskItem
+
+    var body: some View {
+        let running = model.isRunning(task.id)
+        Menu {
+            SwitchTaskItems(current: task.id, offersSearch: true)
+        } label: {
+            Label(running ? "Falsche Aufgabe?" : "Andere Aufgabe", systemImage: "arrow.left.arrow.right")
+                .font(.callout)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .foregroundStyle(Theme.tertiary)
+        .tint(Theme.secondary)
+        .help(running ? "Aufgabe wechseln: die Zeit seit dem Start zählt dann für die neue Aufgabe, der Timer läuft weiter" : "Andere Aufgabe in den Fokus holen")
+    }
+}
+
+/// Aufgaben zum Wechseln: heute, Standardaufgaben, Eingang. Für Fokus, Titelleiste und Menüleiste.
+struct SwitchTaskItems: View {
+    @Environment(AppModel.self) private var model
+    let current: UUID?
+    /// „Andere suchen …“ öffnet die Befehlszeile (nur im Hauptfenster sinnvoll).
+    var offersSearch = false
+
+    var body: some View {
+        let today = model.todayTasks.filter { !$0.isDone && $0.id != current }
+        let standing = model.standingTasks.filter { $0.id != current }
+        let inbox = Array(model.inboxTasks.filter { $0.id != current }.prefix(10))
+        if today.isEmpty, standing.isEmpty, inbox.isEmpty {
+            Text("Keine anderen offenen Aufgaben")
+        }
+        if !today.isEmpty {
+            Section("Heute") {
+                ForEach(today) { task in
+                    Button(task.title) { model.switchTask(to: task.id) }
+                }
+            }
+        }
+        if !standing.isEmpty {
+            Section("Standardaufgaben") {
+                ForEach(standing) { task in
+                    Button(task.title) { model.switchTask(to: task.id) }
+                }
+            }
+        }
+        if !inbox.isEmpty {
+            Section("Eingang") {
+                ForEach(inbox) { task in
+                    Button(task.title) { model.switchTask(to: task.id) }
+                }
+            }
+        }
+        if offersSearch {
+            Divider()
+            Button("Andere suchen … (⌘K)") { model.openCommandBar(with: "wechseln zu ") }
+        }
+    }
+}
+
 /// Unteraufgaben unter einer Zeile, wenn sie aufgeklappt sind (Eingang, Kunden).
 struct ExpandedSubtasks: View {
     @Environment(AppModel.self) private var model

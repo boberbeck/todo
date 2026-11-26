@@ -342,7 +342,11 @@ struct RunningTimerPill: View {
                     .overlay(Capsule().strokeBorder(Theme.accent.opacity(0.35)))
                 }
                 .buttonStyle(.plain)
-                .help("Läuft – im Fokus öffnen")
+                .help("Läuft – im Fokus öffnen. Rechtsklick: falsche Aufgabe? Zeit auf eine andere umhängen")
+                .contextMenu {
+                    Text("Laufende Zeit umhängen auf")
+                    SwitchTaskItems(current: task.id, offersSearch: true)
+                }
                 Button {
                     model.startBreak()
                 } label: {

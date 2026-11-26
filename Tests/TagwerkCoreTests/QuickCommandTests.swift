@@ -172,6 +172,20 @@ final class QuickCommandTests: XCTestCase {
         XCTAssertFalse(QuickCommand.suggestions(for: "", in: working).map(\.action).contains(.absent(kind: .sick, from: today, through: today, halfDay: false)))
     }
 
+    func testSwitchesRunningTask() {
+        // Läuft die falsche Aufgabe, bietet der beste Treffer auch „Zeit umhängen“ an
+        XCTAssertTrue(actions("angebot", running: vpn.id).contains(.switchRunning(offer.id)))
+        XCTAssertFalse(actions("angebot").contains(.switchRunning(offer.id)), "ohne laufenden Timer nichts umzuhängen")
+        XCTAssertEqual(actions("wechseln zu angebot", running: vpn.id).first, .switchRunning(offer.id))
+        XCTAssertEqual(actions("eigentlich orga", running: vpn.id).first, .switchRunning(organisation.id))
+        XCTAssertFalse(actions("wechseln zu vpn", running: vpn.id).contains(.switchRunning(vpn.id)), "nicht auf sich selbst")
+        XCTAssertFalse(actions("wechseln zu angebot", running: vpn.id).contains { if case .startNew = $0 { return true } else { return false } })
+        XCTAssertEqual(QuickCommand.switchRest("umhängen auf Angebot"), "Angebot")
+        XCTAssertEqual(QuickCommand.switchRest("Wechseln Doku"), "Doku")
+        XCTAssertNil(QuickCommand.switchRest("wechseln"))
+        XCTAssertNil(QuickCommand.switchRest("Angebot wechseln"))
+    }
+
     func testIdleSuggestions() {
         let idle = actions("", running: vpn.id)
         XCTAssertEqual(idle.first, .complete(vpn.id))
@@ -182,5 +196,22 @@ final class QuickCommandTests: XCTestCase {
         XCTAssertFalse(idle.contains(.start(vpn.id)))
         XCTAssertEqual(actions("", lunch: true).first, .endLunch)
         XCTAssertLessThanOrEqual(QuickCommand.suggestions(for: "", in: context(running: vpn.id)).count, 8)
+    }
+}
+
+final class TimerSwitchTests: XCTestCase {
+    func testReassignMovesRunningEntryWithItsTime() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let wrong = UUID()
+        let right = UUID()
+        let earlier = TimeEntry(taskID: wrong, start: start.addingTimeInterval(-3600), end: start.addingTimeInterval(-1800))
+        let running = TimeEntry(taskID: wrong, start: start)
+        let moved = TimerLogic.reassignRunning(to: right, entries: [earlier, running])
+        XCTAssertEqual(moved?.id, running.id, "derselbe Eintrag, nur die Aufgabe ändert sich")
+        XCTAssertEqual(moved?.taskID, right)
+        XCTAssertEqual(moved?.start, start, "die Zeit seit dem Start wandert mit")
+        XCTAssertNil(moved?.end, "läuft weiter")
+        XCTAssertNil(TimerLogic.reassignRunning(to: wrong, entries: [earlier, running]), "schon die richtige Aufgabe")
+        XCTAssertNil(TimerLogic.reassignRunning(to: right, entries: [earlier]), "nichts läuft")
     }
 }

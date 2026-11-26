@@ -52,6 +52,11 @@ struct MenuBarContent: View {
                         Button("Erledigt") { model.complete(task.id) }
                     }
                 }
+                Menu("Falsche Aufgabe? Zeit umhängen") {
+                    SwitchTaskItems(current: task.id)
+                }
+                .fixedSize()
+                .help("Die Zeit seit dem Start zählt dann für die gewählte Aufgabe, der Timer läuft weiter")
             } else {
                 Text("Kein Timer aktiv")
                     .foregroundStyle(.secondary)

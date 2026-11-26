@@ -63,6 +63,8 @@ public enum CommandAction: Equatable, Sendable {
     case stop
     case complete(UUID)
     case focus(UUID)
+    /// Falsche Aufgabe gestartet: die laufende Zeit (seit dem Start) gehört ab jetzt zu dieser Aufgabe
+    case switchRunning(UUID)
     case startLunch
     case endLunch
     case open(CommandDestination)
@@ -149,6 +151,13 @@ public enum QuickCommand {
         // Feste Wörter: stopp, fertig, Mittag, weiter
         result += keywordSuggestions(key, context)
 
+        // „wechseln zu Angebot“, „eigentlich Angebot“: falsche Aufgabe gestartet
+        if context.runningTaskID != nil, let rest = switchRest(query) {
+            for (task, _) in rankedTasks(for: rest, in: context).prefix(4) where task.id != context.runningTaskID {
+                result.append(switchSuggestion(task))
+            }
+        }
+
         // „krank“, „krank bis Freitag“, „Urlaub morgen“
         let absenceParsed = absence(query, today: context.today, calendar: context.calendar)
         if let parsed = absenceParsed {
@@ -224,7 +233,8 @@ public enum QuickCommand {
             }
         }
 
-        // Bestehende Aufgaben
+        // Bestehende Aufgaben; läuft schon ein Timer, beim besten Treffer auch „Zeit umhängen“
+        var offersSwitch = context.runningTaskID != nil
         for (task, _) in rankedTasks(for: query, in: context).prefix(4) {
             if task.id == context.runningTaskID {
                 result.append(CommandSuggestion(
@@ -242,6 +252,10 @@ public enum QuickCommand {
                     symbol: task.isStanding ? "pin" : "play.fill",
                     action: .start(task.id)
                 ))
+                if offersSwitch {
+                    offersSwitch = false
+                    result.append(switchSuggestion(task))
+                }
             }
         }
 
@@ -257,7 +271,7 @@ public enum QuickCommand {
         }
 
         // Freier Text: neue Aufgabe jetzt starten oder anlegen
-        if !looksLikeCommand(query), result.allSatisfy({ !$0.id.hasPrefix("log") && !$0.id.hasPrefix("since") && !$0.id.hasPrefix("add") && !$0.id.hasPrefix("absen") }) {
+        if !looksLikeCommand(query), result.allSatisfy({ !$0.id.hasPrefix("log") && !$0.id.hasPrefix("since") && !$0.id.hasPrefix("add") && !$0.id.hasPrefix("absen") && !$0.id.hasPrefix("switch") }) {
             let split = DurationParser.split(title: query)
             let title = cleanTitle(split.title)
             if !title.isEmpty, title.count >= 2 {
@@ -280,6 +294,27 @@ public enum QuickCommand {
 
         var seen = Set<String>()
         return Array(result.filter { seen.insert($0.id).inserted }.prefix(limit))
+    }
+
+    static func switchSuggestion(_ task: TaskItem) -> CommandSuggestion {
+        CommandSuggestion(
+            id: "switch-\(task.id)",
+            title: "Laufende Zeit auf „\(task.title)“ umhängen",
+            detail: "Falsche Aufgabe gestartet? Die Zeit seit dem Start zählt dann hierfür, der Timer läuft weiter",
+            symbol: "arrow.left.arrow.right",
+            action: .switchRunning(task.id)
+        )
+    }
+
+    /// „wechseln zu Angebot“, „umhängen auf Angebot“, „eigentlich Angebot“ → „Angebot“.
+    public static func switchRest(_ query: String) -> String? {
+        var words = query.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard let first = words.first,
+              ["wechseln", "wechsel", "wechsle", "umhangen", "umbuchen", "eigentlich", "falsch"].contains(normalize(first)) else { return nil }
+        words.removeFirst()
+        if let next = words.first, ["zu", "auf", "nach"].contains(normalize(next)) { words.removeFirst() }
+        let rest = words.joined(separator: " ")
+        return rest.isEmpty ? nil : rest
     }
 
     // MARK: Ohne Eingabe

@@ -166,6 +166,7 @@ struct FocusTaskPane: View {
 
             HStack(spacing: 24) {
                 BackdatedStartMenu(task: task, asButton: true)
+                SwitchTaskMenu(task: task)
                 if running {
                     StartBreakButton()
                 }

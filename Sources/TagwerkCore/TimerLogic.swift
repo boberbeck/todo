@@ -56,6 +56,14 @@ public enum TimerLogic {
         return self.start(taskID: taskID, entries: entries, at: start)
     }
 
+    /// Falsche Aufgabe gestartet: Der laufende Eintrag gehört samt seiner bisherigen Zeit ab sofort zu `taskID`
+    /// und läuft weiter. `nil`, wenn nichts läuft oder er schon zu dieser Aufgabe gehört.
+    public static func reassignRunning(to taskID: UUID, entries: [TimeEntry]) -> TimeEntry? {
+        guard var current = running(in: entries), current.taskID != taskID else { return nil }
+        current.taskID = taskID
+        return current
+    }
+
     public static func start(taskID: UUID, entries: [TimeEntry], at now: Date) -> Change {
         if let running = running(in: entries), running.taskID == taskID {
             return Change()

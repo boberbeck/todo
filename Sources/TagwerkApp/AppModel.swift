@@ -574,6 +574,29 @@ final class AppModel {
         selection = .focus
     }
 
+    /// Andere Aufgabe in den Fokus. Läuft ein Timer (falsche Aufgabe gestartet), wandert die Zeit seit seinem Start mit;
+    /// Timer und Pomodoro-Runde laufen einfach weiter.
+    func switchTask(to taskID: UUID) {
+        guard let target = task(taskID), !target.isDone else { return }
+        if let moved = TimerLogic.reassignRunning(to: taskID, entries: entries) {
+            do {
+                try store.save(moved)
+                replace(moved)
+            } catch {
+                report(error)
+                return
+            }
+            if var current = pomodoro, current.phase == .work {
+                current.taskID = taskID
+                pomodoro = current
+            }
+            now = Date()
+            AppLog.info("Timer", "Laufende Zeit auf eine andere Aufgabe umgehängt")
+            showToast("Läuft jetzt für „\(target.title)“, samt der Zeit seit dem Start", symbol: "arrow.left.arrow.right")
+        }
+        focusedTaskID = taskID
+    }
+
     func requestNewTask() {
         selection = .today
         newTaskRequest += 1
@@ -1215,6 +1238,8 @@ final class AppModel {
             showToast("Erledigt: \(title)", symbol: "checkmark.circle.fill")
         case .focus(let id):
             openFocus(id)
+        case .switchRunning(let id):
+            switchTask(to: id)
         case .startLunch:
             startBreak()
             showToast("Mittagspause. Guten Appetit!", symbol: "fork.knife")
