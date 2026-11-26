@@ -513,6 +513,22 @@ final class ManageEngineAPITests: XCTestCase {
         XCTAssertEqual((worklog?["type"] as? [String: Any])?["name"] as? String, "Ticketbearbeitung")
     }
 
+    func testWorklogKeepsLineBreaks() throws {
+        XCTAssertEqual(ManageEngineAPI.worklogHTML("Logs geprüft & Tunnel neu"), "Logs geprüft & Tunnel neu", "eine Zeile bleibt")
+        XCTAssertEqual(
+            ManageEngineAPI.worklogHTML("Zugriff geprüft\n• VMQPDEV01 updaten: PHP 8.2.35 -> 8.2.36\r\n• A & B <neu>"),
+            "Zugriff geprüft<br>• VMQPDEV01 updaten: PHP 8.2.35 -&gt; 8.2.36<br>• A &amp; B &lt;neu&gt;"
+        )
+        let request = try ManageEngineAPI.addWorklog(
+            config: config, token: "T", requestKey: "1", description: "Erste\nZweite", minutes: 15,
+            start: Date(timeIntervalSince1970: 0), worklogType: nil
+        )
+        let body = String(decoding: request.httpBody ?? Data(), as: UTF8.self)
+        let json = String(body.dropFirst("input_data=".count)).removingPercentEncoding ?? ""
+        let worklog = (try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])?["worklog"] as? [String: Any]
+        XCTAssertEqual(worklog?["description"] as? String, "Erste<br>Zweite")
+    }
+
     func testWorklogVariants() throws {
         func worklog(_ variant: ManageEngineAPI.WorklogVariant) throws -> [String: Any] {
             let request = try ManageEngineAPI.addWorklog(
@@ -947,7 +963,7 @@ final class SubtaskAndTicketTests: XCTestCase {
         XCTAssertEqual(combined.trackedSeconds, 35 * 60)
         XCTAssertEqual(combined.minutes, TimeMath.rounded(35 * 60, toMinutes: 15, mode: .nearest), "einmal für alles gerundet")
         XCTAssertTrue(combined.issues.isEmpty, "\(combined.issues)")
-        XCTAssertEqual(combined.worklogDescription, "Planung abgestimmt\nRegeln exportieren: Regeln gesichert\nTest")
+        XCTAssertEqual(combined.worklogDescription, "Planung abgestimmt\n• Regeln exportieren: Regeln gesichert\n• Test")
 
         let prepared = DailyClose.prepare(combined, now: at(18))
         XCTAssertEqual(prepared.count, 1)
@@ -982,7 +998,7 @@ final class SubtaskAndTicketTests: XCTestCase {
         XCTAssertEqual(lines[0].displayTitle, "Firewall-Umzug")
         XCTAssertEqual(lines[0].task.id, first.id, "ohne Zeit auf der Aufgabe darüber: unter dem ersten Teil")
         XCTAssertEqual(lines[0].minutes, 60)
-        XCTAssertEqual(lines[0].worklogDescription, "Export: Regeln gesichert\nImport")
+        XCTAssertEqual(lines[0].worklogDescription, "• Export: Regeln gesichert\n• Import")
         XCTAssertTrue(lines[0].issues.isEmpty, "ein Text reicht")
 
         // Ganz ohne Text: Hinweis wie bei einer einzelnen Aufgabe

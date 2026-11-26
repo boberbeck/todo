@@ -166,22 +166,22 @@ public struct BookingLine: Identifiable, Equatable, Sendable {
     }
 
     /// Text für den Worklog in ManageEngine. Zusammengefasst: je Teil eine Zeile
-    /// (die Aufgabe selbst mit ihrem Text, Unteraufgaben als „Titel: Text“).
+    /// (die Aufgabe selbst mit ihrem Text, Unteraufgaben als „• Titel: Text“).
     public var worklogDescription: String {
-        if isCombined { return combinedDescription(separator: "\n") }
+        if isCombined { return combinedDescription(separator: "\n", bullet: "• ") }
         return task.workDescription.isEmpty ? displayTitle : task.workDescription
     }
 
     /// Bearbeitungstext für die Liste (ohne Rückfall auf den Titel).
     public var listDescription: String {
-        isCombined ? combinedDescription(separator: "; ") : task.workDescription
+        isCombined ? combinedDescription(separator: "; ", bullet: "") : task.workDescription
     }
 
-    func combinedDescription(separator: String) -> String {
+    func combinedDescription(separator: String, bullet: String) -> String {
         parts.compactMap { part -> String? in
             let text = part.task.workDescription.trimmingCharacters(in: .whitespacesAndNewlines)
             if !part.task.isSubtask { return text.isEmpty ? nil : text }
-            return text.isEmpty ? part.task.title : "\(part.task.title): \(text)"
+            return bullet + (text.isEmpty ? part.task.title : "\(part.task.title): \(text)")
         }
         .joined(separator: separator)
     }

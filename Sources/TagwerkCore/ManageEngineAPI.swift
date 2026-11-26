@@ -145,6 +145,24 @@ public enum ManageEngineAPI {
         return try get(path: "/api/v3/requests", input: input, config: config, token: token, requireTechnician: false)
     }
 
+    /// ManageEngine zeigt die Beschreibung als formatierten Text (HTML) und verschluckt Zeilenumbrüche.
+    /// Mehrzeiliges wird darum zu Zeilen mit `<br>` (Sonderzeichen maskiert); eine einzelne Zeile bleibt, wie sie ist.
+    public static func worklogHTML(_ text: String) -> String {
+        let lines = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+        guard lines.count > 1 else { return text }
+        return lines
+            .map { line in
+                line.replacingOccurrences(of: "&", with: "&amp;")
+                    .replacingOccurrences(of: "<", with: "&lt;")
+                    .replacingOccurrences(of: ">", with: "&gt;")
+            }
+            .joined(separator: "<br>")
+    }
+
     /// Legt einen Worklog am Ticket an: Beschreibung, Dauer, Start und Ende.
     public static func addWorklog(
         config: ManageEngineConfig,
@@ -160,7 +178,7 @@ public enum ManageEngineAPI {
         guard config.technicianIDIsNumeric else { throw ManageEngineError.technicianNotNumeric }
         let end = start.addingTimeInterval(TimeInterval(minutes * 60))
         var worklog: [String: Any] = [
-            "description": description,
+            "description": worklogHTML(description),
             "owner": ["id": config.trimmedTechnician],
             "start_time": ["value": String(Int64(start.timeIntervalSince1970 * 1000))],
             "end_time": ["value": String(Int64(end.timeIntervalSince1970 * 1000))],
