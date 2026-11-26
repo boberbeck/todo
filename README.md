@@ -82,7 +82,7 @@ Für den Kalenderzugriff am besten `scripts/make-app.sh` nutzen und `build/Tagwe
 
 ## Termine als Zeit erfassen
 
-Termine aus dem Kalender werden per Rechtsklick oder Doppelklick › „Als Zeit erfassen …“ zur erfassten Zeit, mit Kunde; Tagwerk merkt sich den Kunden je Termintitel. Im Tagesabschluss ist der Worklog im Ticket freiwillig („Ohne Worklog“).
+Termine aus dem Kalender werden per Rechtsklick oder Doppelklick › „Als Zeit erfassen …“ zur erfassten Zeit, mit Kunde; Tagwerk merkt sich den Kunden je Termintitel. Danach zeigt Tagwerk nur noch die Aufgabe: im Wochenkalender und im Tagesband steht der erfasste Eintrag statt des Termins, im Tageskalender auf Start der Block mit Titel und Kunde der Aufgabe (Doppelklick öffnet sie). Im Kalender selbst bleibt der Termin. Im Tagesabschluss ist der Worklog im Ticket freiwillig („Ohne Worklog“).
 
 SAP ByDesign ist nicht mehr eingebaut. Beim ersten Start der neuen Fassung räumt Tagwerk das gespeicherte ByDesign-Passwort, die Anmeldung im früheren ByDesign-Fenster und die Einstellungen dazu weg. Alte Daten in der Datenbank bleiben unangetastet, werden aber nicht mehr gelesen.
 

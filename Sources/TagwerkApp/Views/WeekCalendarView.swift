@@ -217,7 +217,8 @@ struct DayTimeline: View {
                 }
             }
 
-            ForEach(model.calendarEvents(on: day).filter { !$0.isAllDay }) { event in
+            // Als Aufgabe erfasste Termine stehen nur noch als Aufgabe (Zeitblock unten) da
+            ForEach(model.calendarEvents(on: day).filter { !$0.isAllDay && !model.isShownAsTask($0) }) { event in
                 let top = max(0, y(event.start))
                 EventBlock(event: event, height: max(16, min(total, y(event.end)) - top), logged: model.isLogged(event))
                     .padding(.horizontal, 4)

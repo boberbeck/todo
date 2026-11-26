@@ -288,9 +288,14 @@ struct EventBlock: View {
     @State private var showsLogSheet = false
 
     var body: some View {
+        // Als Aufgabe erfasst: statt des Termins steht die Aufgabe da (Titel und Kunde der Aufgabe)
+        let task = logged ? model.loggedTask(for: event) : nil
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
-                Text(event.displayTitle)
+                if let customer = model.customer(task?.customerID) {
+                    CustomerDot(colorIndex: customer.colorIndex, size: 6)
+                }
+                Text(task?.title ?? event.displayTitle)
                     .font(.caption.weight(.medium))
                     .lineLimit(1)
                 if logged {
@@ -318,13 +323,21 @@ struct EventBlock: View {
                 .stroke(Color.primary.opacity(0.15))
         )
         .contextMenu {
-            Button(logged ? "Schon als Zeit erfasst" : "Als Zeit erfassen …") {
-                showsLogSheet = true
+            if let task {
+                Button("Aufgabe öffnen …") { model.openDetail(task.id) }
+            } else {
+                Button(logged ? "Schon als Zeit erfasst" : "Als Zeit erfassen …") {
+                    showsLogSheet = true
+                }
+                .disabled(logged)
             }
-            .disabled(logged)
         }
         .onTapGesture(count: 2) {
-            if !logged { showsLogSheet = true }
+            if let task {
+                model.openDetail(task.id)
+            } else if !logged {
+                showsLogSheet = true
+            }
         }
         .sheet(isPresented: $showsLogSheet) {
             LogEventSheet(event: event)

@@ -55,6 +55,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Der Timer läuft in der Menüleiste weiter, auch wenn das Fenster zu ist.
         false
     }
+
+    /// Klick auf das Dock-Symbol: das Hauptfenster wieder öffnen (auch wenn es geschlossen war).
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MainActor.assumeIsolated {
+            MainWindow.show()
+        }
+        return true
+    }
+}
+
+/// Öffnet das Hauptfenster von außerhalb einer Ansicht (Dock-Symbol). Die Menüleiste meldet dafür beim Start,
+/// wie SwiftUI das Fenster öffnet; sie ist immer da, auch wenn das Fenster zu ist.
+@MainActor
+enum MainWindow {
+    private static var opener: (() -> Void)?
+
+    static func register(_ open: @escaping () -> Void) {
+        opener = open
+    }
+
+    static func show() {
+        if let opener {
+            opener()
+        } else if let window = NSApp.windows.first(where: { $0.identifier?.rawValue.contains("main") == true })
+            ?? NSApp.windows.first(where: { $0.canBecomeMain && !($0 is NSPanel) }) {
+            window.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate()
+    }
 }
 
 struct TagwerkCommands: Commands {

@@ -58,7 +58,7 @@ struct DayBand: View {
                         .frame(width: scale.width(from: work.start, to: work.end), height: barHeight)
                         .offset(x: scale.x(work.start), y: sunSpace)
 
-                    ForEach(model.timedEvents) { event in
+                    ForEach(model.timedEvents.filter { !model.isShownAsTask($0) }) { event in
                         BandSegment(kind: .event, x: scale.x(event.start), width: scale.width(from: event.start, to: event.end), height: barHeight)
                             .offset(y: sunSpace)
                             .help("\(event.displayTitle) · \(Self.clock(event.start))–\(Self.clock(event.end))")

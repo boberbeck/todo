@@ -5,14 +5,21 @@ import TagwerkCore
 /// Text in der Menüleiste: laufende Zeit und Aufgabe, sonst nur ein Symbol.
 struct MenuBarLabel: View {
     let model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        if let task = model.runningTask {
-            Text("▶ \(TimeMath.format(model.tracked(taskID: task.id, now: model.now))) \(String(task.title.prefix(20)))")
-        } else if let pause = model.runningBreak {
-            Text("Mittag \(TimeMath.format(pause.duration(now: model.now)))")
-        } else {
-            Image(systemName: "checklist")
+        Group {
+            if let task = model.runningTask {
+                Text("▶ \(TimeMath.format(model.tracked(taskID: task.id, now: model.now))) \(String(task.title.prefix(20)))")
+            } else if let pause = model.runningBreak {
+                Text("Mittag \(TimeMath.format(pause.duration(now: model.now)))")
+            } else {
+                Image(systemName: "checklist")
+            }
+        }
+        // Damit ein Klick aufs Dock-Symbol das Fenster wieder öffnen kann
+        .onAppear {
+            MainWindow.register { openWindow(id: "main") }
         }
     }
 }

@@ -894,6 +894,18 @@ final class AppModel {
         tasks.contains { $0.source == .calendar && $0.externalID == event.id }
     }
 
+    /// Aufgabe, die aus diesem Termin erfasst wurde.
+    func loggedTask(for event: CalendarEvent) -> TaskItem? {
+        tasks.first { $0.source == .calendar && $0.externalID == event.id }
+    }
+
+    /// Termin, der als Aufgabe mit erfasster Zeit in Tagwerk steht: dort zeigt Tagwerk nur noch die Aufgabe.
+    /// Im Kalender selbst bleibt der Termin.
+    func isShownAsTask(_ event: CalendarEvent) -> Bool {
+        guard let task = loggedTask(for: event) else { return false }
+        return entries.contains { $0.taskID == task.id }
+    }
+
     func requestCalendarAccess() async {
         calendarAccess = await calendarProvider.requestAccess()
         AppLog.info("Kalender", "Zugriff angefragt: \(calendarAccess)")
