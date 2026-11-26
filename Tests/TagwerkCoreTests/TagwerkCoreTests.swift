@@ -648,6 +648,20 @@ final class ReviewTests: XCTestCase {
         XCTAssertEqual(header.messageID, "<abc@example.com>")
     }
 
+    func testEmailHeaderUTF16AndDropTitle() {
+        let mail = "From: Max Muster <max@example.com>\r\nSubject: Angebot prüfen\r\n\r\nText"
+        var utf16 = Data([0xFF, 0xFE])
+        utf16.append(mail.data(using: .utf16LittleEndian)!)
+        XCTAssertEqual(EmailHeaderParser.parse(utf16).subject, "Angebot prüfen")
+        XCTAssertEqual(EmailHeaderParser.parse(mail.data(using: .utf16LittleEndian)!).from, "Max Muster", "auch ohne Kennung am Anfang")
+
+        XCTAssertEqual(MailDropTitle.best(subject: "Rechnung", suggestedName: "x.eml", fileName: nil, text: nil), "Rechnung")
+        XCTAssertEqual(MailDropTitle.best(subject: nil, suggestedName: "Angebot Müller.eml", fileName: "1234.eml", text: nil), "Angebot Müller")
+        XCTAssertEqual(MailDropTitle.best(subject: " ", suggestedName: "Untitled", fileName: "Server-Wartung.msg", text: nil), "Server-Wartung")
+        XCTAssertEqual(MailDropTitle.best(subject: nil, suggestedName: "3F2A9C10-77B1-4E0B-9C1E-0A1B2C3D4E5F", fileName: nil, text: "\n  Bitte VPN prüfen\nMehr Text"), "Bitte VPN prüfen")
+        XCTAssertNil(MailDropTitle.best(subject: nil, suggestedName: "message", fileName: "12345.eml", text: nil))
+    }
+
     func testEmailFromWithoutName() {
         let header = EmailHeaderParser.parse(Data("From: <service@example.com>\nSubject: Test\n\nx".utf8))
         XCTAssertEqual(header.from, "service@example.com")

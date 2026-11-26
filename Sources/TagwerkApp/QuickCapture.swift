@@ -161,22 +161,44 @@ enum DropImporter {
                 UTType(identifier)?.conforms(to: .emailMessage) ?? false
             }) {
                 handled = true
+                // Das neue Outlook liefert beim Ziehen nicht immer eine lesbare Mail-Datei. Dann helfen der vorgeschlagene
+                // Name oder mitgelieferter Text. Was ankam, steht (ohne Inhalt) im Protokoll.
+                let suggested = provider.suggestedName
+                let types = provider.registeredTypeIdentifiers.joined(separator: ", ")
+                let hasText = provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier)
                 _ = provider.loadFileRepresentation(forTypeIdentifier: mailType) { url, _ in
-                    guard let url, let data = try? Data(contentsOf: url) else { return }
-                    let header = EmailHeaderParser.parse(data)
+                    let data = url.flatMap { try? Data(contentsOf: $0) }
+                    let header = data.map(EmailHeaderParser.parse)
+                    let fileName = url?.lastPathComponent
+                    let note = "Typen: \(types) · Name: \(suggested == nil ? "keiner" : "vorhanden") · Datei: .\(url?.pathExtension ?? "–"), \(data?.count ?? 0) Bytes, beginnt mit \(signature(data)) · Betreff \(header?.subject == nil ? "nicht gefunden" : "gefunden")"
+                    let title = MailDropTitle.best(subject: header?.subject, suggestedName: suggested, fileName: fileName, text: nil)
                     Task { @MainActor in
-                        model.addMailTask(subject: header.subject, from: header.from, link: nil)
+                        AppLog.info("Mail-Drop", note)
+                        if title == nil, hasText {
+                            _ = provider.loadObject(ofClass: String.self) { text, _ in
+                                let fromText = MailDropTitle.best(subject: nil, suggestedName: nil, fileName: nil, text: text)
+                                Task { @MainActor in
+                                    model.addMailTask(subject: fromText, from: header?.from, link: nil)
+                                }
+                            }
+                        } else {
+                            model.addMailTask(subject: title, from: header?.from, link: nil)
+                        }
                     }
                 }
             } else if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                 handled = true
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
                     guard let url else { return }
-                    let isMail = url.pathExtension.lowercased() == "eml"
-                    let header = isMail ? (try? Data(contentsOf: url)).map(EmailHeaderParser.parse) : nil
+                    let isMail = ["eml", "msg", "emlx"].contains(url.pathExtension.lowercased())
+                    let data = isMail ? try? Data(contentsOf: url) : nil
+                    let header = data.map(EmailHeaderParser.parse)
+                    let note = "Datei: .\(url.pathExtension), \(data?.count ?? 0) Bytes, beginnt mit \(signature(data)) · Betreff \(header?.subject == nil ? "nicht gefunden" : "gefunden")"
                     Task { @MainActor in
-                        if let header {
-                            model.addMailTask(subject: header.subject, from: header.from, link: nil)
+                        if isMail {
+                            AppLog.info("Mail-Drop", note)
+                            let title = MailDropTitle.best(subject: header?.subject, suggestedName: nil, fileName: url.lastPathComponent, text: nil)
+                            model.addMailTask(subject: title, from: header?.from, link: nil)
                         } else {
                             model.addMailTask(subject: url.deletingPathExtension().lastPathComponent, from: nil, link: url.absoluteString)
                         }
@@ -206,5 +228,11 @@ enum DropImporter {
             }
         }
         return handled
+    }
+
+    /// Die ersten Bytes als Hex, um das Format zu erkennen (z. B. D0CF11E0 = Outlook-.msg), ohne Inhalt zu protokollieren.
+    static func signature(_ data: Data?) -> String {
+        guard let data, !data.isEmpty else { return "–" }
+        return data.prefix(4).map { String(format: "%02X", $0) }.joined()
     }
 }

@@ -108,7 +108,7 @@ public enum EmailHeaderParser {
     }
 
     public static func parse(_ data: Data) -> Header {
-        let text = String(decoding: data.prefix(64 * 1024), as: UTF8.self)
+        let text = decodedText(data.prefix(64 * 1024))
         // Kopf endet an der ersten Leerzeile
         let headerPart: Substring
         if let range = text.range(of: "\r\n\r\n") ?? text.range(of: "\n\n") {
@@ -137,6 +137,24 @@ public enum EmailHeaderParser {
             date: fields["date"],
             messageID: fields["message-id"]
         )
+    }
+
+    /// Text der Datei: UTF-8, oder UTF-16 (mit oder ohne Kennung am Anfang), wie es manche Programme beim Ziehen liefern.
+    static func decodedText(_ data: Data) -> String {
+        let bytes = [UInt8](data)
+        if bytes.starts(with: [0xFF, 0xFE]) {
+            return String(data: Data(bytes.dropFirst(2)), encoding: .utf16LittleEndian) ?? ""
+        }
+        if bytes.starts(with: [0xFE, 0xFF]) {
+            return String(data: Data(bytes.dropFirst(2)), encoding: .utf16BigEndian) ?? ""
+        }
+        // Viele Null-Bytes an ungeraden Stellen: UTF-16 ohne Kennung
+        let sample = bytes.prefix(400)
+        let oddZeros = stride(from: 1, to: sample.count, by: 2).filter { sample[$0] == 0 }.count
+        if sample.count >= 20, oddZeros * 2 > sample.count / 2 {
+            return String(data: Data(bytes.prefix(bytes.count - bytes.count % 2)), encoding: .utf16LittleEndian) ?? ""
+        }
+        return String(decoding: data, as: UTF8.self)
     }
 
     /// "Max Muster <max@example.com>" → "Max Muster", sonst die Adresse.
@@ -279,5 +297,45 @@ public enum TimeExport {
     static func escape(_ field: String) -> String {
         guard field.contains(";") || field.contains("\"") || field.contains("\n") else { return field }
         return "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    }
+}
+
+/// Titel für eine in den Eingang gezogene Mail. Manche Mail-Programme (z. B. das neue Outlook) liefern beim Ziehen keine
+/// lesbare Mail-Datei; dann helfen der vorgeschlagene Name, der Dateiname oder mitgelieferter Text.
+public enum MailDropTitle {
+    public static func best(subject: String?, suggestedName: String?, fileName: String?, text: String?) -> String? {
+        if let subject = clean(subject) { return subject }
+        for name in [suggestedName, fileName] {
+            if let usable = usableName(name) { return usable }
+        }
+        if let line = text?
+            .components(separatedBy: .newlines)
+            .map({ $0.trimmingCharacters(in: .whitespaces) })
+            .first(where: { !$0.isEmpty }) {
+            return String(line.prefix(120))
+        }
+        return nil
+    }
+
+    private static func clean(_ text: String?) -> String? {
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    /// Dateiname ohne Endung, aber keine Platzhalter wie „Untitled“, „message“ oder eine reine Kennung.
+    static func usableName(_ name: String?) -> String? {
+        guard var base = clean(name) else { return nil }
+        for ending in [".eml", ".msg", ".emlx", ".mbox", ".txt"] where base.lowercased().hasSuffix(ending) {
+            base = String(base.dropLast(ending.count))
+        }
+        base = base.trimmingCharacters(in: .whitespaces)
+        let lower = base.lowercased()
+        let placeholders = ["untitled", "unbenannt", "message", "mail", "email", "e-mail", "outlook", "nachricht", "attachment"]
+        if base.isEmpty || placeholders.contains(lower) { return nil }
+        if lower.hasPrefix("untitled ") || lower.hasPrefix("message ") { return nil }
+        let hexish = base.allSatisfy { $0.isHexDigit || $0 == "-" || $0 == "_" }
+        if hexish, base.count >= 8 { return nil }
+        if base.allSatisfy(\.isNumber) { return nil }
+        return base
     }
 }
