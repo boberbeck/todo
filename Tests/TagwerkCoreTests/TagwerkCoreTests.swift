@@ -677,6 +677,16 @@ final class ReviewTests: XCTestCase {
         XCTAssertEqual(header?.subject, "VPN-Störung Standort Nord")
         XCTAssertEqual(header?.from, "Jürgen Müller")
         XCTAssertNil(MailDropPayload.mailHeader(fromFileURLData: Data("file:///Users/test/Downloads/Angebot.eml".utf8)), "echter Link")
+
+        // Beim Ziehen wird daraus ein „Link“ mit Schema „Received“; sein Inhalt bleibt erhalten
+        let asURL = URL(dataRepresentation: Data(source.utf8), relativeTo: nil)
+        XCTAssertNotNil(asURL)
+        XCTAssertEqual(asURL?.scheme, "Received")
+        XCTAssertFalse(asURL?.isFileURL ?? true)
+        let fromURL = asURL.flatMap { MailDropPayload.mailHeader(fromFileURLData: $0.dataRepresentation) }
+            ?? asURL?.absoluteString.removingPercentEncoding.flatMap { MailDropPayload.mailHeader(fromFileURLData: Data($0.utf8)) }
+        XCTAssertEqual(fromURL?.subject, "VPN-Störung Standort Nord")
+        XCTAssertEqual(fromURL?.from, "Jürgen Müller")
         XCTAssertNil(MailDropPayload.mailHeader(fromFileURLData: Data("irgendein Text ohne Kopf".utf8)))
     }
 

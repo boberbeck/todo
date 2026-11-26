@@ -203,19 +203,21 @@ enum DropImporter {
                         Task { @MainActor in AppLog.warning("Mail-Drop", "Datei-Link nicht lesbar: \(failure)") }
                         return
                     }
-                    // Das neue Outlook legt statt eines Links den Quelltext der Mail ab („Received: …“)
+                    // Das neue Outlook legt statt eines Links den Quelltext der Mail ab („Received: …“). Der steckt schon
+                    // in diesem „Link“: ein zweites Laden käme nach dem Ziehen nicht mehr an.
                     guard url.isFileURL else {
-                        _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
-                            let header = data.flatMap(MailDropPayload.mailHeader(fromFileURLData:))
-                            let title = MailDropTitle.best(subject: header?.subject, suggestedName: suggested, fileName: nil, text: nil)
-                            let note = "Mail als Quelltext statt Datei-Link: \(data?.count ?? 0) Bytes · Betreff \(header?.subject == nil ? "nicht gefunden" : "gefunden") · Absender \(header?.from == nil ? "nicht gefunden" : "gefunden")"
-                            Task { @MainActor in
-                                AppLog.info("Mail-Drop", note)
-                                if header != nil || title != nil {
-                                    model.addMailTask(subject: title, from: header?.from, link: nil, plannedDate: plannedDate)
-                                } else {
-                                    model.reportUnreadableDrop()
-                                }
+                        let raw = url.dataRepresentation
+                        let decoded = url.absoluteString.removingPercentEncoding.map { Data($0.utf8) }
+                        let header = MailDropPayload.mailHeader(fromFileURLData: raw)
+                            ?? decoded.flatMap(MailDropPayload.mailHeader(fromFileURLData:))
+                        let title = MailDropTitle.best(subject: header?.subject, suggestedName: suggested, fileName: nil, text: nil)
+                        let note = "Mail als Quelltext statt Datei-Link: \(raw.count) Bytes · Betreff \(header?.subject == nil ? "nicht gefunden" : "gefunden") · Absender \(header?.from == nil ? "nicht gefunden" : "gefunden")"
+                        Task { @MainActor in
+                            AppLog.info("Mail-Drop", note)
+                            if header != nil || title != nil {
+                                model.addMailTask(subject: title, from: header?.from, link: nil, plannedDate: plannedDate)
+                            } else {
+                                model.reportUnreadableDrop()
                             }
                         }
                         return
