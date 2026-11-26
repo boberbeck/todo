@@ -177,37 +177,30 @@ struct SubtaskRow: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(running ? Theme.text : Theme.tertiary)
             }
-            if !task.isDone, hovering || running {
-                Button {
-                    showsTicketPicker = true
-                } label: {
-                    Image(systemName: "ticket")
-                        .font(.system(size: 11))
-                        .frame(width: 20, height: 20)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(task.ticketNumber == nil ? Theme.tertiary : Theme.secondary)
-                .help("Ticket zuordnen")
-                .popover(isPresented: $showsTicketPicker, arrowEdge: .bottom) {
-                    TicketPicker(taskID: task.id) { showsTicketPicker = false }
-                }
-
-                Button {
-                    model.toggleTimer(for: task.id)
-                } label: {
-                    Image(systemName: running ? "pause.fill" : "play.fill")
-                        .font(.system(size: 9))
-                        .frame(width: 20, height: 20)
-                        .background(Circle().fill(running ? Theme.accent : Color.white.opacity(0.08)))
-                        .foregroundStyle(running ? Color.black.opacity(0.85) : Theme.text)
-                }
-                .buttonStyle(.plain)
-                .help(running ? "Timer stoppen" : "Timer für diese Unteraufgabe starten")
+            // Läuft der Timer, bleibt „Pause“ fest stehen; alles andere erscheint erst beim Darüberfahren
+            if running {
+                timerButton(running: true)
             }
         }
         .padding(.vertical, 3)
         .padding(.horizontal, 4)
         .background(RoundedRectangle(cornerRadius: 6).fill(running ? Theme.accentSoft : (hovering ? Color.white.opacity(0.04) : .clear)))
+        // Knöpfe beim Darüberfahren schweben über dem Ende der Zeile, statt den Namen zu verdrängen
+        .overlay(alignment: .trailing) {
+            if !task.isDone, hovering {
+                HStack(spacing: 2) {
+                    ticketButton
+                    if !running {
+                        timerButton(running: false)
+                    }
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Theme.surfaceFloating))
+                .overlay(Capsule().strokeBorder(Theme.border))
+                .padding(.trailing, running ? 30 : 2)
+            }
+        }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .contextMenu {
@@ -216,6 +209,36 @@ struct SubtaskRow: View {
         }
         // Auf einen Tag, auf „Heute“ oder in den Kalender ziehen: eigener Tag bzw. Zeitblock
         .draggable(task.id.uuidString)
+    }
+
+    private var ticketButton: some View {
+        Button {
+            showsTicketPicker = true
+        } label: {
+            Image(systemName: "ticket")
+                .font(.system(size: 11))
+                .frame(width: 20, height: 20)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(task.ticketNumber == nil ? Theme.tertiary : Theme.secondary)
+        .help("Ticket zuordnen")
+        .popover(isPresented: $showsTicketPicker, arrowEdge: .bottom) {
+            TicketPicker(taskID: task.id) { showsTicketPicker = false }
+        }
+    }
+
+    private func timerButton(running: Bool) -> some View {
+        Button {
+            model.toggleTimer(for: task.id)
+        } label: {
+            Image(systemName: running ? "pause.fill" : "play.fill")
+                .font(.system(size: 9))
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(running ? Theme.accent : Color.white.opacity(0.08)))
+                .foregroundStyle(running ? Color.black.opacity(0.85) : Theme.text)
+        }
+        .buttonStyle(.plain)
+        .help(running ? "Timer stoppen" : "Timer für diese Unteraufgabe starten")
     }
 
     private var titleText: some View {

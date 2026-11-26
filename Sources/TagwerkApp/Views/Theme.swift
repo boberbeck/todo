@@ -655,26 +655,22 @@ struct TaskCard: View {
 
             Spacer(minLength: 4)
 
-            if !compact || running || hovering {
+            // In schmalen Karten nimmt nur ein laufender Timer Platz ein; die Knöpfe beim Darüberfahren
+            // schweben oben rechts, damit Titel und Unteraufgaben nicht zusammengeschoben werden.
+            if !compact || running {
                 VStack(alignment: .trailing, spacing: 6) {
                     if !compact {
                         Text(model.timeLabel(for: task, now: running ? model.now : Date()))
                             .font(.system(.callout, design: .rounded).weight(running ? .medium : .regular).monospacedDigit())
                             .foregroundStyle(running ? Theme.text : Theme.secondary)
                     }
-                    if !task.isDone, running || hovering {
+                    if !task.isDone, running || (hovering && !compact) {
                         HStack(spacing: 6) {
-                            if hovering {
+                            if hovering, !compact {
                                 OpenDetailButton(task: task)
                                 AddSubtaskButton(task: task)
                             }
-                            Button {
-                                model.toggleTimer(for: task.id)
-                            } label: {
-                                Image(systemName: running ? "pause.fill" : "play.fill")
-                            }
-                            .buttonStyle(IconButtonStyle(size: 28, prominent: running))
-                            .help(running ? "Timer stoppen" : "Timer starten")
+                            timerButton(running: running)
                         }
                     }
                 }
@@ -694,6 +690,23 @@ struct TaskCard: View {
             fill: hovering ? Theme.surfaceRaised : Theme.surface
         )
         .animation(.easeOut(duration: 0.12), value: hovering)
+        .overlay(alignment: .topTrailing) {
+            if compact, hovering, !task.isDone {
+                HStack(spacing: 6) {
+                    OpenDetailButton(task: task)
+                    AddSubtaskButton(task: task)
+                    if !running {
+                        timerButton(running: false)
+                    }
+                }
+                .padding(4)
+                .background(Capsule().fill(Theme.surfaceFloating))
+                .overlay(Capsule().strokeBorder(Theme.border))
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+                .padding(.top, 6)
+                .padding(.trailing, running ? 50 : 8)
+            }
+        }
         .overlay(alignment: .top) {
             if isDropTarget {
                 Capsule()
@@ -716,6 +729,16 @@ struct TaskCard: View {
             }
             return !ids.isEmpty
         } isTargeted: { isDropTarget = $0 && allowsDrop }
+    }
+
+    private func timerButton(running: Bool) -> some View {
+        Button {
+            model.toggleTimer(for: task.id)
+        } label: {
+            Image(systemName: running ? "pause.fill" : "play.fill")
+        }
+        .buttonStyle(IconButtonStyle(size: 28, prominent: running))
+        .help(running ? "Timer stoppen" : "Timer starten")
     }
 }
 

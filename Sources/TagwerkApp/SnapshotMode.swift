@@ -51,7 +51,9 @@ enum SnapshotMode {
         model.music.isDemo = true
         model.music.selectedPlaylist = "Fokus am Morgen"
         // Unteraufgaben der Beispielaufgaben aufgeklappt zeigen
-        model.expandedTaskIDs = Set(model.todayTasks.filter { !model.subtasks(of: $0.id).isEmpty && $0.title.hasPrefix("Angebot") }.map(\.id))
+        model.expandedTaskIDs = Set(model.tasks.filter { task in
+            !model.subtasks(of: task.id).isEmpty && (task.title.hasPrefix("Angebot Wartung") || task.title.hasPrefix("Kritische"))
+        }.map(\.id))
 
         var screens: [(name: String, item: SidebarItem)] = [
             ("start", .today),

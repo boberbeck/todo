@@ -143,6 +143,22 @@ enum DemoData {
             TaskItem(title: "Backup-Konzept skizzieren", customerID: stadtwerke.id, estimateMinutes: 120, createdAt: now.addingTimeInterval(-50 * hour)),
         ]
 
+        // Viele Unteraufgaben mit langen Servernamen: so sieht eine schmale Spalte im Wochenplan aus
+        let patch = TaskItem(title: "Kritische Sicherheitslücke PHP", customerID: stadtwerke.id, estimateMinutes: 90,
+                             createdAt: now.addingTimeInterval(-5 * minute), ticketNumber: "1250", ticketKey: "100150")
+        let servers = ["WEBDEV01", "WEBTEST01", "WEBPROD01", "WEBDEVDMZ01.app.dmz", "WEBTESTDMZ01.app.dmz", "WEBPRODDMZ01.app.dmz"]
+        let patchSteps = servers.enumerated().map { index, server in
+            TaskItem(title: "\(server) updaten", customerID: stadtwerke.id, status: index == 3 ? .done : .open,
+                     completedAt: index == 3 ? now.addingTimeInterval(-26 * hour) : nil,
+                     sortIndex: Double(index + 1), createdAt: now.addingTimeInterval(-5 * minute), parentID: patch.id)
+        }
+        tasks.append(patch)
+        tasks += patchSteps
+        let yesterdayAfternoon = FreeTime.date(on: today.adding(days: -1, calendar: calendar), minutes: 14 * 60, calendar: calendar)
+        entries.append(TimeEntry(taskID: patchSteps[0].id, start: yesterdayAfternoon, end: yesterdayAfternoon.addingTimeInterval(38 * minute)))
+        entries.append(TimeEntry(taskID: patchSteps[3].id, start: yesterdayAfternoon.addingTimeInterval(45 * minute),
+                                 end: yesterdayAfternoon.addingTimeInterval(66 * minute)))
+
         // Geplantes für die nächsten Tage (Woche planen)
         tasks += [
             TaskItem(title: "Angebot Firewall-Erneuerung", customerID: mueller.id, plannedDate: today.adding(days: 1, calendar: calendar),
