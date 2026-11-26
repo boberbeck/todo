@@ -155,6 +155,10 @@ enum DropImporter {
 
     @MainActor
     static func handle(_ providers: [NSItemProvider], model: AppModel) -> Bool {
+        // Für die Fehlersuche: jedes Ziehen mit den angebotenen Formaten protokollieren (ohne Inhalt)
+        for (index, provider) in providers.enumerated() {
+            AppLog.info("Drop", "Teil \(index + 1) von \(providers.count): \(provider.registeredTypeIdentifiers.joined(separator: ", ")) · Name: \(provider.suggestedName == nil ? "keiner" : "vorhanden")")
+        }
         var handled = false
         for provider in providers {
             if let mailType = provider.registeredTypeIdentifiers.first(where: { identifier in
@@ -194,7 +198,9 @@ enum DropImporter {
                     let data = isMail ? try? Data(contentsOf: url) : nil
                     let header = data.map(EmailHeaderParser.parse)
                     let note = "Datei: .\(url.pathExtension), \(data?.count ?? 0) Bytes, beginnt mit \(signature(data)) · Betreff \(header?.subject == nil ? "nicht gefunden" : "gefunden")"
+                    let plainNote = "Datei ohne Mail-Endung: .\(url.pathExtension.isEmpty ? "–" : url.pathExtension), Name \(url.deletingPathExtension().lastPathComponent.count) Zeichen, Schema \(url.scheme ?? "–")"
                     Task { @MainActor in
+                        if !isMail { AppLog.info("Mail-Drop", plainNote) }
                         if isMail {
                             AppLog.info("Mail-Drop", note)
                             let title = MailDropTitle.best(subject: header?.subject, suggestedName: nil, fileName: url.lastPathComponent, text: nil)
@@ -227,6 +233,7 @@ enum DropImporter {
                 }
             }
         }
+        if !handled { AppLog.warning("Drop", "Kein passendes Format, nichts angelegt") }
         return handled
     }
 
