@@ -220,8 +220,8 @@ struct MeetingSheet: View {
     // MARK: Teile
 
     private func folderRow(_ customer: Customer) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "folder")
+        HStack(spacing: 12) {
+            Text("Ordner")
                 .foregroundStyle(Theme.secondary)
                 .frame(width: 70, alignment: .leading)
             if let path = customer.folderPath, !path.isEmpty {
