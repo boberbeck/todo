@@ -197,6 +197,10 @@ enum Preferences {
     static let calendarHourHeightKey = "calendarHourHeight"
     /// Ordner, in dem neue Kundenordner für Claude Code entstehen (leer = ~/Kunden)
     static let customerFoldersBaseKey = "customerFoldersBase"
+    /// Höhe des Notizfelds im Aufgabenfenster
+    static let taskNotesHeightKey = "taskNotesHeight"
+    static let defaultTaskNotesHeight: Double = 90
+    static let taskNotesHeightRange: ClosedRange<Double> = 50...700
     /// Breite des Eingangs im Wochenplan
     static let planInboxWidthKey = "planInboxWidth"
     static let defaultPlanInboxWidth: Double = 260

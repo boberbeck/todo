@@ -306,6 +306,43 @@ struct ResizeHandle: View {
     }
 }
 
+/// Griff unter einem Feld: nach unten ziehen macht es höher, Doppelklick setzt die Höhe zurück.
+struct HeightGrip: View {
+    @Binding var height: Double
+    let range: ClosedRange<Double>
+    let defaultValue: Double
+    @State private var startHeight: Double?
+    @State private var hovering = false
+
+    var body: some View {
+        Capsule()
+            .fill(startHeight != nil ? Theme.accent : (hovering ? Theme.secondary : Theme.border))
+            .frame(width: 36, height: 4)
+            .frame(maxWidth: .infinity)
+            .frame(height: 14)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                guard inside != hovering else { return }
+                hovering = inside
+                if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let start = startHeight ?? height
+                        startHeight = start
+                        height = min(range.upperBound, max(range.lowerBound, start + Double(value.translation.height)))
+                    }
+                    .onEnded { _ in startHeight = nil }
+            )
+            .onTapGesture(count: 2) { height = defaultValue }
+            .help("Ziehen ändert die Höhe, Doppelklick setzt sie zurück")
+            .onDisappear {
+                if hovering { NSCursor.pop() }
+            }
+    }
+}
+
 /// Work Log Type eines Tickets, mit den Namen aus ServiceDesk Plus.
 struct WorklogTypeMenu: View {
     @Environment(AppModel.self) private var model

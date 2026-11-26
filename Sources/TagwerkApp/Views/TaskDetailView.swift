@@ -12,6 +12,8 @@ struct TaskDetailView: View {
 
     @State private var title = ""
     @State private var notes = ""
+    /// Höhe des Notizfelds, mit der Maus am unteren Rand verstellbar
+    @AppStorage(Preferences.taskNotesHeightKey) private var notesHeight = Preferences.defaultTaskNotesHeight
     @State private var workDescription = ""
     @State private var showsTicketPicker = false
     @State private var timeDraft: TimeEntryDraft?
@@ -169,10 +171,13 @@ struct TaskDetailView: View {
                 }
 
                 Section("Notizen") {
-                    TextEditor(text: $notes)
-                        .font(.body)
-                        .frame(minHeight: 60)
-                        .scrollContentBackground(.hidden)
+                    VStack(spacing: 0) {
+                        TextEditor(text: $notes)
+                            .font(.body)
+                            .frame(height: CGFloat(notesHeight))
+                            .scrollContentBackground(.hidden)
+                        HeightGrip(height: $notesHeight, range: Preferences.taskNotesHeightRange, defaultValue: Preferences.defaultTaskNotesHeight)
+                    }
                 }
 
                 Section {
