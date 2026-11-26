@@ -293,9 +293,8 @@ enum SnapshotMode {
         NSApp.terminate(nil)
     }
 
-    /// Bittet das CI-Skript um ein Foto. Ohne Antwort zeichnet die App das Fenster selbst.
-    @MainActor
     /// Scrollt die längste Liste im Fenster ganz nach unten (für Bilder von Inhalten unterhalb des sichtbaren Bereichs).
+    @MainActor
     private static func scrollToBottom(in window: NSWindow) {
         func scrollViews(in view: NSView) -> [NSScrollView] {
             let own: [NSScrollView] = (view as? NSScrollView).map { [$0] } ?? []
@@ -313,6 +312,8 @@ enum SnapshotMode {
         scroll.reflectScrolledClipView(scroll.contentView)
     }
 
+    /// Bittet das CI-Skript um ein Foto. Ohne Antwort zeichnet die App das Fenster selbst.
+    @MainActor
     private static func capture(_ window: NSWindow?, name: String, in directory: URL) async {
         let marker = directory.appendingPathComponent(".ready")
         let windowNumber = window?.windowNumber ?? 0
