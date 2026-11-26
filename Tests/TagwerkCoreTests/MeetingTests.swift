@@ -91,4 +91,24 @@ final class MeetingTests: XCTestCase {
         XCTAssertTrue(afterDelete.meetings.isEmpty)
         XCTAssertNil(afterDelete.tasks.first?.meetingID, "Aufgabe bleibt, verliert nur den Verweis")
     }
+
+    func testClaudeDesktopLink() throws {
+        let url = try XCTUnwrap(ClaudeDesktopLink.newCodeSession(
+            prompt: "Mach Aufgaben aus „Weekly“ & Co: a=b+c?",
+            folder: "/Users/test/Kunden/Müller Logistik"
+        ))
+        XCTAssertEqual(url.scheme, "claude")
+        XCTAssertEqual(url.host, "code")
+        XCTAssertEqual(url.path, "/new")
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(items.first { $0.name == "q" }?.value, "Mach Aufgaben aus „Weekly“ & Co: a=b+c?")
+        XCTAssertEqual(items.first { $0.name == "folder" }?.value, "/Users/test/Kunden/Müller Logistik")
+        XCTAssertFalse(url.absoluteString.contains("&Co"), "& im Text ist kodiert")
+        XCTAssertTrue(url.absoluteString.contains("%2FUsers%2Ftest"))
+        XCTAssertEqual(ClaudeDesktopLink.newCodeSession(prompt: nil, folder: nil)?.absoluteString, "claude://code/new")
+        let long = String(repeating: "x", count: 20_000)
+        let truncated = ClaudeDesktopLink.newCodeSession(prompt: long, folder: nil)
+        let value = URLComponents(url: try XCTUnwrap(truncated), resolvingAgainstBaseURL: false)?.queryItems?.first?.value
+        XCTAssertEqual(value?.count, ClaudeDesktopLink.maximumPromptLength)
+    }
 }

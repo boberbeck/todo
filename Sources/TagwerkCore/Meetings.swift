@@ -185,3 +185,27 @@ public enum MeetingFiles {
         """
     }
 }
+
+/// Link, der in der Claude-App (Desktop) eine neue Claude-Code-Sitzung öffnet: im Ordner, mit vorausgefüllter Bitte.
+/// Format laut Anthropic: `claude://code/new?q=…&folder=…`; die App fragt vor dem Ordner einmal nach.
+public enum ClaudeDesktopLink {
+    /// Die App kürzt längere Bitten.
+    public static let maximumPromptLength = 14_000
+
+    public static func newCodeSession(prompt: String?, folder: String?) -> URL? {
+        var parameters: [String] = []
+        if let prompt, !prompt.isEmpty {
+            parameters.append("q=" + encode(String(prompt.prefix(maximumPromptLength))))
+        }
+        if let folder, !folder.isEmpty {
+            parameters.append("folder=" + encode(folder))
+        }
+        return URL(string: "claude://code/new" + (parameters.isEmpty ? "" : "?" + parameters.joined(separator: "&")))
+    }
+
+    /// Streng kodiert: nur Buchstaben, Ziffern und „-._~“ bleiben, alles andere (auch &, =, +, Umlaute) wird %XX.
+    static func encode(_ value: String) -> String {
+        let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        return value.addingPercentEncoding(withAllowedCharacters: unreserved) ?? ""
+    }
+}

@@ -71,8 +71,8 @@ enum TranscriptReader {
     }
 }
 
-/// Startet Claude Code in einem Ordner: Tagwerk legt ein kleines Skript ab, das Terminal öffnet und ausführt.
-/// So braucht es keine Erlaubnis, das Terminal fernzusteuern.
+/// Startet Claude Code in einem Ordner: in der Claude-App (neue Code-Sitzung, Bitte vorausgefüllt).
+/// Ist die App nicht installiert, im Terminal über ein kleines Skript (ohne Erlaubnis zum Fernsteuern).
 enum ClaudeCodeLauncher {
     static func prompt(for meeting: Meeting, calendar: Calendar) -> String {
         let day = meeting.start.formatted(date: .numeric, time: .omitted)
@@ -81,7 +81,21 @@ enum ClaudeCodeLauncher {
             + "schlag mir die Aufgaben vor und leg sie nach meinem Okay mit aufgabe_anlegen und meeting \(id) in Tagwerk an."
     }
 
+    /// `true`, wenn die Claude-App Links wie `claude://code/new` öffnen kann.
+    static var hasDesktopApp: Bool {
+        guard let probe = ClaudeDesktopLink.newCodeSession(prompt: nil, folder: nil) else { return false }
+        return NSWorkspace.shared.urlForApplication(toOpen: probe) != nil
+    }
+
     static func open(in folder: URL, prompt: String?) throws {
+        if let link = ClaudeDesktopLink.newCodeSession(prompt: prompt, folder: folder.path), hasDesktopApp {
+            NSWorkspace.shared.open(link)
+            return
+        }
+        try openInTerminal(folder: folder, prompt: prompt)
+    }
+
+    private static func openInTerminal(folder: URL, prompt: String?) throws {
         let script = """
         #!/bin/zsh -l
         rm -f -- "$0"
@@ -198,8 +212,8 @@ struct MeetingSheet: View {
                 .buttonStyle(GhostButtonStyle(prominent: true))
                 .disabled(meeting?.hasTranscript != true)
                 .help(customer == nil
-                      ? "Startet Claude Code mit der Bitte, aus dem Meeting Aufgaben zu machen"
-                      : "Startet Claude Code im Ordner von \(customer?.name ?? "") mit der Bitte, aus dem Meeting Aufgaben zu machen")
+                      ? "Öffnet Claude Code in der Claude-App, die Bitte zum Meeting steht schon da (mit ↩ senden)"
+                      : "Öffnet Claude Code in der Claude-App im Ordner von \(customer?.name ?? ""); die Bitte zum Meeting steht schon da (mit ↩ senden)")
             }
         }
         .padding(24)
@@ -444,7 +458,7 @@ struct CustomerFolderRow: View {
                         Label("Claude Code", systemImage: "terminal")
                     }
                     .buttonStyle(GhostButtonStyle(small: true))
-                    .help("Startet Claude Code in diesem Ordner")
+                    .help("Öffnet Claude Code in der Claude-App in diesem Ordner")
                 } else {
                     Text("Kein Ordner für Claude Code")
                         .foregroundStyle(Theme.tertiary)
