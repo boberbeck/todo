@@ -710,7 +710,7 @@ final class AppModel {
             PomodoroNotifier.signal(
                 title: next.phase == .longBreak ? "Lange Pause" : "Pause",
                 body: "\(next.completedInSet). Pomodoro geschafft. \(minutes) Minuten Pause, die Zeit läuft nicht mit.",
-                sound: "Glass"
+                event: next.phase == .longBreak ? .longBreak : .shortBreak
             )
         case .ready:
             pomodoro = next
@@ -718,7 +718,7 @@ final class AppModel {
             PomodoroNotifier.signal(
                 title: "Pause vorbei",
                 body: title.map { "Weiter mit „\($0)“." } ?? "Weiter geht's.",
-                sound: "Hero"
+                event: .resume
             )
             if UserDefaults.standard.bool(forKey: Preferences.pomodoroAutoContinueKey) {
                 continuePomodoro()

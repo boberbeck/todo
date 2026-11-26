@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import TagwerkCore
+import UniformTypeIdentifiers
 
 /// Einstellungen in Tabs, wie bei Mac-Apps üblich.
 struct SettingsView: View {
@@ -1365,6 +1366,9 @@ struct PomodoroSettingsSection: View {
     @AppStorage(Preferences.pomodoroRoundsKey) private var rounds = 4
     @AppStorage(Preferences.pomodoroAutoContinueKey) private var autoContinue = false
     @AppStorage(Preferences.pomodoroSoundKey) private var sound = true
+    @AppStorage(Preferences.pomodoroVolumeKey) private var volume = 0.8
+    @State private var ownSounds = SoundLibrary.ownSounds()
+    @State private var systemSounds = SoundLibrary.systemSounds()
 
     var body: some View {
         Section {
@@ -1385,15 +1389,54 @@ struct PomodoroSettingsSection: View {
             }
             Toggle("Nach der Pause automatisch weiter", isOn: $autoContinue)
             Toggle("Ton bei Pause und Weiter", isOn: $sound)
+            if sound {
+                ForEach(PomodoroSoundEvent.allCases) { event in
+                    PomodoroSoundRow(event: event, volume: volume, ownSounds: ownSounds, systemSounds: systemSounds)
+                }
+                LabeledContent("Lautstärke") {
+                    HStack(spacing: 8) {
+                        Image(systemName: "speaker.fill")
+                            .foregroundStyle(.secondary)
+                        Slider(value: $volume, in: 0.05...1, onEditingChanged: { editing in
+                            // Beim Loslassen kurz vorspielen
+                            if !editing {
+                                SoundLibrary.play(UserDefaults.standard.string(forKey: PomodoroSoundEvent.shortBreak.key) ?? PomodoroSoundEvent.shortBreak.defaultSound, volume: Float(volume))
+                            }
+                        })
+                        .frame(maxWidth: 180)
+                        Image(systemName: "speaker.wave.3.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent("Eigener Ton") {
+                    Button("Datei hinzufügen …") { importSound() }
+                        .help("MP3, M4A, WAV, AIFF oder CAF; wird in den Tagwerk-Ordner kopiert und steht dann in jeder Auswahl")
+                }
+            }
         } header: {
             Text("Pomodoro")
         } footer: {
-            SettingsFootnote("Klassisch nach Francesco Cirillo: 25 Minuten arbeiten, 5 Minuten Pause, nach vier Runden 15 bis 30 Minuten. In der Pause stoppt die Zeit und die Musik; sie zählt herunter, danach kommt ein Signal. Ohne „automatisch weiter“ geht es mit „Weiter“ los.")
+            SettingsFootnote("Klassisch nach Francesco Cirillo: 25 Minuten arbeiten, 5 Minuten Pause, nach vier Runden 15 bis 30 Minuten. In der Pause stoppt die Zeit und die Musik; sie zählt herunter, danach kommt ein Signal. Ohne „automatisch weiter“ geht es mit „Weiter“ los. Jeder Ton spielt beim Auswählen einmal vor; Gong, Klangschale, Glöckchen und Holzblock erzeugt Tagwerk selbst.")
         }
         .onChange(of: work) { model.settingsChanged() }
         .onChange(of: shortBreak) { model.settingsChanged() }
         .onChange(of: longBreak) { model.settingsChanged() }
         .onChange(of: rounds) { model.settingsChanged() }
+    }
+
+    private func importSound() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        panel.message = "Ton für Pomodoro wählen"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let id = try SoundLibrary.importSound(from: url)
+            ownSounds = SoundLibrary.ownSounds()
+            SoundLibrary.play(id, volume: Float(volume))
+        } catch {
+            AppLog.error("Ton", "Eigener Ton nicht übernommen: \(error.localizedDescription)")
+        }
     }
 
     private func minutesRow(_ title: String, value: Binding<Int>, range: ClosedRange<Int>, step: Int) -> some View {
@@ -1405,6 +1448,69 @@ struct PomodoroSettingsSection: View {
                     .labelsHidden()
             }
         }
+    }
+}
+
+/// Ein Ton für einen Anlass: Auswahl (spielt beim Wechseln vor) und ▶ zum Anhören.
+struct PomodoroSoundRow: View {
+    let event: PomodoroSoundEvent
+    let volume: Double
+    let ownSounds: [String]
+    let systemSounds: [String]
+    @AppStorage private var selection: String
+
+    init(event: PomodoroSoundEvent, volume: Double, ownSounds: [String], systemSounds: [String]) {
+        self.event = event
+        self.volume = volume
+        self.ownSounds = ownSounds
+        self.systemSounds = systemSounds
+        _selection = AppStorage(wrappedValue: event.defaultSound, event.key)
+    }
+
+    var body: some View {
+        LabeledContent(event.label) {
+            HStack(spacing: 6) {
+                Picker(event.label, selection: $selection) {
+                    Text("Kein Ton").tag(SoundLibrary.silent)
+                    Section("Tagwerk") {
+                        ForEach(SoundLibrary.chimes, id: \.self) { id in
+                            Text(SoundLibrary.label(id)).tag(id)
+                        }
+                    }
+                    if !ownSounds.isEmpty {
+                        Section("Eigene") {
+                            ForEach(ownSounds, id: \.self) { id in
+                                Text(SoundLibrary.label(id)).tag(id)
+                            }
+                        }
+                    }
+                    Section("macOS") {
+                        ForEach(systemSounds, id: \.self) { id in
+                            Text(id).tag(id)
+                        }
+                    }
+                    // Gespeicherter Ton, den es nicht mehr gibt (z. B. Datei gelöscht): trotzdem anzeigen
+                    if !isKnown(selection) {
+                        Text(SoundLibrary.label(selection)).tag(selection)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 180)
+                .onChange(of: selection) { SoundLibrary.play(selection, volume: Float(volume)) }
+                Button {
+                    SoundLibrary.play(selection, volume: Float(volume))
+                } label: {
+                    Image(systemName: "play.fill")
+                }
+                .buttonStyle(.borderless)
+                .disabled(selection == SoundLibrary.silent)
+                .help("Anhören")
+            }
+        }
+    }
+
+    private func isKnown(_ id: String) -> Bool {
+        id == SoundLibrary.silent || SoundLibrary.chimes.contains(id) || ownSounds.contains(id) || systemSounds.contains(id)
     }
 }
 

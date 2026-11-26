@@ -143,6 +143,11 @@ enum Preferences {
     static let pomodoroRoundsKey = "pomodoroRounds"
     static let pomodoroAutoContinueKey = "pomodoroAutoContinue"
     static let pomodoroSoundKey = "pomodoroSound"
+    /// Töne je Anlass (Kennung aus `SoundLibrary`) und Lautstärke 0…1
+    static let pomodoroShortBreakSoundKey = "pomodoroSoundShortBreak"
+    static let pomodoroLongBreakSoundKey = "pomodoroSoundLongBreak"
+    static let pomodoroResumeSoundKey = "pomodoroSoundResume"
+    static let pomodoroVolumeKey = "pomodoroSoundVolume"
     /// Fernzugriff für Claude im Browser und auf dem Handy
     static let remoteEnabledKey = "remoteMCPEnabled"
     static let remotePortKey = "remoteMCPPort"
@@ -191,6 +196,10 @@ enum Preferences {
             pomodoroLongBreakKey: 15,
             pomodoroRoundsKey: 4,
             pomodoroSoundKey: true,
+            pomodoroShortBreakSoundKey: "Glass",
+            pomodoroLongBreakSoundKey: "tagwerk:gong",
+            pomodoroResumeSoundKey: "Hero",
+            pomodoroVolumeKey: 0.8,
         ])
     }
 }

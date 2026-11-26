@@ -229,6 +229,11 @@ enum SnapshotMode {
         model.selection = .today
         try? await Task.sleep(for: .seconds(0.5))
 
+        // Pomodoro-Töne: jeder Tagwerk-Klang wird erzeugt und lässt sich laden
+        for id in SoundLibrary.chimes + ["Glass", "Hero"] {
+            log("Ton \(SoundLibrary.label(id)): \(SoundLibrary.duration(of: id).map { String(format: "%.1f s", $0) } ?? "lädt nicht")")
+        }
+
         // Einstellungen, jeder Tab einzeln
         openSettings()
         try? await Task.sleep(for: .seconds(1.5))
