@@ -26,6 +26,9 @@ public final class TagwerkTools {
     Die Mittagspause (oder eine andere längere Pause) zählt nicht als Arbeitszeit: pause_starten hält den Timer an, \
     pause_beenden macht (auf Wunsch) mit derselben Aufgabe weiter, pause_eintragen trägt eine vergessene Mittagspause nach \
     und schneidet sie aus der erfassten Arbeitszeit heraus. Kurze Unterbrechungen und Pomodoro-Pausen werden nicht eingetragen. \
+    Meetings mit Transkript legt der Nutzer in der App am Termin ab (Werkzeuge meetings und meeting_transkript). \
+    Aufgaben daraus legt aufgabe_anlegen mit dem Parameter meeting an: Kunde und Verweis aufs Meeting kommen dann von selbst. \
+    Schlage Aufgaben erst vor und lege sie nach Zustimmung an; ohne Aufgaben markiert meeting_erledigt das Meeting. \
     IDs aus den Antworten sind für Änderungen nötig; die ersten 8 Zeichen reichen. \
     Datumsangaben: heute, morgen, gestern, JJJJ-MM-TT oder TT.MM.JJJJ. Gebucht wird nur in der App selbst.
     """
@@ -78,8 +81,30 @@ public final class TagwerkTools {
                     "ticket": text("Ticketnummer aus ManageEngine; die Zeit geht dann auch als Worklog dorthin"),
                     "unteraufgabe_von": text("ID der übergeordneten Aufgabe; dann ist dies eine Unteraufgabe"),
                     "ziel": text("Langes Ziel, auf das die Aufgabe einzahlt (Titel oder ID, siehe „ziele“)"),
+                    "meeting": text("ID des Meetings, aus dem die Aufgabe stammt; Kunde wird übernommen, das Meeting gilt dann als verarbeitet"),
                 ],
                 required: ["titel"]
+            ),
+            tool(
+                "meetings",
+                "Meetings mit Transkript, neueste zuerst: Titel, Zeit, Kunde, ob schon Aufgaben daraus gemacht wurden.",
+                properties: [
+                    "kunde": text("Nur die Meetings dieses Kunden"),
+                    "nur_offen": flag("true = nur Meetings, aus denen noch keine Aufgaben gemacht wurden"),
+                    "limit": number("Höchstens so viele (Standard 20)"),
+                ]
+            ),
+            tool(
+                "meeting_transkript",
+                "Transkript eines Meetings lesen, mit Titel, Zeit, Kunde und den schon daraus angelegten Aufgaben.",
+                properties: ["id": text("ID des Meetings (die ersten 8 Zeichen reichen) oder ein Teil des Titels (dann das neueste passende)")],
+                required: ["id"]
+            ),
+            tool(
+                "meeting_erledigt",
+                "Meeting als verarbeitet markieren, wenn keine (weiteren) Aufgaben daraus entstehen.",
+                properties: ["id": text("ID des Meetings")],
+                required: ["id"]
             ),
             tool(
                 "aufgabe_aendern",
@@ -236,6 +261,9 @@ public final class TagwerkTools {
         case "pause_starten": return try startBreak()
         case "pause_beenden": return try endBreak(arguments)
         case "pause_eintragen": return try addBreak(arguments)
+        case "meetings": return try listMeetings(arguments)
+        case "meeting_transkript": return try meetingTranscript(arguments)
+        case "meeting_erledigt": return try markMeetingProcessed(arguments)
         default: throw ToolError("Unbekanntes Werkzeug: \(name)")
         }
     }
@@ -329,6 +357,7 @@ public final class TagwerkTools {
             return found.parentID.flatMap { id in snapshot.tasks.first { $0.id == id } } ?? found
         }
         let customer = try string(arguments, "kunde").map { try resolveCustomer($0, in: snapshot.customers) }
+        let meeting = try string(arguments, "meeting").map { try resolveMeeting($0, in: snapshot.meetings) }
         var plannedDate: LocalDate?
         if parent == nil { plannedDate = try plannedDay(from: string(arguments, "datum")) }
         var task = TaskItem(
@@ -350,9 +379,98 @@ public final class TagwerkTools {
             task.longGoalID = goal.id
             if task.customerID == nil { task.customerID = goal.customerID }
         }
+        if var meeting {
+            task.meetingID = meeting.id
+            if task.customerID == nil { task.customerID = meeting.customerID }
+            if meeting.processedAt == nil {
+                meeting.processedAt = now()
+                try store.save(meeting)
+            }
+        }
         try store.save(task)
         let updated = try store.load()
         return json(["angelegt": describe(task, in: updated, day: nil)])
+    }
+
+    // MARK: Meetings
+
+    private func listMeetings(_ arguments: [String: Any]) throws -> String {
+        let snapshot = try store.load()
+        var meetings = snapshot.meetings
+        if let name = string(arguments, "kunde") {
+            let customer = try resolveCustomer(name, in: snapshot.customers)
+            meetings = meetings.filter { $0.customerID == customer.id }
+        }
+        if bool(arguments, "nur_offen") == true {
+            meetings = meetings.filter { !$0.isProcessed }
+        }
+        let limit = max(1, int(arguments, "limit") ?? 20)
+        return json([
+            "meetings": meetings.sorted { $0.start > $1.start }.prefix(limit).map { describe($0, in: snapshot) },
+            "anzahl": meetings.count,
+        ])
+    }
+
+    private func meetingTranscript(_ arguments: [String: Any]) throws -> String {
+        let snapshot = try store.load()
+        let meeting = try resolveMeeting(string(arguments, "id") ?? "", in: snapshot.meetings)
+        guard let path = meeting.transcriptPath, !path.isEmpty else {
+            throw ToolError("Zu „\(meeting.title)“ ist kein Transkript abgelegt.")
+        }
+        guard let data = FileManager.default.contents(atPath: path) else {
+            throw ToolError("Die Transkript-Datei fehlt: \(path)")
+        }
+        var result = describe(meeting, in: snapshot)
+        var text = String(decoding: data, as: UTF8.self)
+        let limit = 300_000
+        if text.count > limit {
+            text = String(text.prefix(limit))
+            result["gekuerzt"] = true
+        }
+        result["transkript_text"] = text
+        return json(result)
+    }
+
+    private func markMeetingProcessed(_ arguments: [String: Any]) throws -> String {
+        let snapshot = try store.load()
+        var meeting = try resolveMeeting(string(arguments, "id") ?? "", in: snapshot.meetings)
+        if meeting.processedAt == nil {
+            meeting.processedAt = now()
+            try store.save(meeting)
+        }
+        return json(["erledigt": describe(meeting, in: try store.load())])
+    }
+
+    private func describe(_ meeting: Meeting, in snapshot: Snapshot) -> [String: Any] {
+        var entry: [String: Any] = [
+            "id": meeting.id.uuidString,
+            "titel": meeting.title,
+            "datum": LocalDate(meeting.start, calendar: calendar).string,
+            "zeit": "\(clock(meeting.start))–\(clock(meeting.end))",
+            "verarbeitet": meeting.isProcessed,
+            "transkript": meeting.hasTranscript,
+        ]
+        if let customer = snapshot.customers.first(where: { $0.id == meeting.customerID }) { entry["kunde"] = customer.name }
+        if let path = meeting.transcriptPath, !path.isEmpty { entry["transkript_datei"] = path }
+        let tasks = snapshot.tasks.filter { $0.meetingID == meeting.id }
+        if !tasks.isEmpty {
+            entry["aufgaben"] = tasks.map { ["id": $0.id.uuidString, "titel": $0.title, "erledigt": $0.isDone] as [String: Any] }
+        }
+        return entry
+    }
+
+    /// ID (Anfang reicht) oder ein Teil des Titels; bei mehreren passenden Titeln das neueste Meeting.
+    func resolveMeeting(_ reference: String, in meetings: [Meeting]) throws -> Meeting {
+        let key = reference.trimmingCharacters(in: .whitespaces)
+        guard !key.isEmpty else { throw ToolError("Bitte die ID des Meetings angeben.") }
+        if key.count >= 4 {
+            let matches = meetings.filter { $0.id.uuidString.lowercased().hasPrefix(key.lowercased()) }
+            if matches.count == 1 { return matches[0] }
+            if matches.count > 1 { throw ToolError("Die ID „\(reference)“ ist nicht eindeutig.") }
+        }
+        let byTitle = meetings.filter { $0.title.range(of: key, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        if let latest = byTitle.max(by: { $0.start < $1.start }) { return latest }
+        throw ToolError("Kein Meeting „\(reference)“. Das Werkzeug meetings listet alle.")
     }
 
     private func updateTask(_ arguments: [String: Any]) throws -> String {
@@ -892,6 +1010,9 @@ public final class TagwerkTools {
         if let number = effective.linkedTicketNumber { entry["ticket"] = number }
         if let parent {
             entry["unteraufgabe_von"] = ["id": parent.id.uuidString, "titel": parent.title]
+        }
+        if let meeting = task.meetingID.flatMap({ id in snapshot.meetings.first { $0.id == id } }) {
+            entry["meeting"] = ["id": meeting.id.uuidString, "titel": meeting.title, "datum": LocalDate(meeting.start, calendar: calendar).string]
         }
         let subtasks = DayPlan.subtasks(of: task.id, in: snapshot.tasks)
         if !subtasks.isEmpty {

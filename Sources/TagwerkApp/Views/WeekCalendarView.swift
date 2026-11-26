@@ -397,6 +397,9 @@ struct EntryBlock: View {
             if let task {
                 Button("Aufgabe öffnen …") { model.openDetail(task.id) }
                 Button("Im Fokus öffnen") { model.openFocus(task.id) }
+                if task.source == .calendar || task.meetingID != nil {
+                    Button("Meeting & Transkript …") { model.openMeeting(for: task) }
+                }
             }
             Divider()
             Button("Eintrag löschen", role: .destructive) { model.deleteEntry(entry.id) }

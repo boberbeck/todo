@@ -283,7 +283,11 @@ struct CustomerDetailContent: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 8)
-            .padding(.bottom, 12)
+
+            CustomerFolderRow(customer: customer)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
 
             List {
                 Section("Offen (\(open.count))") {

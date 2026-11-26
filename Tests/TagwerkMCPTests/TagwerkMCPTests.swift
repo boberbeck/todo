@@ -177,6 +177,50 @@ final class MCPServerTests: XCTestCase {
         XCTAssertEqual(perTask.first?["aufgabe"] as? String, "Beratung")
     }
 
+    func testMeetingsTranscriptAndTasksFromMeeting() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tagwerk-meeting-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("2026-11-19 0900 Weekly.md")
+        try "# Weekly\n\n## Transkript\n\nMax: Ich erneuere das Zertifikat bis Freitag.\n".write(to: file, atomically: true, encoding: .utf8)
+
+        let cesa = Customer(name: "ceSA", folderPath: folder.path)
+        let other = Customer(name: "OBI")
+        let weekly = Meeting(eventID: "w@1", title: "Weekly Status Meeting - ceSA", start: now.addingTimeInterval(-3600), end: now,
+                             customerID: cesa.id, transcriptPath: file.path)
+        let older = Meeting(title: "Weekly Status Meeting - ceSA", start: now.addingTimeInterval(-7 * 86400), end: now.addingTimeInterval(-7 * 86400 + 3600),
+                            customerID: cesa.id, transcriptPath: file.path, processedAt: now.addingTimeInterval(-6 * 86400))
+        let obi = Meeting(title: "Jour fixe OBI", start: now.addingTimeInterval(-7200), end: now.addingTimeInterval(-5400), customerID: other.id)
+        let (server, store) = makeServer(Snapshot(customers: [cesa, other], meetings: [weekly, older, obi]))
+
+        let open = try call(server, "meetings", ["kunde": "cesa", "nur_offen": true])
+        let listed = try XCTUnwrap(open.json["meetings"] as? [[String: Any]])
+        XCTAssertEqual(listed.map { $0["id"] as? String }, [weekly.id.uuidString], "nur offene Meetings des Kunden")
+        XCTAssertEqual(listed.first?["kunde"] as? String, "ceSA")
+        XCTAssertEqual(try call(server, "meetings").json["anzahl"] as? Int, 3)
+
+        // per Titel: das neueste passende
+        let transcript = try call(server, "meeting_transkript", ["id": "Weekly Status"])
+        XCTAssertFalse(transcript.isError, transcript.text)
+        XCTAssertEqual(transcript.json["id"] as? String, weekly.id.uuidString)
+        XCTAssertTrue((transcript.json["transkript_text"] as? String ?? "").contains("Zertifikat bis Freitag"))
+        XCTAssertTrue(try call(server, "meeting_transkript", ["id": String(obi.id.uuidString.prefix(8))]).isError, "ohne Transkript")
+
+        let created = try call(server, "aufgabe_anlegen", ["titel": "Zertifikat erneuern", "meeting": String(weekly.id.uuidString.prefix(8))])
+        XCTAssertFalse(created.isError, created.text)
+        let task = try XCTUnwrap(try store.load().tasks.first { $0.title == "Zertifikat erneuern" })
+        XCTAssertEqual(task.meetingID, weekly.id)
+        XCTAssertEqual(task.customerID, cesa.id, "Kunde kommt vom Meeting")
+        XCTAssertEqual(try store.load().meetings.first { $0.id == weekly.id }?.isProcessed, true)
+        let angelegt = try XCTUnwrap(created.json["angelegt"] as? [String: Any])
+        XCTAssertEqual((angelegt["meeting"] as? [String: Any])?["titel"] as? String, "Weekly Status Meeting - ceSA")
+
+        let done = try call(server, "meeting_erledigt", ["id": String(obi.id.uuidString.prefix(8))])
+        XCTAssertFalse(done.isError, done.text)
+        let stillOpen = try XCTUnwrap(try call(server, "meetings", ["nur_offen": true]).json["meetings"] as? [[String: Any]])
+        XCTAssertTrue(stillOpen.isEmpty)
+    }
+
     func testDayCloseShowsMissingFields() throws {
         let task = TaskItem(title: "Ticket 4711", source: .ticket, externalID: "4711")
         let entry = TimeEntry(taskID: task.id, start: now.addingTimeInterval(-40 * 60), end: now.addingTimeInterval(-10 * 60))

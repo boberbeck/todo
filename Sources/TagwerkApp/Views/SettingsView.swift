@@ -836,6 +836,8 @@ struct ClaudeSettings: View {
 
             RemoteAccessSection()
 
+            CustomerFoldersSection()
+
             Section {
                 if let url = ClaudeIntegration.serverURL {
                     LabeledContent("Programm") {

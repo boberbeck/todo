@@ -12,6 +12,8 @@ public struct Snapshot: Sendable, Equatable {
     public var absences: [Absence]
     /// Pausen
     public var breaks: [WorkBreak]
+    /// Meetings mit Transkript
+    public var meetings: [Meeting]
 
     public init(
         customers: [Customer] = [],
@@ -21,7 +23,8 @@ public struct Snapshot: Sendable, Equatable {
         goals: [WeeklyGoal] = [],
         longGoals: [LongGoal] = [],
         absences: [Absence] = [],
-        breaks: [WorkBreak] = []
+        breaks: [WorkBreak] = [],
+        meetings: [Meeting] = []
     ) {
         self.customers = customers
         self.tasks = tasks
@@ -31,6 +34,7 @@ public struct Snapshot: Sendable, Equatable {
         self.longGoals = longGoals
         self.absences = absences
         self.breaks = breaks
+        self.meetings = meetings
     }
 }
 
@@ -50,6 +54,9 @@ public protocol Store: AnyObject {
     func deleteAbsence(id: UUID) throws
     func save(_ workBreak: WorkBreak) throws
     func deleteBreak(id: UUID) throws
+    func save(_ meeting: Meeting) throws
+    /// Löscht das Meeting (nicht die Transkript-Datei); Aufgaben verlieren nur den Verweis.
+    func deleteMeeting(id: UUID) throws
     /// Legt eine Sicherungskopie der Daten an.
     func backup(to url: URL) throws
     /// Löscht die Aufgabe, ihre Zeiteinträge und Buchungen.
@@ -125,6 +132,17 @@ public final class InMemoryStore: Store {
 
     public func deleteBreak(id: UUID) throws {
         snapshot.breaks.removeAll { $0.id == id }
+    }
+
+    public func save(_ meeting: Meeting) throws {
+        upsert(meeting, into: &snapshot.meetings)
+    }
+
+    public func deleteMeeting(id: UUID) throws {
+        snapshot.meetings.removeAll { $0.id == id }
+        for index in snapshot.tasks.indices where snapshot.tasks[index].meetingID == id {
+            snapshot.tasks[index].meetingID = nil
+        }
     }
 
     public func backup(to url: URL) throws {}

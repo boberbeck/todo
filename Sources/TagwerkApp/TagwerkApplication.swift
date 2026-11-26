@@ -195,6 +195,12 @@ enum Preferences {
         "Wartung",
     ]
     static let calendarHourHeightKey = "calendarHourHeight"
+    /// Ordner, in dem neue Kundenordner für Claude Code entstehen (leer = ~/Kunden)
+    static let customerFoldersBaseKey = "customerFoldersBase"
+    /// Breite des Eingangs im Wochenplan
+    static let planInboxWidthKey = "planInboxWidth"
+    static let defaultPlanInboxWidth: Double = 260
+    static let planInboxWidthRange: ClosedRange<Double> = 220...720
 
     static let defaultCalendarWidth: Double = 260
     static let minCalendarWidth: Double = 200

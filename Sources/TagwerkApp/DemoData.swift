@@ -10,7 +10,21 @@ enum DemoData {
 
         let mueller = Customer(name: "Müller Logistik", colorIndex: 1, createdAt: now.addingTimeInterval(-90 * 86400),
                                manageEngineAccount: "Müller Logistik GmbH")
-        let stadtwerke = Customer(name: "Stadtwerke Nord", colorIndex: 2, createdAt: now.addingTimeInterval(-80 * 86400))
+        let stadtwerke = Customer(name: "Stadtwerke Nord", colorIndex: 2, createdAt: now.addingTimeInterval(-80 * 86400),
+                                  folderPath: "/Users/demo/Kunden/Stadtwerke Nord")
+        // Kundentermin von gestern mit Transkript; zwei Aufgaben sind daraus entstanden
+        let yesterdayMeetingStart = FreeTime.date(on: today.adding(days: -1, calendar: calendar), minutes: 10 * 60, calendar: calendar)
+        let customerMeeting = Meeting(
+            eventID: "demo-meeting-stadtwerke",
+            title: "Abstimmung Backup Stadtwerke",
+            start: yesterdayMeetingStart,
+            end: yesterdayMeetingStart.addingTimeInterval(45 * 60),
+            customerID: stadtwerke.id,
+            transcriptPath: "/Users/demo/Kunden/Stadtwerke Nord/Meetings/"
+                + MeetingFiles.fileName(title: "Abstimmung Backup Stadtwerke", start: yesterdayMeetingStart, calendar: calendar),
+            processedAt: now.addingTimeInterval(-20 * hour),
+            createdAt: now.addingTimeInterval(-22 * hour)
+        )
         let becker = Customer(name: "Becker & Partner", colorIndex: 6, createdAt: now.addingTimeInterval(-70 * 86400))
 
         var tasks: [TaskItem] = []
@@ -140,7 +154,10 @@ enum DemoData {
                      externalID: "1243", createdAt: now.addingTimeInterval(-50 * minute)),
             TaskItem(title: "Wartungsvertrag verlängern", customerID: becker.id,
                      createdAt: now.addingTimeInterval(-26 * hour)),
-            TaskItem(title: "Backup-Konzept skizzieren", customerID: stadtwerke.id, estimateMinutes: 120, createdAt: now.addingTimeInterval(-50 * hour)),
+            TaskItem(title: "Backup-Konzept skizzieren", customerID: stadtwerke.id, estimateMinutes: 120, createdAt: now.addingTimeInterval(-50 * hour),
+                     meetingID: customerMeeting.id),
+            TaskItem(title: "Restore-Test Fileserver planen", customerID: stadtwerke.id, estimateMinutes: 60, createdAt: now.addingTimeInterval(-20 * hour),
+                     meetingID: customerMeeting.id),
         ]
 
         // Viele Unteraufgaben mit langen Servernamen: so sieht eine schmale Spalte im Wochenplan aus
@@ -248,6 +265,6 @@ enum DemoData {
         return Snapshot(customers: [mueller, stadtwerke, becker], tasks: tasks, entries: entries,
                         bookings: bookings,
                         goals: [goalOffer, goalStoerungen, goalMigration, goalNext], longGoals: [azure],
-                        breaks: breaks)
+                        breaks: breaks, meetings: [customerMeeting])
     }
 }

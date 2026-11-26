@@ -144,6 +144,23 @@ enum SnapshotMode {
         try? await Task.sleep(for: .seconds(0.8))
         await capture(window, name: "tagesabschluss-unteraufgaben", in: directory)
 
+        // Meeting-Fenster: Kunde, Transkript, Aufgaben daraus, Claude Code
+        if let meeting = model.meetings.first {
+            model.selection = .today
+            model.meetingContext = MeetingContext(meeting: meeting)
+            try? await Task.sleep(for: .seconds(1.5))
+            await capture(window.attachedSheet ?? window, name: "meeting", in: directory)
+            log("Meeting: \(meeting.title), Aufgaben daraus \(model.tasks(fromMeeting: meeting.id).count), Kunde \(model.customer(meeting.customerID)?.name ?? "keiner")")
+            model.meetingContext = nil
+            try? await Task.sleep(for: .seconds(0.8))
+        }
+        // Kunde mit Ordner für Claude Code
+        if let customer = model.customers.first(where: { $0.folderPath != nil }) {
+            model.selection = .customer(customer.id)
+            try? await Task.sleep(for: .seconds(1.2))
+            await capture(window, name: "kunde-ordner", in: directory)
+        }
+
         // Neue Aufgabe direkt im Kalender beschriften
         model.selection = .calendar
         try? await Task.sleep(for: .seconds(1.2))

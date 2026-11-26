@@ -34,6 +34,10 @@ final class AppModel {
     private(set) var absences: [Absence] = []
     /// Pausen (zählen nicht als Arbeitszeit)
     private(set) var breaks: [WorkBreak] = []
+    /// Meetings mit Transkript
+    private(set) var meetings: [Meeting] = []
+    /// Offenes Meeting-Fenster (Doppelklick auf einen Termin)
+    var meetingContext: MeetingContext?
     /// Befehlszeile (⌘K) offen, mit ihrer Eingabe
     var showsCommandBar = false
     var commandQuery = ""
@@ -1053,6 +1057,202 @@ final class AppModel {
         } catch {
             report(error)
         }
+    }
+
+    // MARK: Meetings und Kundenordner
+
+    func meeting(_ id: UUID?) -> Meeting? {
+        id.flatMap { id in meetings.first { $0.id == id } }
+    }
+
+    func meeting(for context: MeetingContext) -> Meeting? {
+        if let id = context.meetingID, let found = meeting(id) { return found }
+        guard let eventID = context.eventID else { return nil }
+        return meetings.first { $0.eventID == eventID }
+    }
+
+    func tasks(fromMeeting id: UUID) -> [TaskItem] {
+        tasks.filter { $0.meetingID == id }.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// Meeting-Fenster für einen Termin.
+    func openMeeting(_ event: CalendarEvent) {
+        meetingContext = MeetingContext(event: event)
+    }
+
+    /// Meeting-Fenster für eine Aufgabe: das Meeting, aus dem sie stammt, oder den Termin, aus dem sie erfasst wurde.
+    func openMeeting(for task: TaskItem) {
+        if let meeting = meeting(task.meetingID) {
+            meetingContext = MeetingContext(meeting: meeting)
+            return
+        }
+        guard task.source == .calendar, let eventID = task.externalID else { return }
+        if let event = events.first(where: { $0.id == eventID }) {
+            meetingContext = MeetingContext(event: event)
+        } else if let meeting = meetings.first(where: { $0.eventID == eventID }) {
+            meetingContext = MeetingContext(meeting: meeting)
+        } else {
+            let own = entries.filter { $0.taskID == task.id }.sorted { $0.start < $1.start }
+            let start = own.first?.start ?? task.completedAt ?? Date()
+            let end = own.last?.end ?? start.addingTimeInterval(TimeInterval((task.estimateMinutes ?? 30) * 60))
+            meetingContext = MeetingContext(meetingID: nil, eventID: eventID, title: task.title, start: start, end: end, event: nil)
+        }
+    }
+
+    /// Kunde, der für ein Meeting naheliegt: der gespeicherte, der der erfassten Aufgabe, sonst der zuletzt für diesen Titel gewählte.
+    func suggestedCustomer(for context: MeetingContext) -> UUID? {
+        if let meeting = meeting(for: context) { return meeting.customerID }
+        if let eventID = context.eventID,
+           let logged = tasks.first(where: { $0.source == .calendar && $0.externalID == eventID }),
+           logged.customerID != nil {
+            return logged.customerID
+        }
+        return storedAssignments()[Self.assignmentKey(title: context.title)]?.customerID
+    }
+
+    /// Legt das Meeting an oder ändert seinen Kunden; merkt sich den Kunden für diesen Termintitel.
+    @discardableResult
+    func saveMeeting(_ context: MeetingContext, customerID: UUID?) -> Meeting {
+        var meeting = meeting(for: context)
+            ?? Meeting(eventID: context.eventID, title: context.title, start: context.start, end: context.end)
+        meeting.customerID = customerID
+        persistMeeting(meeting)
+        var all = storedAssignments()
+        all[Self.assignmentKey(title: context.title)] = EventAssignment(customerID: customerID)
+        if let data = try? JSONEncoder().encode(all) {
+            UserDefaults.standard.set(data, forKey: Self.eventAssignmentsKey)
+        }
+        return meeting
+    }
+
+    /// Legt das Transkript als Datei im Ordner des Kunden ab (unter „Meetings“; der Ordner entsteht bei Bedarf)
+    /// und merkt sie am Meeting. Ohne Kunde landet es im Tagwerk-Ordner.
+    @discardableResult
+    func storeTranscript(_ text: String, for context: MeetingContext, customerID: UUID?) throws -> URL {
+        let cleaned = MeetingFiles.isVTT(text) ? MeetingFiles.plainTranscript(fromVTT: text) : text
+        guard !cleaned.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw MeetingError.emptyTranscript
+        }
+        let customer = self.customer(customerID)
+        let folder: URL
+        if let customer {
+            folder = try ensureFolder(for: customer.id).appendingPathComponent(MeetingFiles.meetingsFolder, isDirectory: true)
+        } else {
+            folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Tagwerk", isDirectory: true)
+                .appendingPathComponent(MeetingFiles.meetingsFolder, isDirectory: true)
+        }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var meeting = saveMeeting(context, customerID: customerID)
+        let url = folder.appendingPathComponent(MeetingFiles.fileName(title: context.title, start: context.start))
+        let document = MeetingFiles.document(
+            title: context.title, start: context.start, end: context.end, customerName: customer?.name, transcript: cleaned
+        )
+        try document.write(to: url, atomically: true, encoding: .utf8)
+        meeting.transcriptPath = url.path
+        persistMeeting(meeting)
+        AppLog.info("Meeting", "Transkript abgelegt (\(cleaned.count) Zeichen)")
+        return url
+    }
+
+    /// Meeting ohne (weitere) Aufgaben abschließen.
+    func markMeetingProcessed(_ context: MeetingContext) {
+        guard var meeting = meeting(for: context), meeting.processedAt == nil else { return }
+        meeting.processedAt = Date()
+        persistMeeting(meeting)
+    }
+
+    /// Basisordner für neue Kundenordner (Einstellungen › Claude), Standard „Kunden“ im Benutzerordner.
+    var customerFoldersBase: URL {
+        _ = settingsVersion
+        let raw = UserDefaults.standard.string(forKey: Preferences.customerFoldersBaseKey) ?? ""
+        if raw.isEmpty {
+            return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Kunden", isDirectory: true)
+        }
+        return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath, isDirectory: true)
+    }
+
+    func setCustomerFoldersBase(_ url: URL) {
+        UserDefaults.standard.set(url.path, forKey: Preferences.customerFoldersBaseKey)
+        settingsVersion += 1
+    }
+
+    /// Ordner des Kunden; fehlt er, wird er im Basisordner angelegt (mit „Meetings“ und einer ersten CLAUDE.md).
+    @discardableResult
+    func ensureFolder(for customerID: UUID) throws -> URL {
+        guard var customer = customer(customerID) else { throw MeetingError.noCustomer }
+        let url: URL
+        if let path = customer.folderPath, !path.isEmpty {
+            url = URL(fileURLWithPath: path, isDirectory: true)
+        } else {
+            url = customerFoldersBase.appendingPathComponent(MeetingFiles.folderName(for: customer.name), isDirectory: true)
+        }
+        try FileManager.default.createDirectory(
+            at: url.appendingPathComponent(MeetingFiles.meetingsFolder, isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try writeInstructionsIfMissing(customerName: customer.name, in: url)
+        if customer.folderPath != url.path {
+            customer.folderPath = url.path
+            save(customer)
+            AppLog.info("Kundenordner", "Angelegt bzw. verknüpft")
+        }
+        return url
+    }
+
+    /// Vorhandenen Ordner für den Kunden nehmen (oder die Verknüpfung lösen).
+    func setFolder(_ url: URL?, for customerID: UUID) {
+        guard var customer = customer(customerID) else { return }
+        customer.folderPath = url?.path
+        save(customer)
+    }
+
+    func hasInstructions(customerID: UUID) -> Bool {
+        guard let path = customer(customerID)?.folderPath else { return false }
+        return FileManager.default.fileExists(atPath: (path as NSString).appendingPathComponent(MeetingFiles.instructionsFile))
+    }
+
+    /// CLAUDE.md im Kundenordner anlegen, wenn noch keine da ist (eine vorhandene bleibt unangetastet).
+    func writeInstructionsIfMissing(customerName: String, in folder: URL) throws {
+        let file = folder.appendingPathComponent(MeetingFiles.instructionsFile)
+        guard !FileManager.default.fileExists(atPath: file.path) else { return }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try MeetingFiles.claudeInstructions(customerName: customerName).write(to: file, atomically: true, encoding: .utf8)
+    }
+
+    /// Startet Claude Code im Ordner des Kunden (legt ihn bei Bedarf an), auf Wunsch gleich mit der Bitte zum Meeting.
+    func openClaudeCode(customerID: UUID?, meeting: Meeting? = nil) {
+        do {
+            let folder = try customerID.map { try ensureFolder(for: $0) }
+                ?? FileManager.default.homeDirectoryForCurrentUser
+            let prompt = meeting.map { ClaudeCodeLauncher.prompt(for: $0, calendar: .current) }
+            try ClaudeCodeLauncher.open(in: folder, prompt: prompt)
+            AppLog.info("Claude Code", meeting == nil ? "Im Kundenordner geöffnet" : "Für ein Meeting geöffnet")
+        } catch {
+            report(error)
+        }
+    }
+
+    private func persistMeeting(_ meeting: Meeting) {
+        do {
+            try store.save(meeting)
+            if let index = meetings.firstIndex(where: { $0.id == meeting.id }) {
+                meetings[index] = meeting
+            } else {
+                meetings.append(meeting)
+            }
+        } catch {
+            report(error)
+        }
+    }
+
+    private func storedAssignments() -> [String: EventAssignment] {
+        UserDefaults.standard.data(forKey: Self.eventAssignmentsKey)
+            .flatMap { try? JSONDecoder().decode([String: EventAssignment].self, from: $0) } ?? [:]
+    }
+
+    private static func assignmentKey(title: String) -> String {
+        title.lowercased().trimmingCharacters(in: .whitespaces)
     }
 
     // MARK: Pausen
@@ -2323,6 +2523,7 @@ final class AppModel {
             longGoals = snapshot.longGoals
             absences = snapshot.absences
             breaks = snapshot.breaks
+            meetings = snapshot.meetings
             cleanUpHTMLEntities()
         } catch {
             report(error)

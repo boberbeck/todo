@@ -52,6 +52,19 @@ struct TaskDetailView: View {
                     }
                 }
 
+                if let meeting = model.meeting(task.meetingID) {
+                    Section {
+                        LabeledContent("Aus dem Meeting") {
+                            Button("\(meeting.title), \(meeting.start.formatted(date: .numeric, time: .shortened))") {
+                                model.openMeeting(for: task)
+                            }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(Theme.accent)
+                            .help("Meeting mit Transkript öffnen")
+                        }
+                    }
+                }
+
                 Section("Planung") {
                     Picker("Kunde", selection: Binding(
                         get: { task.customerID },

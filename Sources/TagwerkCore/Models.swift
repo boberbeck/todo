@@ -40,6 +40,8 @@ public struct Customer: Identifiable, Hashable, Codable, Sendable {
     public var createdAt: Date
     /// Name des Kontos in ManageEngine, über das Tickets diesem Kunden zugeordnet werden.
     public var manageEngineAccount: String?
+    /// Ordner des Kunden für Claude Code (CLAUDE.md, Meeting-Transkripte)
+    public var folderPath: String?
 
     public init(
         id: UUID = UUID(),
@@ -47,7 +49,8 @@ public struct Customer: Identifiable, Hashable, Codable, Sendable {
         colorIndex: Int = 0,
         isArchived: Bool = false,
         createdAt: Date = Date(),
-        manageEngineAccount: String? = nil
+        manageEngineAccount: String? = nil,
+        folderPath: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -55,6 +58,7 @@ public struct Customer: Identifiable, Hashable, Codable, Sendable {
         self.isArchived = isArchived
         self.createdAt = createdAt
         self.manageEngineAccount = manageEngineAccount
+        self.folderPath = folderPath
     }
 }
 
@@ -103,6 +107,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
     /// Unteraufgabe mit eigenem Tag: ihre Position in der Liste dieses Tages
     /// (`sortIndex` bleibt die Reihenfolge unter ihrer Aufgabe).
     public var daySortIndex: Double?
+    /// Meeting, aus dem die Aufgabe entstanden ist
+    public var meetingID: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -130,7 +136,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         longGoalID: UUID? = nil,
         ticketTitle: String? = nil,
         isStanding: Bool = false,
-        daySortIndex: Double? = nil
+        daySortIndex: Double? = nil,
+        meetingID: UUID? = nil
     ) {
         self.id = id
         self.title = title
@@ -158,6 +165,7 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         self.ticketTitle = ticketTitle
         self.isStanding = isStanding
         self.daySortIndex = daySortIndex
+        self.meetingID = meetingID
     }
 
     public var isDone: Bool { status == .done }

@@ -5,6 +5,8 @@ import TagwerkCore
 struct WeekPlanView: View {
     @Environment(AppModel.self) private var model
     @State private var weekStart: LocalDate?
+    /// Breite des Eingangs, mit der Maus an seinem rechten Rand verstellbar
+    @AppStorage(Preferences.planInboxWidthKey) private var inboxWidth = Preferences.defaultPlanInboxWidth
 
     var body: some View {
         let monday = weekStart ?? model.currentWeekStart
@@ -21,9 +23,17 @@ struct WeekPlanView: View {
             .padding(.top, 32)
             .padding(.bottom, 24)
 
-            HStack(alignment: .top, spacing: 16) {
+            HStack(alignment: .top, spacing: 4) {
                 InboxColumn()
-                    .frame(width: 260)
+                    .frame(width: CGFloat(inboxWidth))
+
+                ResizeHandle(
+                    width: $inboxWidth,
+                    range: Preferences.planInboxWidthRange,
+                    defaultValue: Preferences.defaultPlanInboxWidth,
+                    showsLine: false,
+                    resizesLeftColumn: true
+                )
 
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal) {

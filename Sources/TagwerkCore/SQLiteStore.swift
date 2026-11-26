@@ -26,7 +26,7 @@ public final class SQLiteStore: Store {
     private var db: OpaquePointer?
 
     /// Aktuelle Version des Datenbankschemas.
-    public static let schemaVersion = 13
+    public static let schemaVersion = 14
 
     public init(url: URL) throws {
         try FileManager.default.createDirectory(
@@ -318,6 +318,33 @@ public final class SQLiteStore: Store {
             COMMIT;
             """)
         }
+        if version < 14 {
+            // Meetings mit Transkript, Kundenordner für Claude Code, Aufgaben aus Meetings
+            try exec("""
+            BEGIN;
+            ALTER TABLE customer ADD COLUMN folder_path TEXT;
+            ALTER TABLE task ADD COLUMN meeting_id TEXT;
+            CREATE TABLE IF NOT EXISTS meeting (
+                id TEXT PRIMARY KEY,
+                event_id TEXT,
+                title TEXT NOT NULL DEFAULT '',
+                start_at REAL NOT NULL,
+                end_at REAL NOT NULL,
+                customer_id TEXT,
+                transcript_path TEXT,
+                processed_at REAL,
+                created_at REAL NOT NULL,
+                modified_at REAL
+            );
+            CREATE INDEX IF NOT EXISTS meeting_start ON meeting (start_at);
+            CREATE INDEX IF NOT EXISTS meeting_event ON meeting (event_id);
+            CREATE TRIGGER IF NOT EXISTS meeting_inserted AFTER INSERT ON meeting BEGIN UPDATE meeting SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS meeting_updated AFTER UPDATE ON meeting BEGIN UPDATE meeting SET modified_at = (julianday('now') - 2440587.5) * 86400.0 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS meeting_deleted AFTER DELETE ON meeting BEGIN INSERT OR REPLACE INTO deleted_record (entity, id, deleted_at) VALUES ('meeting', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+            PRAGMA user_version = 14;
+            COMMIT;
+            """)
+        }
     }
 
     /// Für einen späteren Abgleich: was sich seit `date` geändert hat (Tabelle → IDs) und was gelöscht wurde.
@@ -358,7 +385,7 @@ public final class SQLiteStore: Store {
     public func load() throws -> Snapshot {
         var snapshot = Snapshot()
 
-        let customers = try prepare("SELECT id, name, color_index, is_archived, created_at, manage_engine_account FROM customer;")
+        let customers = try prepare("SELECT id, name, color_index, is_archived, created_at, manage_engine_account, folder_path FROM customer;")
         while try customers.step() {
             guard let id = customers.uuid(0) else { continue }
             snapshot.customers.append(Customer(
@@ -367,7 +394,8 @@ public final class SQLiteStore: Store {
                 colorIndex: customers.int(2) ?? 0,
                 isArchived: (customers.int(3) ?? 0) != 0,
                 createdAt: customers.date(4) ?? Date(),
-                manageEngineAccount: customers.text(5)
+                manageEngineAccount: customers.text(5),
+                folderPath: customers.text(6)
             ))
         }
 
@@ -376,7 +404,7 @@ public final class SQLiteStore: Store {
         SELECT id, title, notes, customer_id, source, external_id, external_url, planned_date,
                estimate_minutes, work_description, status, completed_at,
                sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type,
-               parent_id, ticket_number, ticket_key, long_goal_id, ticket_title, is_standing, day_sort_index
+               parent_id, ticket_number, ticket_key, long_goal_id, ticket_title, is_standing, day_sort_index, meeting_id
         FROM task;
         """)
         while try tasks.step() {
@@ -407,7 +435,8 @@ public final class SQLiteStore: Store {
                 longGoalID: tasks.uuid(22),
                 ticketTitle: tasks.text(23),
                 isStanding: (tasks.int(24) ?? 0) != 0,
-                daySortIndex: tasks.double(25)
+                daySortIndex: tasks.double(25),
+                meetingID: tasks.uuid(26)
             ))
         }
 
@@ -508,6 +537,25 @@ public final class SQLiteStore: Store {
             ))
         }
 
+        let meetings = try prepare("""
+        SELECT id, event_id, title, start_at, end_at, customer_id, transcript_path, processed_at, created_at
+        FROM meeting ORDER BY start_at;
+        """)
+        while try meetings.step() {
+            guard let id = meetings.uuid(0), let start = meetings.date(3), let end = meetings.date(4) else { continue }
+            snapshot.meetings.append(Meeting(
+                id: id,
+                eventID: meetings.text(1),
+                title: meetings.text(2) ?? "",
+                start: start,
+                end: end,
+                customerID: meetings.uuid(5),
+                transcriptPath: meetings.text(6),
+                processedAt: meetings.date(7),
+                createdAt: meetings.date(8) ?? Date()
+            ))
+        }
+
         return snapshot
     }
 
@@ -515,13 +563,14 @@ public final class SQLiteStore: Store {
 
     public func save(_ customer: Customer) throws {
         try run("""
-        INSERT INTO customer (id, name, color_index, is_archived, created_at, manage_engine_account)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO customer (id, name, color_index, is_archived, created_at, manage_engine_account, folder_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             color_index = excluded.color_index,
             is_archived = excluded.is_archived,
-            manage_engine_account = excluded.manage_engine_account;
+            manage_engine_account = excluded.manage_engine_account,
+            folder_path = excluded.folder_path;
         """, [
             .text(customer.id.uuidString),
             .text(customer.name),
@@ -529,6 +578,7 @@ public final class SQLiteStore: Store {
             .int(customer.isArchived ? 1 : 0),
             .double(customer.createdAt.timeIntervalSince1970),
             .optionalText(customer.manageEngineAccount),
+            .optionalText(customer.folderPath),
         ])
     }
 
@@ -537,8 +587,8 @@ public final class SQLiteStore: Store {
         INSERT INTO task (id, title, notes, customer_id, source, external_id, external_url, planned_date,
                           estimate_minutes, work_description, status, completed_at,
                           sort_index, created_at, scheduled_start, calendar_event_id, external_key, goal_id, worklog_type,
-                          parent_id, ticket_number, ticket_key, long_goal_id, ticket_title, is_standing, day_sort_index)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          parent_id, ticket_number, ticket_key, long_goal_id, ticket_title, is_standing, day_sort_index, meeting_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             notes = excluded.notes,
@@ -563,7 +613,8 @@ public final class SQLiteStore: Store {
             long_goal_id = excluded.long_goal_id,
             ticket_title = excluded.ticket_title,
             is_standing = excluded.is_standing,
-            day_sort_index = excluded.day_sort_index;
+            day_sort_index = excluded.day_sort_index,
+            meeting_id = excluded.meeting_id;
         """, [
             .text(task.id.uuidString),
             .text(task.title),
@@ -591,6 +642,7 @@ public final class SQLiteStore: Store {
             .optionalText(task.ticketTitle),
             .int(task.isStanding ? 1 : 0),
             .optionalDouble(task.daySortIndex),
+            .optionalText(task.meetingID?.uuidString),
         ])
     }
 
@@ -729,6 +781,43 @@ public final class SQLiteStore: Store {
 
     public func deleteBreak(id: UUID) throws {
         try run("DELETE FROM work_break WHERE id = ?;", [.text(id.uuidString)])
+    }
+
+    public func save(_ meeting: Meeting) throws {
+        try run("""
+        INSERT INTO meeting (id, event_id, title, start_at, end_at, customer_id, transcript_path, processed_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            event_id = excluded.event_id,
+            title = excluded.title,
+            start_at = excluded.start_at,
+            end_at = excluded.end_at,
+            customer_id = excluded.customer_id,
+            transcript_path = excluded.transcript_path,
+            processed_at = excluded.processed_at;
+        """, [
+            .text(meeting.id.uuidString),
+            .optionalText(meeting.eventID),
+            .text(meeting.title),
+            .double(meeting.start.timeIntervalSince1970),
+            .double(meeting.end.timeIntervalSince1970),
+            .optionalText(meeting.customerID?.uuidString),
+            .optionalText(meeting.transcriptPath),
+            .optionalDouble(meeting.processedAt?.timeIntervalSince1970),
+            .double(meeting.createdAt.timeIntervalSince1970),
+        ])
+    }
+
+    public func deleteMeeting(id: UUID) throws {
+        try exec("BEGIN;")
+        do {
+            try run("UPDATE task SET meeting_id = NULL WHERE meeting_id = ?;", [.text(id.uuidString)])
+            try run("DELETE FROM meeting WHERE id = ?;", [.text(id.uuidString)])
+            try exec("COMMIT;")
+        } catch {
+            try? exec("ROLLBACK;")
+            throw error
+        }
     }
 
     public func deleteLongGoal(id: UUID) throws {
@@ -899,7 +988,7 @@ final class Statement {
 
 /// Änderungen seit einem Zeitpunkt, als Grundlage für einen Abgleich zwischen Geräten.
 public struct StoreChanges: Equatable, Sendable {
-    public static let tables = ["customer", "task", "time_entry", "booking", "weekly_goal", "long_goal", "absence", "work_break"]
+    public static let tables = ["customer", "task", "time_entry", "booking", "weekly_goal", "long_goal", "absence", "work_break", "meeting"]
 
     public struct Deletion: Equatable, Sendable {
         public var entity: String

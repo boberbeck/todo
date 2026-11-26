@@ -323,6 +323,7 @@ struct EventBlock: View {
                 .stroke(Color.primary.opacity(0.15))
         )
         .contextMenu {
+            Button("Meeting & Transkript …") { model.openMeeting(event) }
             if let task {
                 Button("Aufgabe öffnen …") { model.openDetail(task.id) }
             } else {
@@ -332,18 +333,15 @@ struct EventBlock: View {
                 .disabled(logged)
             }
         }
+        // Doppelklick: Meeting-Fenster (Transkript, Aufgaben daraus, Claude Code, Zeit erfassen)
         .onTapGesture(count: 2) {
-            if let task {
-                model.openDetail(task.id)
-            } else if !logged {
-                showsLogSheet = true
-            }
+            model.openMeeting(event)
         }
         .sheet(isPresented: $showsLogSheet) {
             LogEventSheet(event: event)
                 .tagwerkSheet()
         }
-        .help("\(event.displayTitle) · \(timeRange)")
+        .help("\(event.displayTitle) · \(timeRange)\(model.meetings.contains { $0.eventID == event.id && $0.hasTranscript } ? " · Transkript abgelegt" : "")\nDoppelklick: Meeting mit Transkript")
     }
 
     private var timeRange: String {

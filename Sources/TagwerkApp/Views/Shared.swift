@@ -76,6 +76,9 @@ struct TaskContextMenu: View {
     var body: some View {
         Button("Öffnen …") { model.openDetail(task.id) }
         Button("Im Fokus öffnen") { model.openFocus(task.id) }
+        if task.meetingID != nil || task.source == .calendar {
+            Button("Meeting & Transkript …") { model.openMeeting(for: task) }
+        }
         if !task.isDone {
             Button(task.isSubtask ? "Weitere Unteraufgabe" : "Unteraufgabe hinzufügen") { model.beginSubtaskEntry(for: task.id) }
         }
@@ -252,14 +255,16 @@ struct ColorChooser: View {
     }
 }
 
-/// Senkrechte Trennlinie, die man mit der Maus ziehen kann. Sie verändert die Breite der Spalte rechts von ihr.
-/// Doppelklick setzt die Breite zurück.
+/// Senkrechte Trennlinie, die man mit der Maus ziehen kann. Sie verändert die Breite der Spalte rechts von ihr
+/// (oder links, mit `resizesLeftColumn`). Doppelklick setzt die Breite zurück.
 struct ResizeHandle: View {
     @Binding var width: Double
     let range: ClosedRange<Double>
     let defaultValue: Double
     /// Sichtbare Linie; ohne Linie bleibt nur der Bereich zum Ziehen.
     var showsLine = true
+    /// Die Spalte links wird breiter, wenn man nach rechts zieht (z. B. der Eingang im Wochenplan).
+    var resizesLeftColumn = false
     @State private var startWidth: Double?
     @State private var hovering = false
 
@@ -287,7 +292,8 @@ struct ResizeHandle: View {
                             .onChanged { value in
                                 let start = startWidth ?? min(width, range.upperBound)
                                 startWidth = start
-                                width = min(range.upperBound, max(range.lowerBound, start - Double(value.translation.width)))
+                                let delta = Double(value.translation.width)
+                                width = min(range.upperBound, max(range.lowerBound, resizesLeftColumn ? start + delta : start - delta))
                             }
                             .onEnded { _ in startWidth = nil }
                     )

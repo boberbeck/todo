@@ -123,6 +123,10 @@ struct RootView: View {
             EditEntrySheet(entry: entry)
                 .tagwerkSheet()
         }
+        .sheet(item: $model.meetingContext) { context in
+            MeetingSheet(context: context)
+                .tagwerkSheet()
+        }
         .sheet(isPresented: Binding(
             get: { model.ticketPickerTaskID != nil },
             set: { if !$0 { model.ticketPickerTaskID = nil } }
