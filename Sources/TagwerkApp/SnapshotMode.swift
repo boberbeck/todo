@@ -220,6 +220,13 @@ enum SnapshotMode {
             model.perform(first.action)
             try? await Task.sleep(for: .seconds(0.6))
             log("Befehl „\(query)“ → \(first.title): Aufgaben \(tasksBefore)→\(model.tasks.count), Einträge \(entriesBefore)→\(model.entries.count), läuft: \(model.runningTask?.title ?? (model.runningBreak != nil ? "Mittagspause" : "nichts")), Seite: \(String(describing: model.selection ?? .today)), Hinweis: \(model.toast?.text ?? "-")")
+            if query == "wechseln zu angebot" {
+                // Fokus nach dem Wechsel: neue Aufgabe, Zeit mitgenommen, Hinweis unten
+                model.selection = .focus
+                try? await Task.sleep(for: .seconds(1.2))
+                await capture(window, name: "fokus-gewechselt", in: directory)
+                model.selection = .today
+            }
             if query == "45m Telefonat Müller" {
                 model.selection = .today
                 try? await Task.sleep(for: .seconds(1.2))
