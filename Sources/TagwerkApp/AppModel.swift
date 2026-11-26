@@ -2134,29 +2134,41 @@ final class AppModel {
     }
 
     /// Mail als Aufgabe im Eingang (z. B. aus Outlook hineingezogen).
-    func addMailTask(subject: String?, from: String?, link: String?) {
+    /// Mit `plannedDate` (z. B. auf „Heute“ gezogen) steht sie gleich an dem Tag statt im Eingang.
+    func addMailTask(subject: String?, from: String?, link: String?, plannedDate: LocalDate? = nil) {
         let title = (subject?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? "Mail ohne Betreff"
         let task = TaskItem(
             title: title,
             notes: from.map { "Von: \($0)" } ?? "",
             source: .mail,
-            externalURL: link
+            externalURL: link,
+            plannedDate: plannedDate
         )
         persist(task)
-        inboxMessage = "„\(title)“ liegt im Eingang."
+        inboxMessage = "„\(title)“ \(dropPlace(plannedDate))."
     }
 
-    func addLinkTask(_ url: URL) {
+    func addLinkTask(_ url: URL, plannedDate: LocalDate? = nil) {
         let title = url.host.map { "Link: \($0)" } ?? url.absoluteString
-        persist(TaskItem(title: title, externalURL: url.absoluteString))
-        inboxMessage = "Link liegt im Eingang."
+        persist(TaskItem(title: title, externalURL: url.absoluteString, plannedDate: plannedDate))
+        inboxMessage = "Link \(dropPlace(plannedDate))."
     }
 
-    func addTextTask(_ text: String) {
+    func addTextTask(_ text: String, plannedDate: LocalDate? = nil) {
         let firstLine = text.split(separator: "\n").first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? ""
         guard !firstLine.isEmpty else { return }
-        addTask(title: String(firstLine.prefix(200)), customerID: nil, plannedDate: nil)
-        inboxMessage = "Text liegt im Eingang."
+        addTask(title: String(firstLine.prefix(200)), customerID: nil, plannedDate: plannedDate)
+        inboxMessage = "Text \(dropPlace(plannedDate))."
+    }
+
+    /// Hineingezogen, aber nicht lesbar: kurzer Hinweis statt Stille.
+    func reportUnreadableDrop() {
+        inboxMessage = "Format nicht erkannt; Details stehen im Protokoll."
+    }
+
+    private func dropPlace(_ day: LocalDate?) -> String {
+        guard let day else { return "liegt im Eingang" }
+        return day == today ? "steht auf Heute" : "ist eingeplant"
     }
 
     // MARK: Sicherung und Export

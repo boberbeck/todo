@@ -150,31 +150,36 @@ struct QuickCaptureView: View {
 }
 
 /// Nimmt Mails (z. B. aus Outlook), Dateien, Links und Text per Drag-and-drop als Aufgaben an.
+/// Ohne `plannedDate` landen sie im Eingang, sonst gleich an dem Tag (z. B. auf „Heute“ gezogen).
 enum DropImporter {
-    static let acceptedTypes: [UTType] = [.emailMessage, .fileURL, .url, .plainText]
+    /// `.item` zuletzt: so kommt jedes Ziehen hier an und steht im Protokoll, auch wenn das Format unbekannt ist
+    /// (das neue Outlook bietet je nach Version andere Formate an).
+    static let acceptedTypes: [UTType] = [.emailMessage, .fileURL, .url, .plainText, .item]
 
     @MainActor
-    static func handle(_ providers: [NSItemProvider], model: AppModel) -> Bool {
+    static func handle(_ providers: [NSItemProvider], model: AppModel, plannedDate: LocalDate? = nil) -> Bool {
         // Für die Fehlersuche: jedes Ziehen mit den angebotenen Formaten protokollieren (ohne Inhalt)
+        let place = plannedDate == nil ? "Eingang" : "Tag"
         for (index, provider) in providers.enumerated() {
-            AppLog.info("Drop", "Teil \(index + 1) von \(providers.count): \(provider.registeredTypeIdentifiers.joined(separator: ", ")) · Name: \(provider.suggestedName == nil ? "keiner" : "vorhanden")")
+            AppLog.info("Drop", "\(place), Teil \(index + 1) von \(providers.count): \(provider.registeredTypeIdentifiers.joined(separator: ", ")) · Name: \(provider.suggestedName == nil ? "keiner" : "vorhanden")")
         }
         var handled = false
         for provider in providers {
+            let suggested = provider.suggestedName
+            let types = provider.registeredTypeIdentifiers.joined(separator: ", ")
             if let mailType = provider.registeredTypeIdentifiers.first(where: { identifier in
                 UTType(identifier)?.conforms(to: .emailMessage) ?? false
             }) {
                 handled = true
                 // Das neue Outlook liefert beim Ziehen nicht immer eine lesbare Mail-Datei. Dann helfen der vorgeschlagene
                 // Name oder mitgelieferter Text. Was ankam, steht (ohne Inhalt) im Protokoll.
-                let suggested = provider.suggestedName
-                let types = provider.registeredTypeIdentifiers.joined(separator: ", ")
                 let hasText = provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier)
-                _ = provider.loadFileRepresentation(forTypeIdentifier: mailType) { url, _ in
+                AppLog.info("Mail-Drop", "Lade \(mailType) …")
+                _ = provider.loadFileRepresentation(forTypeIdentifier: mailType) { url, error in
                     let data = url.flatMap { try? Data(contentsOf: $0) }
                     let header = data.map(EmailHeaderParser.parse)
                     let fileName = url?.lastPathComponent
-                    let note = "Typen: \(types) · Name: \(suggested == nil ? "keiner" : "vorhanden") · Datei: .\(url?.pathExtension ?? "–"), \(data?.count ?? 0) Bytes, beginnt mit \(signature(data)) · Betreff \(header?.subject == nil ? "nicht gefunden" : "gefunden")"
+                    let note = "Typen: \(types) · Name: \(suggested == nil ? "keiner" : "vorhanden") · Datei: .\(url?.pathExtension ?? "–"), \(data?.count ?? 0) Bytes, beginnt mit \(signature(data)) · Betreff \(header?.subject == nil ? "nicht gefunden" : "gefunden") · Fehler: \(describe(error))"
                     let title = MailDropTitle.best(subject: header?.subject, suggestedName: suggested, fileName: fileName, text: nil)
                     Task { @MainActor in
                         AppLog.info("Mail-Drop", note)
@@ -182,31 +187,35 @@ enum DropImporter {
                             _ = provider.loadObject(ofClass: String.self) { text, _ in
                                 let fromText = MailDropTitle.best(subject: nil, suggestedName: nil, fileName: nil, text: text)
                                 Task { @MainActor in
-                                    model.addMailTask(subject: fromText, from: header?.from, link: nil)
+                                    model.addMailTask(subject: fromText, from: header?.from, link: nil, plannedDate: plannedDate)
                                 }
                             }
                         } else {
-                            model.addMailTask(subject: title, from: header?.from, link: nil)
+                            model.addMailTask(subject: title, from: header?.from, link: nil, plannedDate: plannedDate)
                         }
                     }
                 }
             } else if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                 handled = true
-                _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                    guard let url else { return }
+                _ = provider.loadObject(ofClass: URL.self) { url, error in
+                    guard let url else {
+                        let failure = describe(error)
+                        Task { @MainActor in AppLog.warning("Mail-Drop", "Datei-Link nicht lesbar: \(failure)") }
+                        return
+                    }
                     let isMail = ["eml", "msg", "emlx"].contains(url.pathExtension.lowercased())
                     let data = isMail ? try? Data(contentsOf: url) : nil
                     let header = data.map(EmailHeaderParser.parse)
                     let note = "Datei: .\(url.pathExtension), \(data?.count ?? 0) Bytes, beginnt mit \(signature(data)) · Betreff \(header?.subject == nil ? "nicht gefunden" : "gefunden")"
                     let plainNote = "Datei ohne Mail-Endung: .\(url.pathExtension.isEmpty ? "–" : url.pathExtension), Name \(url.deletingPathExtension().lastPathComponent.count) Zeichen, Schema \(url.scheme ?? "–")"
                     Task { @MainActor in
-                        if !isMail { AppLog.info("Mail-Drop", plainNote) }
                         if isMail {
                             AppLog.info("Mail-Drop", note)
                             let title = MailDropTitle.best(subject: header?.subject, suggestedName: nil, fileName: url.lastPathComponent, text: nil)
-                            model.addMailTask(subject: title, from: header?.from, link: nil)
+                            model.addMailTask(subject: title, from: header?.from, link: nil, plannedDate: plannedDate)
                         } else {
-                            model.addMailTask(subject: url.deletingPathExtension().lastPathComponent, from: nil, link: url.absoluteString)
+                            AppLog.info("Mail-Drop", plainNote)
+                            model.addMailTask(subject: url.deletingPathExtension().lastPathComponent, from: nil, link: url.absoluteString, plannedDate: plannedDate)
                         }
                     }
                 }
@@ -215,7 +224,8 @@ enum DropImporter {
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
                     guard let url else { return }
                     Task { @MainActor in
-                        model.addLinkTask(url)
+                        AppLog.info("Drop", "Link mit Schema \(url.scheme ?? "–")")
+                        model.addLinkTask(url, plannedDate: plannedDate)
                     }
                 }
             } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
@@ -223,11 +233,30 @@ enum DropImporter {
                 _ = provider.loadObject(ofClass: String.self) { text, _ in
                     guard let text else { return }
                     Task { @MainActor in
-                        // Eine aus Tagwerk gezogene Aufgabe kommt als ID: zurück in den Eingang legen.
+                        // Eine aus Tagwerk gezogene Aufgabe kommt als ID: an den Tag (oder zurück in den Eingang) legen.
                         if let id = UUID(uuidString: text.trimmingCharacters(in: .whitespacesAndNewlines)), model.task(id) != nil {
-                            model.move(id, to: nil, before: nil)
+                            model.move(id, to: plannedDate, before: nil)
                         } else {
-                            model.addTextTask(text)
+                            AppLog.info("Drop", "Text mit \(text.count) Zeichen")
+                            model.addTextTask(text, plannedDate: plannedDate)
+                        }
+                    }
+                }
+            } else if let otherType = provider.registeredTypeIdentifiers.first {
+                // Unbekanntes Format (z. B. eine versprochene Datei): trotzdem versuchen, eine Mail daraus zu lesen.
+                handled = true
+                _ = provider.loadFileRepresentation(forTypeIdentifier: otherType) { url, error in
+                    let data = url.flatMap { try? Data(contentsOf: $0) }
+                    let header = data.map(EmailHeaderParser.parse)
+                    let note = "Unbekanntes Format \(otherType) · Typen: \(types) · Datei: .\(url?.pathExtension ?? "–"), \(data?.count ?? 0) Bytes, beginnt mit \(signature(data)) · Betreff \(header?.subject == nil ? "nicht gefunden" : "gefunden") · Fehler: \(describe(error))"
+                    let title = MailDropTitle.best(subject: header?.subject, suggestedName: suggested, fileName: url?.lastPathComponent, text: nil)
+                    let looksLikeMail = header?.subject != nil || header?.from != nil
+                    Task { @MainActor in
+                        AppLog.info("Mail-Drop", note)
+                        if looksLikeMail || title != nil {
+                            model.addMailTask(subject: title, from: header?.from, link: nil, plannedDate: plannedDate)
+                        } else {
+                            model.reportUnreadableDrop()
                         }
                     }
                 }
@@ -235,6 +264,13 @@ enum DropImporter {
         }
         if !handled { AppLog.warning("Drop", "Kein passendes Format, nichts angelegt") }
         return handled
+    }
+
+    /// Fehler kurz und ohne Inhalt fürs Protokoll.
+    static func describe(_ error: Error?) -> String {
+        guard let error else { return "keiner" }
+        let nsError = error as NSError
+        return "\(nsError.domain) \(nsError.code)"
     }
 
     /// Die ersten Bytes als Hex, um das Format zu erkennen (z. B. D0CF11E0 = Outlook-.msg), ohne Inhalt zu protokollieren.

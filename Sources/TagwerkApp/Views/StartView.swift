@@ -150,10 +150,9 @@ struct StartTaskColumn: View {
                 }
             }
             .contentShape(Rectangle())
-            .dropDestination(for: String.self) { items, _ in
-                let ids = items.compactMap { UUID(uuidString: $0) }
-                for id in ids { model.move(id, to: model.today, before: nil) }
-                return !ids.isEmpty
+            // Aufgaben aus dem Eingang und Mails, Links oder Text aus anderen Apps: gleich für heute
+            .onDrop(of: DropImporter.acceptedTypes, isTargeted: nil) { providers in
+                DropImporter.handle(providers, model: model, plannedDate: model.today)
             }
 
             if !done.isEmpty {

@@ -33,7 +33,7 @@ Aufbau: dunkel und ruhig, oben die Leiste mit Start, Plan, Kalender, Fokus, Kund
 | Rückblick | Stunden gegen das Wochenziel, Tagesdurchschnitt, Anteil Kundenarbeit, Stunden je Tag und je Kunde, Verlauf der letzten Wochen, Wochenziele, Export als CSV. |
 | Leerlauf | Läuft der Timer und kommt länger keine Eingabe, fragt Tagwerk nach der Rückkehr: Zeit behalten, abziehen oder einer anderen Aufgabe geben (auch einer Standardaufgabe). Ab 20 Minuten gibt es zusätzlich „Als Mittagspause eintragen“. |
 | Schnell erfassen | ⌃⌥ Leertaste öffnet von überall ein kleines Fenster für neue Aufgaben. |
-| Mails | Mails aus Outlook (oder .eml-Dateien) in den Eingang ziehen; Betreff und Absender werden übernommen. |
+| Mails | Mails aus Outlook (oder .eml-Dateien) in den Eingang ziehen, oder auf „Heute“ für sofort; Betreff und Absender werden übernommen. Jedes Ziehen steht mit den angebotenen Formaten (ohne Inhalt) im Protokoll. |
 | Sicherung | Täglich eine Kopie der Datenbank, die letzten 14 bleiben. |
 | Claude | Ein MCP-Server liegt in der App. Claude Desktop und Claude Code können damit Aufgaben, Timer, Zeiten und den Stand des Tagesabschlusses lesen und ändern. Gebucht wird weiter nur in Tagwerk. |
 | Menüleiste | Laufende Zeit, Stoppen, Mittagspause, Erledigt, eine andere Aufgabe oder Standardaufgabe starten. |
