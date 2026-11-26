@@ -339,15 +339,39 @@ final class AppModel {
     }
 
     /// Plant eine Aufgabe für einen Tag ein (`nil` = zurück in den Eingang).
-    func plan(_ id: UUID, for day: LocalDate?) {
-        guard var task = self.task(id), task.plannedDate != day, !task.isStanding else { return }
+    func plan(_ id: UUID, for requestedDay: LocalDate?) {
+        guard var task = self.task(id), !task.isStanding else { return }
+        let day = normalizedDay(requestedDay, for: task)
+        guard task.plannedDate != day else { return }
         task.plannedDate = day
-        task.sortIndex = DayPlan.nextSortIndex(in: tasks.filter { $0.plannedDate == day })
+        if task.isSubtask {
+            // Die Reihenfolge unter der Aufgabe bleibt; am Tag kommt sie ans Ende.
+            task.daySortIndex = day.map { DayPlan.nextDayIndex(in: dayTasks($0)) }
+        } else {
+            task.sortIndex = DayPlan.nextSortIndex(in: tasks.filter { $0.plannedDate == day })
+        }
         if task.scheduledStart != nil {
             task.scheduledStart = nil
             syncBlock(&task)
         }
         persist(task)
+    }
+
+    /// Eine Unteraufgabe am Tag ihrer Aufgabe braucht keinen eigenen: sie steht dort darunter und zieht mit ihr um.
+    private func normalizedDay(_ day: LocalDate?, for task: TaskItem) -> LocalDate? {
+        guard task.isSubtask, let day, day == parent(of: task)?.plannedDate else { return day }
+        return nil
+    }
+
+    /// Tag, an dem eine Aufgabe dran ist: ihr eigener, bei Unteraufgaben sonst der ihrer Aufgabe.
+    func effectiveDay(of task: TaskItem) -> LocalDate? {
+        task.plannedDate ?? (task.isSubtask ? parent(of: task)?.plannedDate : nil)
+    }
+
+    /// Unteraufgabe mit eigenem Tag (anders als ihre Aufgabe)?
+    func isPlannedOnItsOwn(_ task: TaskItem) -> Bool {
+        guard task.isSubtask, let day = task.plannedDate else { return false }
+        return parent(of: task)?.plannedDate != day
     }
 
     func moveTodayTasks(from source: IndexSet, to destination: Int) {
@@ -475,7 +499,10 @@ final class AppModel {
         task.ticketKey = effective.ticketKey
         task.ticketTitle = effective.ticketTitle
         task.worklogType = effective.worklogType
-        task.sortIndex = DayPlan.nextSortIndex(in: tasks.filter { $0.plannedDate == nil })
+        let day = task.plannedDate
+        let position = task.daySortIndex ?? DayPlan.nextSortIndex(in: tasks.filter { $0.plannedDate == day })
+        task.sortIndex = position
+        task.daySortIndex = nil
         persist(task)
     }
 
@@ -910,7 +937,11 @@ final class AppModel {
             let day = LocalDate(snapped)
             if task.plannedDate != day {
                 task.plannedDate = day
-                task.sortIndex = DayPlan.nextSortIndex(in: tasks.filter { $0.plannedDate == day })
+                if task.isSubtask {
+                    task.daySortIndex = DayPlan.nextDayIndex(in: dayTasks(day))
+                } else {
+                    task.sortIndex = DayPlan.nextSortIndex(in: tasks.filter { $0.plannedDate == day })
+                }
             }
             task.scheduledStart = snapped
         } else {
@@ -1414,7 +1445,7 @@ final class AppModel {
     /// Offene Aufgaben eines Tages auf den nächsten Arbeitstag schieben (z. B. heute krank).
     func moveOpenTasks(from day: LocalDate) {
         let target = Absences.nextWorkingDay(after: day, absences: absences)
-        for task in tasks where task.plannedDate == day && !task.isDone && task.parentID == nil {
+        for task in dayTasks(day) where !task.isDone {
             plan(task.id, for: target)
         }
     }
@@ -1437,9 +1468,10 @@ final class AppModel {
     }
 
     /// Verschiebt eine Aufgabe in einen Tag (oder den Eingang), vor eine andere Aufgabe oder ans Ende.
-    func move(_ id: UUID, to day: LocalDate?, before targetID: UUID?) {
+    func move(_ id: UUID, to requestedDay: LocalDate?, before targetID: UUID?) {
         guard targetID != id, var task = self.task(id), !task.isStanding else { return }
-        guard let day else {
+        // Unteraufgabe auf den Tag ihrer Aufgabe (oder in den Eingang): wieder einfach unter der Aufgabe
+        guard let day = normalizedDay(requestedDay, for: task) else {
             plan(id, for: nil)
             return
         }
@@ -1453,10 +1485,14 @@ final class AppModel {
         list.insert(task, at: position)
         for (index, var item) in list.enumerated() {
             let newIndex = Double(index + 1)
-            if item.id == id || item.sortIndex != newIndex {
+            guard item.id == id || item.dayOrder != newIndex else { continue }
+            // Unteraufgaben behalten ihre Reihenfolge unter der Aufgabe
+            if item.isSubtask {
+                item.daySortIndex = newIndex
+            } else {
                 item.sortIndex = newIndex
-                persist(item)
             }
+            persist(item)
         }
     }
 

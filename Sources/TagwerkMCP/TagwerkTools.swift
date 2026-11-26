@@ -16,6 +16,7 @@ public final class TagwerkTools {
     Tagwerk ist die Aufgaben- und Zeiterfassungs-App des Nutzers (Mac). Aufgaben gehören optional zu einem Kunden, \
     haben einen geplanten Tag (sonst liegen sie im Eingang) und eine Schätzung in Minuten. Es läuft höchstens ein Timer. \
     Aufgaben können Unteraufgaben haben (aufgabe_anlegen mit unteraufgabe_von); diese erben Kunde und Ticket. \
+    Eine Unteraufgabe lässt sich mit aufgabe_aendern und datum auf einen eigenen Tag legen; sie steht dann dort als eigene Aufgabe. \
     Eigene Aufgaben lassen sich einem Ticket aus ManageEngine zuordnen (Parameter ticket); die Zeit geht dann als Worklog dorthin. \
     Lange Ziele (z. B. „AZ-305 bestehen“, Werkzeug ziele) haben Zieldatum und Stundenziel; Aufgaben zahlen über den Parameter ziel darauf ein. \
     Krank- und Urlaubstage trägt abwesenheit_eintragen ein (auch mehrere Tage, nur Arbeitstage); offene Aufgaben dieser Tage \
@@ -363,10 +364,18 @@ public final class TagwerkTools {
         if let description = rawString(arguments, "beschreibung") { task.workDescription = description }
         if arguments["datum"] != nil {
             let newDay = try plannedDay(from: string(arguments, "datum"))
-            if newDay != task.plannedDate {
-                task.plannedDate = newDay
+            // Unteraufgabe am Tag ihrer Aufgabe: kein eigener Tag, sie steht dort darunter
+            let parentDay = task.parentID.flatMap { id in snapshot.tasks.first { $0.id == id } }?.plannedDate
+            let effective = task.isSubtask && newDay == parentDay ? nil : newDay
+            if effective != task.plannedDate {
+                task.plannedDate = effective
                 task.scheduledStart = nil
-                task.sortIndex = DayPlan.nextSortIndex(in: snapshot.tasks.filter { $0.plannedDate == newDay })
+                if task.isSubtask {
+                    // Reihenfolge unter der Aufgabe bleibt, am Tag ans Ende
+                    task.daySortIndex = effective.map { DayPlan.nextDayIndex(in: DayPlan.tasks(for: $0, in: snapshot.tasks)) }
+                } else {
+                    task.sortIndex = DayPlan.nextSortIndex(in: snapshot.tasks.filter { $0.plannedDate == effective })
+                }
             }
         }
         if let estimate = int(arguments, "schaetzung_min") { task.estimateMinutes = estimate > 0 ? estimate : nil }
@@ -651,7 +660,7 @@ public final class TagwerkTools {
             let all = snapshot.absences.filter { old in !new.contains { $0.day == old.day } } + new
             for absence in new where !absence.halfDay {
                 let target = Absences.nextWorkingDay(after: absence.day, absences: all, calendar: calendar)
-                for var task in snapshot.tasks where task.plannedDate == absence.day && !task.isDone && task.parentID == nil {
+                for var task in DayPlan.tasks(for: absence.day, in: snapshot.tasks) where !task.isDone {
                     task.plannedDate = target
                     task.scheduledStart = nil
                     try store.save(task)

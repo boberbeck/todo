@@ -86,8 +86,10 @@ struct TaskContextMenu: View {
         if task.isSubtask {
             Button("Wieder eigene Aufgabe") { model.promoteSubtask(task.id) }
         }
-        if task.plannedDate != model.today, !task.isSubtask {
-            Button("Für heute einplanen") { model.plan(task.id, for: model.today) }
+        let day = model.effectiveDay(of: task)
+        let tomorrow = model.today.adding(days: 1)
+        if day != model.today, !task.isStanding {
+            Button(task.isSubtask ? "Einzeln für heute einplanen" : "Für heute einplanen") { model.plan(task.id, for: model.today) }
         }
         if !task.isDone {
             if task.scheduledStart == nil {
@@ -96,8 +98,19 @@ struct TaskContextMenu: View {
                 Button("Zeitblock entfernen") { model.schedule(task.id, at: nil) }
             }
         }
-        if !task.isSubtask {
-            Button("Auf morgen verschieben") { model.plan(task.id, for: model.today.adding(days: 1)) }
+        if !task.isStanding {
+            if day != tomorrow {
+                Button(task.isSubtask ? "Einzeln für morgen einplanen" : "Auf morgen verschieben") { model.plan(task.id, for: tomorrow) }
+            }
+            Menu(task.isSubtask ? "Einzeln einplanen am" : "Einplanen am") {
+                ForEach(DayText.upcomingWorkdays(from: model.today), id: \.self) { option in
+                    Button(DayText.long(option, today: model.today)) { model.plan(task.id, for: option) }
+                        .disabled(option == day)
+                }
+            }
+        }
+        if task.isSubtask, task.plannedDate != nil {
+            Button("Wieder mit der Aufgabe planen") { model.plan(task.id, for: nil) }
         }
         if task.plannedDate != nil, !task.isSubtask {
             Button("Zurück in den Eingang") { model.plan(task.id, for: nil) }

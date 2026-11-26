@@ -625,6 +625,14 @@ struct TaskCard: View {
             .help(task.isDone ? "Wieder öffnen" : "Erledigt")
 
             VStack(alignment: .leading, spacing: 4) {
+                // Eigens eingeplante Unteraufgabe: zu welcher Aufgabe sie gehört
+                if task.isSubtask, let parent = model.parent(of: task) {
+                    Label(parent.title, systemImage: "arrow.turn.left.up")
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiary)
+                        .lineLimit(1)
+                        .help("Unteraufgabe von „\(parent.title)“, eigens für diesen Tag eingeplant. Rechtsklick › „Wieder mit der Aufgabe planen“")
+                }
                 Text(task.title)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(task.isDone ? Theme.secondary : Theme.text)

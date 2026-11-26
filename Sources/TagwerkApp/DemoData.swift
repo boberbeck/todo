@@ -98,14 +98,17 @@ enum DemoData {
         tasks += [serverUpdate, jourFixe, vpn, offer, invoice]
         // Unteraufgaben: das Angebot in Schritten, einer davon mit eigenem Ticket. Die Logs zur VPN-Störung
         // gehen mit der Störung als ein Worklog ins Ticket.
+        let nextWorkday = (1...4).map { today.adding(days: $0, calendar: calendar) }
+            .first { !calendar.isDateInWeekend($0.startDate(calendar: calendar)) } ?? today.adding(days: 1, calendar: calendar)
         let tunnelLogs = TaskItem(title: "Tunnel-Logs sichern", customerID: mueller.id, workDescription: "Logs exportiert und abgelegt",
                                   status: .done, completedAt: now.addingTimeInterval(-40 * minute),
                                   sortIndex: 1, createdAt: now.addingTimeInterval(-3 * hour), parentID: vpn.id)
         tasks += [
             TaskItem(title: "Leistungsumfang klären", customerID: becker.id, status: .done, completedAt: now.addingTimeInterval(-hour),
                      sortIndex: 1, createdAt: now.addingTimeInterval(-29 * hour), parentID: offer.id),
-            TaskItem(title: "Preise kalkulieren", customerID: becker.id, estimateMinutes: 45,
-                     sortIndex: 2, createdAt: now.addingTimeInterval(-29 * hour), parentID: offer.id),
+            // eigens auf den nächsten Arbeitstag gelegt: steht dort als eigene Karte
+            TaskItem(title: "Preise kalkulieren", customerID: becker.id, plannedDate: nextWorkday, estimateMinutes: 45,
+                     sortIndex: 2, createdAt: now.addingTimeInterval(-29 * hour), parentID: offer.id, daySortIndex: 0.5),
             TaskItem(title: "Lizenzen prüfen", customerID: becker.id, sortIndex: 3, createdAt: now.addingTimeInterval(-29 * hour),
                      parentID: offer.id, ticketNumber: "1243", ticketKey: "100143"),
             tunnelLogs,

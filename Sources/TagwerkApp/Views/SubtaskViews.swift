@@ -2,20 +2,88 @@ import SwiftUI
 import TagwerkCore
 
 /// Unteraufgaben einer Aufgabe: abhaken, Timer starten, Ticket zuordnen, neue anlegen.
+/// Offene stehen oben, je eine Zeile; erledigte sind eingeklappt. Ziehen legt eine Unteraufgabe auf einen eigenen Tag.
 struct SubtaskList: View {
     @Environment(AppModel.self) private var model
     let parent: TaskItem
     var showsAddField = true
 
+    @State private var showsDone = false
+
     var body: some View {
+        let all = model.subtasks(of: parent.id)
+        let open = all.filter { !$0.isDone }
+        let done = all.filter(\.isDone)
         VStack(alignment: .leading, spacing: 1) {
-            ForEach(model.subtasks(of: parent.id)) { subtask in
+            ForEach(open) { subtask in
                 SubtaskRow(task: subtask)
+            }
+            if !done.isEmpty {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { showsDone.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: showsDone ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 8, weight: .semibold))
+                            .frame(width: 13)
+                        Text(done.count == 1 ? "1 erledigt" : "\(done.count) erledigt")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(Theme.tertiary)
+                    .padding(.vertical, 3)
+                    .padding(.horizontal, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(showsDone ? "Erledigte Unteraufgaben ausblenden" : "Erledigte Unteraufgaben zeigen")
+                if showsDone {
+                    ForEach(done) { subtask in
+                        SubtaskRow(task: subtask)
+                    }
+                }
             }
             if showsAddField, !parent.isDone {
                 AddSubtaskField(parentID: parent.id)
             }
         }
+        // Feine Linie links: gehört zur Aufgabe darüber
+        .padding(.leading, 6)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Theme.border)
+                .frame(width: 1)
+                .padding(.vertical, 4)
+        }
+    }
+}
+
+/// Kurzer Tag für kleine Markierungen: Heute, Morgen, sonst „Mo 30.11.“.
+enum DayText {
+    static func short(_ day: LocalDate, today: LocalDate) -> String {
+        if day == today { return "Heute" }
+        if day == today.adding(days: 1) { return "Morgen" }
+        if day == today.adding(days: -1) { return "Gestern" }
+        let names = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"]
+        let weekday = Calendar.current.component(.weekday, from: day.startDate())
+        return "\(names[weekday - 1]) \(day.day).\(day.month)."
+    }
+
+    /// Für Menüs: „Heute“, „Morgen“, „Übermorgen“, sonst „Montag, 30.11.“.
+    static func long(_ day: LocalDate, today: LocalDate) -> String {
+        let label = QuickCommand.dayLabel(day, today: today, calendar: .current)
+        return label.prefix(1).uppercased() + label.dropFirst()
+    }
+
+    /// Die nächsten Arbeitstage ab heute, für „Einplanen am“.
+    static func upcomingWorkdays(from today: LocalDate, count: Int = 10) -> [LocalDate] {
+        var days: [LocalDate] = []
+        var offset = 0
+        while days.count < count, offset < 30 {
+            let day = today.adding(days: offset)
+            if !Calendar.current.isDateInWeekend(day.startDate()) { days.append(day) }
+            offset += 1
+        }
+        return days
     }
 }
 
@@ -81,13 +149,27 @@ struct SubtaskRow: View {
                     .onExitCommand { isEditing = false }
                     .onChange(of: editorFocused) { if !editorFocused, isEditing { commitRename() } }
             } else {
+                // Eine Zeile; bei Namen wie „VMQPTESDMZ01.app.dmz updaten“ bleiben Anfang und Ende lesbar
                 Text(task.title)
                     .font(.callout)
                     .foregroundStyle(task.isDone ? Theme.secondary : Theme.text)
                     .strikethrough(task.isDone, color: Theme.tertiary)
-                    .lineLimit(2)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                     .onTapGesture(count: 2) { beginRename() }
-                    .help("Doppelklick zum Umbenennen")
+                    .help("\(task.title)\n\nDoppelklick zum Umbenennen, ziehen zum Einplanen an einem eigenen Tag")
+            }
+
+            if !task.isDone, model.isPlannedOnItsOwn(task), let day = task.plannedDate {
+                let isToday = day == model.today
+                Text(DayText.short(day, today: model.today))
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(isToday ? Theme.accent : Theme.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(isToday ? Theme.accentSoft : Color.white.opacity(0.06)))
+                    .fixedSize()
+                    .help("Eigens eingeplant: steht an diesem Tag als eigene Aufgabe. Rechtsklick › „Wieder mit der Aufgabe planen“")
             }
 
             if let number = task.ticketNumber, number != model.parent(of: task)?.linkedTicketNumber {
@@ -132,7 +214,7 @@ struct SubtaskRow: View {
                 .help(running ? "Timer stoppen" : "Timer für diese Unteraufgabe starten")
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 3)
         .padding(.horizontal, 4)
         .background(RoundedRectangle(cornerRadius: 6).fill(running ? Theme.accentSoft : (hovering ? Color.white.opacity(0.04) : .clear)))
         .contentShape(Rectangle())
@@ -141,6 +223,8 @@ struct SubtaskRow: View {
             Button("Umbenennen") { beginRename() }
             TaskContextMenu(task: task)
         }
+        // Auf einen Tag, auf „Heute“ oder in den Kalender ziehen: eigener Tag bzw. Zeitblock
+        .draggable(task.id.uuidString)
     }
 
     private func beginRename() {

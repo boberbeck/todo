@@ -119,6 +119,19 @@ enum SnapshotMode {
             try? await Task.sleep(for: .seconds(0.8))
         }
 
+        // Unteraufgaben einzeln planen: auf einen anderen Tag, dann zurück auf den Tag der Aufgabe (wieder darunter)
+        if let offer = model.tasks.first(where: { $0.title == "Angebot Wartungsvertrag" }),
+           let licenses = model.subtasks(of: offer.id).first(where: { $0.title == "Lizenzen prüfen" }) {
+            let tomorrow = model.today.adding(days: 1)
+            let orderBefore = model.subtasks(of: offer.id).map(\.title)
+            model.plan(licenses.id, for: tomorrow)
+            let onTomorrow = model.dayTasks(tomorrow).contains { $0.id == licenses.id }
+            let orderKept = model.subtasks(of: offer.id).map(\.title) == orderBefore
+            log("Unteraufgabe einzeln geplant: steht morgen \(onTomorrow ? "ja" : "nein"), Reihenfolge unter der Aufgabe \(orderKept ? "gleich" : "geändert")")
+            model.move(licenses.id, to: offer.plannedDate ?? model.today, before: nil)
+            log("Zurück auf den Tag der Aufgabe: eigener Tag \(model.task(licenses.id)?.plannedDate?.string ?? "keiner"), auf Start als eigene Karte \(model.todayTasks.contains { $0.id == licenses.id } ? "ja" : "nein")")
+        }
+
         // Tagesabschluss weiter unten: Unteraufgaben am selben Ticket als ein Worklog
         model.selection = .close
         try? await Task.sleep(for: .seconds(1.5))

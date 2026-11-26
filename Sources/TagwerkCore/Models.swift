@@ -100,6 +100,9 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
     public var longGoalID: UUID?
     /// Standardaufgabe wie „Organisatorisches“: immer da, wird nie erledigt, steht nicht im Eingang.
     public var isStanding: Bool
+    /// Unteraufgabe mit eigenem Tag: ihre Position in der Liste dieses Tages
+    /// (`sortIndex` bleibt die Reihenfolge unter ihrer Aufgabe).
+    public var daySortIndex: Double?
 
     public init(
         id: UUID = UUID(),
@@ -126,7 +129,8 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         ticketKey: String? = nil,
         longGoalID: UUID? = nil,
         ticketTitle: String? = nil,
-        isStanding: Bool = false
+        isStanding: Bool = false,
+        daySortIndex: Double? = nil
     ) {
         self.id = id
         self.title = title
@@ -153,11 +157,15 @@ public struct TaskItem: Identifiable, Hashable, Codable, Sendable {
         self.longGoalID = longGoalID
         self.ticketTitle = ticketTitle
         self.isStanding = isStanding
+        self.daySortIndex = daySortIndex
     }
 
     public var isDone: Bool { status == .done }
 
     public var isSubtask: Bool { parentID != nil }
+
+    /// Position in einer Tagesliste: bei Unteraufgaben die eigene, sonst `sortIndex`.
+    public var dayOrder: Double { isSubtask ? (daySortIndex ?? sortIndex) : sortIndex }
 
     /// Ticketnummer: beim Ticket selbst die eigene, sonst die zugeordnete.
     public var linkedTicketNumber: String? {
