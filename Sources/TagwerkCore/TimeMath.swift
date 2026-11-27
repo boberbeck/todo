@@ -26,6 +26,8 @@ public enum TimeMath {
     }
 
     /// Erfasste Zeit an einem Tag. Einträge über Mitternacht werden am Tageswechsel geteilt.
+    /// Überschneiden sich Einträge (z. B. Arbeit an einer Aufgabe während eines erfassten Termins), zählt
+    /// die gemeinsame Zeit nur einmal; jede Aufgabe behält trotzdem ihre volle Zeit.
     public static func tracked(
         on day: LocalDate,
         entries: [TimeEntry],
@@ -33,7 +35,25 @@ public enum TimeMath {
         calendar: Calendar = .current
     ) -> TimeInterval {
         let interval = day.interval(calendar: calendar)
-        return entries.reduce(0) { $0 + overlap(of: $1, with: interval, now: now) }
+        let spans = entries
+            .compactMap { entry -> (start: Date, end: Date)? in
+                let start = max(entry.start, interval.start)
+                let end = min(entry.end ?? now, interval.end)
+                return end > start ? (start, end) : nil
+            }
+            .sorted { $0.start < $1.start }
+        var total: TimeInterval = 0
+        var current: (start: Date, end: Date)?
+        for span in spans {
+            if let open = current, span.start <= open.end {
+                current = (open.start, max(open.end, span.end))
+            } else {
+                if let open = current { total += open.end.timeIntervalSince(open.start) }
+                current = span
+            }
+        }
+        if let open = current { total += open.end.timeIntervalSince(open.start) }
+        return total
     }
 
     /// Erfasste Zeit einer Aufgabe an einem Tag.

@@ -63,6 +63,14 @@ final class TimeMathTests: XCTestCase {
         XCTAssertEqual(TimeMath.tracked(on: day, entries: [entry], now: midnight, calendar: calendar), 1800)
         let nextDay = day.adding(days: 1, calendar: calendar)
         XCTAssertEqual(TimeMath.tracked(on: nextDay, entries: [entry], now: midnight, calendar: calendar), 600)
+
+        // Arbeit während eines erfassten Termins: zählt am Tag nur einmal, jede Aufgabe behält ihre Zeit
+        let meetingStart = midnight.addingTimeInterval(-6 * 3600)
+        let meeting = TimeEntry(taskID: UUID(), start: meetingStart, end: meetingStart.addingTimeInterval(3600))
+        let during = TimeEntry(taskID: UUID(), start: meetingStart.addingTimeInterval(900), end: meetingStart.addingTimeInterval(1800))
+        let after = TimeEntry(taskID: UUID(), start: meetingStart.addingTimeInterval(2 * 3600), end: meetingStart.addingTimeInterval(2.5 * 3600))
+        XCTAssertEqual(TimeMath.tracked(on: day, entries: [meeting, during, after], now: midnight, calendar: calendar), 1.5 * 3600)
+        XCTAssertEqual(TimeMath.tracked(taskID: during.taskID!, on: day, entries: [meeting, during, after], now: midnight, calendar: calendar), 900)
     }
 
     func testRunningEntryCountsUntilNow() {

@@ -59,8 +59,9 @@ struct EditEntrySheet: View {
                         .monospacedDigit()
                 }
                 if let problem {
-                    Label(message(for: problem), systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.accent)
+                    let blocking = Self.blocksSaving(problem)
+                    Label(message(for: problem), systemImage: blocking ? "exclamationmark.triangle.fill" : "info.circle")
+                        .foregroundStyle(blocking ? Theme.accent : Theme.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -85,7 +86,7 @@ struct EditEntrySheet: View {
                 }
                 .buttonStyle(GhostButtonStyle(prominent: true))
                 .keyboardShortcut(.defaultAction)
-                .disabled(problem != nil)
+                .disabled(problem.map(Self.blocksSaving) ?? false)
             }
         }
         .padding(24)
@@ -112,6 +113,12 @@ struct EditEntrySheet: View {
         return model.bookings.contains { $0.taskID == entry.taskID && $0.day == entryDay && $0.status.isDone }
     }
 
+    /// Überschneidungen sind erlaubt (z. B. Arbeit während eines Termins); nur Unmögliches verhindert das Sichern.
+    static func blocksSaving(_ problem: EntryEditing.Problem) -> Bool {
+        if case .overlaps = problem { return false }
+        return true
+    }
+
     private func message(for problem: EntryEditing.Problem) -> String {
         switch problem {
         case .endBeforeStart:
@@ -121,7 +128,7 @@ struct EditEntrySheet: View {
         case .overlaps(let other):
             let title = model.task(other.taskID)?.title ?? "Ohne Aufgabe"
             let range = "\(clock(other.start))–\(other.end.map { clock($0) } ?? "läuft")"
-            return "Überschneidet sich mit „\(title)“ (\(range)). Die Zeit würde doppelt zählen; erst den anderen Eintrag kürzen."
+            return "Überschneidet sich mit „\(title)“ (\(range)). Beide Einträge bleiben, jede Aufgabe behält ihre Zeit; in der Tagessumme zählt die gemeinsame Zeit nur einmal."
         }
     }
 
