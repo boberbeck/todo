@@ -1247,6 +1247,19 @@ struct RemoteAccessSection: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Für Programme auf diesem Mac (z. B. Nod von n8n): ohne Tunnel, direkt über 127.0.0.1
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Auf diesem Mac, z. B. für Nod")
+                    Text("Nod › Apps › Connect MCP: die Adresse mit Schlüssel, oder http://127.0.0.1:\(remote.port)/mcp mit dem Schlüssel als Zugriffstoken")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                CopyTextButton(title: "Adresse", value: remote.localURL)
+                CopyTextButton(title: "Schlüssel", value: remote.token)
+            }
         } header: {
             Text("Claude im Browser und auf dem Handy")
         } footer: {
@@ -1528,6 +1541,22 @@ struct PomodoroSoundRow: View {
 
     private func isKnown(_ id: String) -> Bool {
         id == SoundLibrary.silent || SoundLibrary.chimes.contains(id) || ownSounds.contains(id) || systemSounds.contains(id)
+    }
+}
+
+/// Knopf „… kopieren“ mit kurzer Bestätigung.
+struct CopyTextButton: View {
+    let title: String
+    let value: String
+    @State private var copied = false
+
+    var body: some View {
+        Button(copied ? "Kopiert" : "\(title) kopieren") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(value, forType: .string)
+            copied = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+        }
     }
 }
 

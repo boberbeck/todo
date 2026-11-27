@@ -339,6 +339,11 @@ final class MCPHTTPTests: XCTestCase {
         XCTAssertEqual(handler.respond(to: HTTPRequest(method: "POST", path: "/mcp/falsch", body: Data(initialize.utf8))).status, 404)
         XCTAssertEqual(handler.respond(to: HTTPRequest(method: "POST", path: "/", body: Data(initialize.utf8))).status, 404)
 
+        // Schlüssel als Zugriffstoken (z. B. Nod) unter /mcp
+        XCTAssertEqual(handler.respond(to: HTTPRequest(method: "POST", path: "/mcp", headers: ["authorization": "Bearer \(token)"], body: Data(initialize.utf8))).status, 200)
+        XCTAssertEqual(handler.respond(to: HTTPRequest(method: "POST", path: "/mcp", headers: ["authorization": "Bearer falsch"], body: Data(initialize.utf8))).status, 404)
+        XCTAssertEqual(handler.respond(to: HTTPRequest(method: "POST", path: "/mcp", body: Data(initialize.utf8))).status, 404)
+
         let path = MCPHTTPHandler.path(token: token)
         let response = handler.respond(to: HTTPRequest(method: "POST", path: path + "/", body: Data(initialize.utf8)))
         XCTAssertEqual(response.status, 200)

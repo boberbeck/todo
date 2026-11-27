@@ -106,7 +106,10 @@ public final class MCPHTTPHandler {
     public func respond(to request: HTTPRequest) -> HTTPResponse {
         var path = request.path
         while path.count > 1, path.hasSuffix("/") { path.removeLast() }
-        guard Self.constantTimeEqual(path, Self.path(token: token)) else {
+        // Schlüssel im Pfad (claude.ai) oder als Zugriffstoken unter /mcp (z. B. Nod: „Authorization: Bearer …“)
+        let viaPath = Self.constantTimeEqual(path, Self.path(token: token))
+        let viaHeader = path == "/mcp" && Self.constantTimeEqual(request.headers["authorization"] ?? "", "Bearer \(token)")
+        guard viaPath || viaHeader else {
             return .text(404, "Not Found")
         }
         switch request.method {
