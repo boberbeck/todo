@@ -2569,6 +2569,15 @@ final class AppModel {
 
     /// Titel mit „&lt;“ und Co. (von früheren Claude-Anfragen) einmal in normale Zeichen umwandeln.
     private func cleanUpHTMLEntities() {
+        // Mail-Betreffe, deren Umlaute noch verpackt sind („=?iso-8859-2?Q?…?=“), einmal lesbar machen
+        for task in tasks where task.title.contains("=?") && task.title.contains("?=") {
+            var fixed = task
+            fixed.title = EmailHeaderParser.decodeHeaderValue(task.title)
+            if fixed != task {
+                try? store.save(fixed)
+                if let index = tasks.firstIndex(where: { $0.id == fixed.id }) { tasks[index] = fixed }
+            }
+        }
         for task in tasks where task.title.contains("&") || task.workDescription.contains("&") || task.notes.contains("&") {
             var fixed = task
             fixed.title = HTMLText.decodeEntities(task.title)

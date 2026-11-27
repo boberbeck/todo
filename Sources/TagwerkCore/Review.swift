@@ -167,6 +167,11 @@ public enum EmailHeaderParser {
         return value
     }
 
+    /// Betreff oder Absender mit verpackten Umlauten („=?iso-8859-2?Q?f=FCr?=“) lesbar machen.
+    public static func decodeHeaderValue(_ value: String) -> String {
+        decodeEncodedWords(value)
+    }
+
     /// Dekodiert RFC-2047-Wörter wie "=?UTF-8?B?...?=" und "=?ISO-8859-1?Q?...?=".
     static func decodeEncodedWords(_ value: String) -> String {
         var result = ""
@@ -223,13 +228,31 @@ public enum EmailHeaderParser {
         return string(from: Data(bytes), charset: charset)
     }
 
-    private static func string(from data: Data, charset: String) -> String? {
-        switch charset.lowercased() {
-        case "iso-8859-1", "latin1", "iso-8859-15", "windows-1252", "cp1252":
-            return String(data: data, encoding: .isoLatin1)
+    /// Text in einem Mail-Zeichensatz („iso-8859-2“, „windows-1250“, „utf-8“ …). Unbekanntes wird
+    /// lieber mit kleinen Fehlern gelesen als gar nicht.
+    static func string(from data: Data, charset: String) -> String? {
+        let name = charset.lowercased().trimmingCharacters(in: .whitespaces)
+        // RFC 2231: „utf-8*de“ trägt noch die Sprache
+        let base = name.split(separator: "*").first.map(String.init) ?? name
+        var encoding: String.Encoding?
+        switch base {
+        case "utf-8", "utf8": encoding = .utf8
+        case "us-ascii", "ascii": encoding = .ascii
+        case "iso-8859-1", "latin1", "l1": encoding = .isoLatin1
+        case "iso-8859-2", "latin2", "l2": encoding = .isoLatin2
+        case "windows-1250", "cp1250": encoding = .windowsCP1250
+        case "windows-1251", "cp1251": encoding = .windowsCP1251
+        case "windows-1252", "cp1252": encoding = .windowsCP1252
         default:
-            return String(data: data, encoding: .utf8)
+            #if canImport(Darwin)
+            let known = CFStringConvertIANACharSetNameToEncoding(base as CFString)
+            if known != kCFStringEncodingInvalidId {
+                encoding = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(known))
+            }
+            #endif
         }
+        if let encoding, let text = String(data: data, encoding: encoding) { return text }
+        return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
     }
 }
 

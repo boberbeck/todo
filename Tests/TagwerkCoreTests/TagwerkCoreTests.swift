@@ -706,6 +706,19 @@ final class ReviewTests: XCTestCase {
         XCTAssertNil(MailDropPayload.mailHeader(fromFileURLData: Data("irgendein Text ohne Kopf".utf8)))
     }
 
+    func testEncodedWordsInOtherCharsets() {
+        // So kam der Betreff aus dem neuen Outlook an
+        XCTAssertEqual(
+            EmailHeaderParser.decodeHeaderValue("=?iso-8859-2?Q?RE:_carexpert:_Zeiterfassung_f=FCr_November_und_Dezember_-?= WICHTIG!"),
+            "RE: carexpert: Zeiterfassung für November und Dezember - WICHTIG!"
+        )
+        XCTAssertEqual(EmailHeaderParser.decodeHeaderValue("=?windows-1250?Q?Pr=FCfung_=9Akoda?="), "Prüfung škoda")
+        XCTAssertEqual(EmailHeaderParser.decodeHeaderValue("=?UTF-8?B?w5xiZXJzaWNodA==?="), "Übersicht")
+        XCTAssertEqual(EmailHeaderParser.decodeHeaderValue("=?unbekannt?Q?Gr=C3=BC=C3=9Fe?="), "Grüße", "unbekannter Zeichensatz: als UTF-8 versucht")
+        let header = EmailHeaderParser.parse(Data("Subject: =?iso-8859-2?Q?f=FCr_morgen?=\r\n\r\nx".utf8))
+        XCTAssertEqual(header.subject, "für morgen")
+    }
+
     func testEmailFromWithoutName() {
         let header = EmailHeaderParser.parse(Data("From: <service@example.com>\nSubject: Test\n\nx".utf8))
         XCTAssertEqual(header.from, "service@example.com")
