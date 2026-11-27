@@ -150,6 +150,13 @@ final class AppModel {
             }
             remote.startIfEnabled()
             if isPomodoroEnabled { PomodoroNotifier.requestPermission() }
+            if let commit = Updater.takeJustInstalled() {
+                AppLog.info("Update", "Neu gestartet mit Stand \(commit)")
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(1.5))
+                    self?.showToast("Tagwerk wurde aktualisiert (Stand \(commit))", symbol: "arrow.down.circle")
+                }
+            }
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(20))
                 self?.updater.checkIfDue()
@@ -2631,10 +2638,23 @@ final class AppModel {
         reloadIfChangedElsewhere()
         checkPomodoro()
         if tickCount % 600 == 0 { updater.checkIfDue() }
+        if tickCount % 30 == 0, updater.pendingAutoInstall {
+            updater.installIfPending(goodMoment: isGoodMomentForUpdate)
+        }
         tickCount += 1
         if tickCount % 5 == 0 {
             checkIdle()
         }
+    }
+
+    /// Passt ein Neustart für ein Update gerade? Nur, wenn seit ein paar Minuten keine Eingabe kam, nichts zum
+    /// Bearbeiten offen ist und weder Pomodoro noch Musik laufen. Ein laufender Timer zählt nach dem Neustart weiter.
+    var isGoodMomentForUpdate: Bool {
+        guard IdleMonitor.secondsSinceLastInput() >= 180 else { return false }
+        let editing = timeEntryDraft != nil || breakDraft != nil || absenceDraft != nil || editingEntry != nil
+            || meetingContext != nil || showsCommandBar || detailTaskID != nil || idlePrompt != nil
+        let pomodoroActive = pomodoro.map { $0.phase != .ready } ?? false
+        return !editing && !pomodoroActive && music.state != .playing
     }
 
     private func persist(_ task: TaskItem) {

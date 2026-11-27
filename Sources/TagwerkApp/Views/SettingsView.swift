@@ -1564,6 +1564,7 @@ struct CopyTextButton: View {
 struct UpdateSection: View {
     @Environment(AppModel.self) private var model
     @AppStorage(Preferences.updateAutoCheckKey) private var autoCheck = true
+    @AppStorage(Preferences.updateAutoInstallKey) private var autoInstall = true
     @State private var token = ""
 
     var body: some View {
@@ -1599,6 +1600,9 @@ struct UpdateSection: View {
                 }
             }
             Toggle("Automatisch nach Updates suchen", isOn: $autoCheck)
+            Toggle("Updates automatisch installieren", isOn: $autoInstall)
+                .disabled(!autoCheck)
+                .help("Ohne Nachfrage, sobald du ein paar Minuten nichts eingibst und kein Pomodoro und keine Musik laufen; Tagwerk startet dann kurz neu")
             HStack {
                 Button(updater.isChecking ? "Prüft …" : "Jetzt prüfen") {
                     Task { await updater.check(userInitiated: true) }
@@ -1615,7 +1619,7 @@ struct UpdateSection: View {
         } header: {
             Text("Updates")
         } footer: {
-            SettingsFootnote("Tagwerk schaut beim Start und alle sechs Stunden im Release „aktuell“ nach. Gibt es eine neue Fassung, fragt es; nach „Jetzt aktualisieren“ ersetzt es sich selbst und startet neu. Der Schlüssel liegt im Schlüsselbund und geht nur an GitHub.")
+            SettingsFootnote("Tagwerk schaut beim Start und danach jede Stunde im Release „aktuell“ nach (ohne automatisches Installieren alle sechs Stunden). Mit „automatisch installieren“ setzt es eine neue Fassung ohne Nachfrage ein, sobald du ein paar Minuten nichts eingibst, nichts zum Bearbeiten offen ist und weder Pomodoro noch Musik laufen; ein laufender Timer zählt nach dem kurzen Neustart weiter. Sonst fragt es nach. Der Schlüssel liegt im Schlüsselbund und geht nur an GitHub.")
         }
     }
 }

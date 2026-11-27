@@ -3,8 +3,9 @@ import Foundation
 import Observation
 import TagwerkCore
 
-/// Automatische Updates aus dem Release „aktuell“ auf GitHub: prüft beim Start und alle sechs Stunden,
-/// fragt nach und ersetzt nach Bestätigung die App, danach startet Tagwerk neu.
+/// Automatische Updates aus dem Release „aktuell“ auf GitHub: prüft beim Start und danach regelmäßig.
+/// Mit „automatisch installieren“ (Standard) setzt Tagwerk eine neue Fassung ohne Nachfrage ein, sobald gerade
+/// nichts los ist (siehe `AppModel.isGoodMomentForUpdate`), sonst fragt es nach. Danach startet Tagwerk neu.
 /// Das Repository ist privat; dafür braucht es einen GitHub-Schlüssel, der nur lesen darf (im Schlüsselbund).
 @MainActor
 @Observable
@@ -26,6 +27,10 @@ final class Updater {
     private(set) var lastCheck: Date?
     /// Zeigt die Nachfrage „Jetzt aktualisieren?“
     var showsPrompt = false
+    /// Gefundene Fassung, die von selbst installiert wird, sobald gerade nichts los ist
+    private(set) var pendingAutoInstall = false
+    /// Steht nach dem Neustart kurz unten im Fenster
+    static let justInstalledKey = "updateJustInstalled"
 
     @ObservationIgnored private var cachedHasToken: Bool?
     @ObservationIgnored private var dismissedCommit: String?
@@ -54,13 +59,27 @@ final class Updater {
         UserDefaults.standard.object(forKey: Preferences.updateAutoCheckKey) as? Bool ?? true
     }
 
+    /// Neue Fassungen ohne Nachfrage einsetzen (Standard: an).
+    var installsAutomatically: Bool {
+        isAutomatic && (UserDefaults.standard.object(forKey: Preferences.updateAutoInstallKey) as? Bool ?? true)
+    }
+
     // MARK: Prüfen
 
-    /// Beim Start und danach alle sechs Stunden, wenn ein Schlüssel hinterlegt ist.
+    /// Beim Start und danach jede Stunde (mit automatischem Installieren) bzw. alle sechs Stunden.
     func checkIfDue() {
         guard isAutomatic, !isChecking, !isInstalling, SnapshotMode.directory == nil else { return }
-        if let lastCheck, Date().timeIntervalSince(lastCheck) < 6 * 3600 { return }
+        let interval: TimeInterval = installsAutomatically ? 3600 : 6 * 3600
+        if let lastCheck, Date().timeIntervalSince(lastCheck) < interval { return }
         Task { await check(userInitiated: false) }
+    }
+
+    /// Wartende Fassung einsetzen, wenn der Moment passt (von AppModel regelmäßig gefragt).
+    func installIfPending(goodMoment: Bool) {
+        guard pendingAutoInstall, goodMoment, !isInstalling, installsAutomatically else { return }
+        pendingAutoInstall = false
+        AppLog.info("Update", "Wird ohne Nachfrage eingesetzt (gerade nichts los)")
+        Task { await install() }
     }
 
     func check(userInitiated: Bool) async {
@@ -93,10 +112,16 @@ final class Updater {
                 changes = ReleaseCheck.parseChanges(compare)
             }
             available = Available(release: release, changes: changes)
-            status = "Neue Fassung verfügbar (Stand \(release.shortCommit))."
             AppLog.info("Update", "Neue Fassung \(release.shortCommit) verfügbar (laufend: \(currentBuild ?? "?"))")
-            if userInitiated || dismissedCommit != release.commit {
-                showsPrompt = true
+            if !userInitiated, installsAutomatically {
+                // Ohne Nachfrage, sobald gerade nichts los ist
+                pendingAutoInstall = true
+                status = "Neue Fassung (Stand \(release.shortCommit)) wird installiert, sobald du ein paar Minuten nichts tust."
+            } else {
+                status = "Neue Fassung verfügbar (Stand \(release.shortCommit))."
+                if userInitiated || dismissedCommit != release.commit {
+                    showsPrompt = true
+                }
             }
         } catch {
             status = "Update-Prüfung fehlgeschlagen: \(error)"
@@ -119,10 +144,12 @@ final class Updater {
         let target = Bundle.main.bundleURL
         guard target.pathExtension == "app", !target.path.contains("/AppTranslocation/") else {
             status = "Tagwerk läuft nicht aus „Programme“. Erst die App dorthin ziehen, dann aktualisieren."
+            AppLog.warning("Update", "Nicht installiert: läuft nicht aus „Programme“")
             return
         }
         guard FileManager.default.isWritableFile(atPath: target.deletingLastPathComponent().path) else {
             status = "Keine Schreibrechte in \(target.deletingLastPathComponent().path)."
+            AppLog.warning("Update", "Nicht installiert: keine Schreibrechte")
             return
         }
         isInstalling = true
@@ -155,13 +182,23 @@ final class Updater {
 
             status = "Installiert, Tagwerk startet neu …"
             AppLog.info("Update", "Fassung \(available.release.shortCommit) wird eingesetzt, Neustart")
+            UserDefaults.standard.set(available.release.shortCommit, forKey: Self.justInstalledKey)
             try launchReplacement(staged: staged, target: target, work: work)
             NSApp.terminate(nil)
         } catch {
             isInstalling = false
             status = "Update fehlgeschlagen: \(error)"
             AppLog.error("Update", "Installation fehlgeschlagen: \(error)")
+            // Ging es von selbst schief, lieber einmal nachfragen (mit dem Grund in den Einstellungen)
+            showsPrompt = true
         }
+    }
+
+    /// Nach einem Neustart durch ein Update: welche Fassung eingesetzt wurde (einmalig).
+    static func takeJustInstalled() -> String? {
+        guard let commit = UserDefaults.standard.string(forKey: justInstalledKey) else { return nil }
+        UserDefaults.standard.removeObject(forKey: justInstalledKey)
+        return commit
     }
 
     /// Kleines Skript, das wartet, bis Tagwerk beendet ist, dann die App austauscht und neu startet.

@@ -63,7 +63,7 @@ Daten und Einstellungen bleiben beim Ersetzen der App erhalten; sie liegen nicht
 
 **Fehler melden:** Menü Aufgabe › „Fehler melden …“ oder Einstellungen › Allgemein. Tagwerk legt Beschreibung, Fassung, Zustand der Anbindungen und das Protokoll (`~/Library/Logs/Tagwerk/tagwerk.log`, ohne Passwörter und Schlüssel) zusammen; nach einem Absturz bietet es den Bericht von macOS gleich mit an. Dann als GitHub-Issue (Seite öffnet sich vorausgefüllt), als Datei in „Downloads“ oder als Text für den Chat mit Claude.
 
-**Automatische Updates:** Einmal in Einstellungen › Allgemein › „Updates“ einen GitHub-Schlüssel eintragen, der nur lesen darf („Fine-grained token“, nur dieses Repository, Contents: Read-only). Danach schaut Tagwerk beim Start und alle sechs Stunden im Release „aktuell“ nach, zeigt, was neu ist, und ersetzt sich nach „Jetzt aktualisieren“ selbst; anschließend startet es neu. Die geladene App wird vorher geprüft (Kennung und Signatur).
+**Automatische Updates:** Einmal in Einstellungen › Allgemein › „Updates“ einen GitHub-Schlüssel eintragen, der nur lesen darf („Fine-grained token“, nur dieses Repository, Contents: Read-only). Danach schaut Tagwerk beim Start und jede Stunde im Release „aktuell“ nach und installiert eine neue Fassung ohne Nachfrage („Updates automatisch installieren“, Standard an): sobald du ein paar Minuten nichts eingibst, nichts zum Bearbeiten offen ist und weder Pomodoro noch Musik laufen. Tagwerk startet dann kurz neu, ein laufender Timer zählt weiter, und unten steht „Tagwerk wurde aktualisiert“. Ist der Schalter aus, zeigt es, was neu ist, und ersetzt sich nach „Jetzt aktualisieren“ selbst. Die geladene App wird vorher geprüft (Kennung und Signatur).
 
 ## Starten
 

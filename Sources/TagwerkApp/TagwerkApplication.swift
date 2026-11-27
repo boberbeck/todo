@@ -162,6 +162,8 @@ enum Preferences {
     static let calendarWidthKey = "calendarColumnWidth"
     /// Updates aus GitHub
     static let updateAutoCheckKey = "updateAutoCheck"
+    /// Neue Fassungen ohne Nachfrage installieren (Standard: an)
+    static let updateAutoInstallKey = "updateAutoInstall"
     /// Zuletzt angebotener Absturzbericht (Dateiname)
     static let lastSeenCrashKey = "lastSeenCrashReport"
     /// Pomodoro im Fokus
