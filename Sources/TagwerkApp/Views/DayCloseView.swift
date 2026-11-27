@@ -178,8 +178,12 @@ struct CloseLineRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(line.displayTitle)
-                        .font(.system(size: 14, weight: .medium))
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(line.displayTitle)
+                            .font(.system(size: 14, weight: .medium))
+                            .textSelection(.enabled)
+                        CopyButton(text: line.displayTitle, help: "Titel kopieren, z. B. für SAP")
+                    }
                     TaskMetaLine(task: line.task, showsBooking: false)
                 }
                 Spacer()

@@ -306,6 +306,31 @@ struct ResizeHandle: View {
     }
 }
 
+/// Kleiner Knopf, der Text in die Zwischenablage legt; danach kurz ein Haken.
+struct CopyButton: View {
+    let text: String
+    var help = "Kopieren"
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            copied = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 11, weight: .medium))
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(copied ? Theme.done : Theme.tertiary)
+        .help(copied ? "Kopiert" : help)
+        .animation(.easeOut(duration: 0.15), value: copied)
+    }
+}
+
 /// Griff unter einem Feld: nach unten ziehen macht es höher, Doppelklick setzt die Höhe zurück.
 struct HeightGrip: View {
     @Binding var height: Double
