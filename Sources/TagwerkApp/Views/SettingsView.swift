@@ -1170,6 +1170,9 @@ struct RemoteAccessSection: View {
             Toggle(isOn: $enabled) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Erreichbar, solange Tagwerk läuft")
+                    Text("Nur auf diesem Mac (127.0.0.1), z. B. für Nod. Von außen nur über einen Tunnel.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Text(statusText(remote))
                         .font(.caption)
                         .foregroundStyle(statusColor(remote))
@@ -1183,7 +1186,7 @@ struct RemoteAccessSection: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Tunnel mitstarten")
+                    Text("Tunnel mitstarten (nur für Claude im Browser und Handy)")
                     Spacer()
                     Menu("Vorlage") {
                         ForEach(Self.tunnelSuggestions, id: \.name) { suggestion in
@@ -1194,7 +1197,7 @@ struct RemoteAccessSection: View {
                 }
                 TextField("z. B. tailscale funnel {port}", text: $tunnelCommand)
                     .font(.callout.monospaced())
-                Text("Läuft im Terminal-Umfeld (zsh); {port} wird ersetzt. Leer lassen, wenn du den Tunnel selbst startest.")
+                Text("Läuft im Terminal-Umfeld (zsh); {port} wird ersetzt. Leer lassen, wenn nur Programme auf diesem Mac (z. B. Nod) zugreifen sollen oder du den Tunnel selbst startest.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if case .failed(let message) = remote.tunnelState {
@@ -1261,7 +1264,7 @@ struct RemoteAccessSection: View {
                 CopyTextButton(title: "Schlüssel", value: remote.token)
             }
         } header: {
-            Text("Claude im Browser und auf dem Handy")
+            Text("Zugang über HTTP: Nod auf diesem Mac, Claude im Browser und auf dem Handy")
         } footer: {
             SettingsFootnote("""
             So geht's: 1. Einen Tunnel einrichten (am einfachsten Tailscale Funnel), damit claude.ai deinen Mac erreicht. \
