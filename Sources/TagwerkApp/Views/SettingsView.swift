@@ -503,9 +503,21 @@ struct CalendarSettings: View {
                     SettingsFootnote("„Als belegt“ blockt die Zeit, zeigt aber keinen Titel. Gut für private Termine.")
                 }
                 Section {
-                    Toggle("Zeitblöcke in den Kalender „Tagwerk“ schreiben", isOn: $writeBlocks)
+                    Toggle("Zeitblöcke in einen Kalender schreiben", isOn: $writeBlocks)
+                    if writeBlocks {
+                        Picker("Kalender", selection: Binding(
+                            get: { model.blockCalendarID ?? "" },
+                            set: { model.setBlockCalendar($0.isEmpty ? nil : $0) }
+                        )) {
+                            Text("Eigener Kalender „Tagwerk“").tag("")
+                            ForEach(model.blockTargets) { calendar in
+                                Text(calendar.sourceTitle.isEmpty ? calendar.title : "\(calendar.title) (\(calendar.sourceTitle))")
+                                    .tag(calendar.id)
+                            }
+                        }
+                    }
                 } footer: {
-                    SettingsFootnote("Eingeplante Aufgaben erscheinen dann auch in Outlook und auf dem iPhone, wenn der Kalender dort sichtbar ist.")
+                    SettingsFootnote("Eingeplante Aufgaben erscheinen dann als Termine im gewählten Kalender, z. B. in Outlook, Teams und auf dem iPhone. In einem Outlook-Kalender sehen Kollegen die Zeit als belegt. Beim Wechsel ziehen die Blöcke ab heute mit um; den leeren Kalender „Tagwerk“ kannst du danach in der Kalender-App löschen.")
                 }
             case .notDetermined:
                 Section {
@@ -534,7 +546,10 @@ struct CalendarSettings: View {
             }
         }
         .settingsPage(height: 480)
-        .onChange(of: writeBlocks) { model.settingsChanged() }
+        .onChange(of: writeBlocks) {
+            model.settingsChanged()
+            if writeBlocks { model.resyncBlocks() }
+        }
     }
 }
 

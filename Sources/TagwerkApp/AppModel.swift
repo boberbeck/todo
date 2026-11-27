@@ -890,6 +890,42 @@ final class AppModel {
         return UserDefaults.standard.bool(forKey: Preferences.writeBlocksKey)
     }
 
+    /// Kalender für die Zeitblöcke (z. B. Outlook); `nil` = eigener Kalender „Tagwerk“.
+    var blockCalendarID: String? {
+        _ = settingsVersion
+        let value = UserDefaults.standard.string(forKey: Preferences.blockCalendarIDKey) ?? ""
+        return value.isEmpty ? nil : value
+    }
+
+    /// Kalender, in die Zeitblöcke geschrieben werden können.
+    var blockTargets: [CalendarInfo] {
+        _ = calendarAccess
+        return calendarProvider.blockTargets()
+    }
+
+    /// Anderen Kalender für die Zeitblöcke wählen: Blöcke ab heute ziehen gleich mit um.
+    func setBlockCalendar(_ id: String?) {
+        UserDefaults.standard.set(id ?? "", forKey: Preferences.blockCalendarIDKey)
+        settingsVersion += 1
+        resyncBlocks()
+    }
+
+    /// Schreibt alle Zeitblöcke ab heute neu (z. B. nach dem Wechsel des Kalenders oder dem Einschalten).
+    func resyncBlocks() {
+        guard writesBlocksToCalendar else { return }
+        let start = today.startDate()
+        var moved = 0
+        for var task in tasks where !task.isDone && (task.scheduledStart.map { $0 >= start } ?? false) {
+            let before = task.calendarEventID
+            syncBlock(&task)
+            if task.calendarEventID != before {
+                persist(task)
+            }
+            moved += 1
+        }
+        AppLog.info("Kalender", "Zeitblöcke neu geschrieben: \(moved)")
+    }
+
     var isPlanningDue: Bool {
         DailyPlanning.isDue(lastPlanned: lastPlannedDay, today: today)
     }
@@ -1840,7 +1876,8 @@ final class AppModel {
                     title: task.title,
                     start: interval.start,
                     end: interval.end,
-                    existingID: task.calendarEventID
+                    existingID: task.calendarEventID,
+                    calendarID: blockCalendarID
                 )
             } else if task.scheduledStart == nil, let eventID = task.calendarEventID {
                 try calendarProvider.removeBlock(id: eventID)

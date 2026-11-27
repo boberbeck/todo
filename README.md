@@ -78,7 +78,7 @@ Voraussetzungen: macOS 14 oder neuer und Xcode 15.3 oder neuer.
 
 Screenshots aller Bildschirme liegen unter `docs/screenshots`. Die CI erzeugt sie neu, wenn eine Commit-Nachricht `[screenshots]` enthält.
 
-Für den Kalenderzugriff am besten `scripts/make-app.sh` nutzen und `build/Tagwerk.app` starten. macOS fragt dann einmal nach dem Zugriff auf die Kalender. In den Einstellungen (⌘,) legst du Arbeitszeit, Kalender und Zeitblöcke fest. Ist dein Exchange-Konto im macOS-Kalender eingerichtet, erscheinen dort auch die Outlook-Termine.
+Für den Kalenderzugriff am besten `scripts/make-app.sh` nutzen und `build/Tagwerk.app` starten. macOS fragt dann einmal nach dem Zugriff auf die Kalender. In den Einstellungen (⌘,) legst du Arbeitszeit, Kalender und Zeitblöcke fest. Ist dein Exchange-Konto im macOS-Kalender eingerichtet, erscheinen dort auch die Outlook-Termine. Zeitblöcke geplanter Aufgaben schreibt Tagwerk auf Wunsch in einen Kalender (Einstellungen › Kalender): in einen eigenen Kalender „Tagwerk“ oder direkt in deinen Outlook-Kalender, dann sehen Kollegen die Zeit als belegt. Tagwerk erkennt seine Blöcke an einer Notiz und zeigt sie nicht noch einmal als Termin; beim Wechsel des Kalenders ziehen die Blöcke ab heute mit um.
 
 ## Meetings, Transkripte und Claude Code
 

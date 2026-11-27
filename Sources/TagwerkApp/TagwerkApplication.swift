@@ -197,6 +197,8 @@ enum Preferences {
     static let calendarHourHeightKey = "calendarHourHeight"
     /// Ordner, in dem neue Kundenordner für Claude Code entstehen (leer = ~/Kunden)
     static let customerFoldersBaseKey = "customerFoldersBase"
+    /// Kalender für Zeitblöcke (Kennung aus EventKit); leer = eigener Kalender „Tagwerk“
+    static let blockCalendarIDKey = "timeBlockCalendarID"
     /// Höhe des Notizfelds im Aufgabenfenster
     static let taskNotesHeightKey = "taskNotesHeight"
     static let defaultTaskNotesHeight: Double = 90

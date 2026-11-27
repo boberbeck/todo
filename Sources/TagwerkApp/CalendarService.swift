@@ -42,8 +42,11 @@ protocol CalendarProviding: AnyObject {
     func requestAccess() async -> CalendarAccess
     func calendars(modes: [String: CalendarDisplayMode]) -> [CalendarInfo]
     func events(on day: LocalDate, modes: [String: CalendarDisplayMode]) -> [CalendarEvent]
-    /// Legt einen Zeitblock im Kalender „Tagwerk“ an oder verschiebt ihn. Gibt die Termin-ID zurück.
-    func saveBlock(title: String, start: Date, end: Date, existingID: String?) throws -> String?
+    /// Kalender, in die Tagwerk Zeitblöcke schreiben kann (z. B. der Outlook-Kalender).
+    func blockTargets() -> [CalendarInfo]
+    /// Legt einen Zeitblock an oder verschiebt ihn: im gewählten Kalender, ohne Wahl im Kalender „Tagwerk“.
+    /// Liegt der Block noch in einem anderen Kalender, zieht er um. Gibt die Termin-ID zurück.
+    func saveBlock(title: String, start: Date, end: Date, existingID: String?, calendarID: String?) throws -> String?
     func removeBlock(id: String) throws
 }
 
@@ -58,6 +61,9 @@ enum CalendarServiceError: Error, CustomStringConvertible {
 @MainActor
 final class EventKitCalendar: CalendarProviding {
     static let blockCalendarTitle = "Tagwerk"
+    /// Steht in der Notiz jedes Zeitblocks: so erkennt Tagwerk seine Blöcke auch im Outlook-Kalender
+    /// und zeigt sie nicht noch einmal als Termin.
+    static let blockMarker = "Zeitblock aus Tagwerk"
 
     private let store = EKEventStore()
     var onChange: (() -> Void)?
@@ -119,7 +125,9 @@ final class EventKitCalendar: CalendarProviding {
         guard !visible.isEmpty else { return [] }
         let interval = day.interval()
         let predicate = store.predicateForEvents(withStart: interval.start, end: interval.end, calendars: visible)
-        return store.events(matching: predicate).map { event in
+        return store.events(matching: predicate)
+            .filter { !Self.isBlock($0) }
+            .map { event in
             let calendar = event.calendar
             let mode = calendar.map { modes[$0.calendarIdentifier] ?? Self.defaultMode(for: $0) } ?? .busy
             let baseID = event.eventIdentifier ?? event.calendarItemIdentifier
@@ -137,15 +145,48 @@ final class EventKitCalendar: CalendarProviding {
         .sorted { $0.start < $1.start }
     }
 
-    func saveBlock(title: String, start: Date, end: Date, existingID: String?) throws -> String? {
+    static func isBlock(_ event: EKEvent) -> Bool {
+        event.notes?.contains(blockMarker) == true
+    }
+
+    func blockTargets() -> [CalendarInfo] {
+        guard access == .granted else { return [] }
+        return store.calendars(for: .event)
+            .filter { calendar in
+                calendar.allowsContentModifications
+                    && calendar.title != Self.blockCalendarTitle
+                    && calendar.type != .birthday
+                    && calendar.type != .subscription
+            }
+            .map { CalendarInfo(id: $0.calendarIdentifier, title: $0.title, sourceTitle: $0.source?.title ?? "", mode: .titled) }
+            .sorted { ($0.sourceTitle, $0.title) < ($1.sourceTitle, $1.title) }
+    }
+
+    func saveBlock(title: String, start: Date, end: Date, existingID: String?, calendarID: String?) throws -> String? {
         guard access == .granted else { return existingID }
-        let event = existingID.flatMap { store.event(withIdentifier: $0) } ?? EKEvent(eventStore: store)
+        let target = try targetCalendar(calendarID)
+        var existing = existingID.flatMap { store.event(withIdentifier: $0) }
+        // Zwischen Konten (z. B. iCloud → Outlook) lässt sich ein Termin nicht verschieben: alten löschen, neu anlegen
+        if let current = existing, current.calendar?.calendarIdentifier != target.calendarIdentifier {
+            try? store.remove(current, span: .thisEvent, commit: true)
+            existing = nil
+        }
+        let event = existing ?? EKEvent(eventStore: store)
         event.title = title
         event.startDate = start
         event.endDate = end
-        event.calendar = try blockCalendar()
+        event.notes = "\(Self.blockMarker): geplante Aufgabe. Verschieben und Löschen am besten in Tagwerk."
+        event.calendar = target
         try store.save(event, span: .thisEvent, commit: true)
         return event.eventIdentifier
+    }
+
+    /// Gewählter Kalender, wenn es ihn noch gibt und er beschreibbar ist; sonst der Kalender „Tagwerk“.
+    private func targetCalendar(_ calendarID: String?) throws -> EKCalendar {
+        if let calendarID, let chosen = store.calendar(withIdentifier: calendarID), chosen.allowsContentModifications {
+            return chosen
+        }
+        return try blockCalendar()
     }
 
     func removeBlock(id: String) throws {
@@ -239,7 +280,11 @@ final class DemoCalendar: CalendarProviding {
         }
     }
 
-    func saveBlock(title: String, start: Date, end: Date, existingID: String?) throws -> String? { existingID }
+    func blockTargets() -> [CalendarInfo] {
+        [CalendarInfo(id: "demo-work", title: "Kalender", sourceTitle: "Exchange", mode: .titled)]
+    }
+
+    func saveBlock(title: String, start: Date, end: Date, existingID: String?, calendarID: String?) throws -> String? { existingID }
 
     func removeBlock(id: String) throws {}
 }
